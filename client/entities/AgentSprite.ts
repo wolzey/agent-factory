@@ -26,7 +26,6 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   private statusIcon: Phaser.GameObjects.Sprite | null = null;
   private neonGlow: Phaser.GameObjects.Rectangle;
   private thoughtBubble: Phaser.GameObjects.Container | null = null;
-  private thoughtTween: Phaser.Tweens.Tween | null = null;
 
   public sessionData: AgentSession;
   private spriteKey: string;
@@ -202,76 +201,39 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   private showThoughtBubble() {
-    if (this.thoughtBubble) return; // Already showing
+    if (this.thoughtBubble) return;
 
-    this.thoughtBubble = this.scene.add.container(-4, -38);
+    // Compact bubble at same position as status icons (12, -20)
+    this.thoughtBubble = this.scene.add.container(12, -20);
 
-    // Small trailing dots
-    const dot1 = this.scene.add.circle(2, 12, 2, 0xffffff, 0.6);
-    const dot2 = this.scene.add.circle(-2, 6, 3, 0xffffff, 0.7);
-    this.thoughtBubble.add(dot1);
-    this.thoughtBubble.add(dot2);
-
-    // Main bubble
+    // Small bubble background
     const bubble = this.scene.add.graphics();
     bubble.fillStyle(0xffffff, 0.9);
-    bubble.fillRoundedRect(-12, -14, 24, 16, 6);
+    bubble.fillRoundedRect(-8, -6, 16, 12, 4);
     this.thoughtBubble.add(bubble);
 
-    // Dots inside bubble (animated ellipsis)
-    const d1 = this.scene.add.circle(-5, -6, 2, 0x444466);
-    const d2 = this.scene.add.circle(0, -6, 2, 0x444466);
-    const d3 = this.scene.add.circle(5, -6, 2, 0x444466);
+    // Three animated dots
+    const d1 = this.scene.add.circle(-4, 0, 1.5, 0x444466);
+    const d2 = this.scene.add.circle(0, 0, 1.5, 0x444466);
+    const d3 = this.scene.add.circle(4, 0, 1.5, 0x444466);
     this.thoughtBubble.add(d1);
     this.thoughtBubble.add(d2);
     this.thoughtBubble.add(d3);
 
+    // Small tail dot
+    const tail = this.scene.add.circle(-6, 8, 1.5, 0xffffff, 0.7);
+    this.thoughtBubble.add(tail);
+
     this.add(this.thoughtBubble);
 
-    // Animate the dots bouncing
-    this.scene.tweens.add({
-      targets: d1,
-      y: d1.y - 3,
-      duration: 400,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
-    this.scene.tweens.add({
-      targets: d2,
-      y: d2.y - 3,
-      duration: 400,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-      delay: 133,
-    });
-    this.scene.tweens.add({
-      targets: d3,
-      y: d3.y - 3,
-      duration: 400,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-      delay: 266,
-    });
-
-    // Gentle float of the whole bubble
-    this.thoughtTween = this.scene.tweens.add({
-      targets: this.thoughtBubble,
-      y: this.thoughtBubble.y - 3,
-      duration: 1200,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
+    // Bounce dots in sequence
+    this.scene.tweens.add({ targets: d1, y: d1.y - 2, duration: 350, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    this.scene.tweens.add({ targets: d2, y: d2.y - 2, duration: 350, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 117 });
+    this.scene.tweens.add({ targets: d3, y: d3.y - 2, duration: 350, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 234 });
   }
 
   private hideThoughtBubble() {
     if (!this.thoughtBubble) return;
-
-    this.thoughtTween?.destroy();
-    this.thoughtTween = null;
     this.thoughtBubble.destroy();
     this.thoughtBubble = null;
   }
