@@ -17,15 +17,22 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function loadServerConfig(): ServerConfig {
   const configPath = resolve(__dirname, '../server-config.json');
+  let config = { ...DEFAULT_SERVER_CONFIG };
   try {
     if (existsSync(configPath)) {
       const raw = JSON.parse(readFileSync(configPath, 'utf-8'));
-      return { ...DEFAULT_SERVER_CONFIG, ...raw };
+      config = { ...config, ...raw };
     }
   } catch (err) {
     console.warn('Failed to load server-config.json, using defaults:', err);
   }
-  return { ...DEFAULT_SERVER_CONFIG };
+
+  // Env var override: GRAPHIC_DEATH=true
+  if (process.env.GRAPHIC_DEATH !== undefined) {
+    config.graphicDeath = process.env.GRAPHIC_DEATH === 'true' || process.env.GRAPHIC_DEATH === '1';
+  }
+
+  return config;
 }
 
 async function main() {

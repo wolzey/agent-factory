@@ -55,6 +55,9 @@ export class FactoryScene extends Phaser.Scene {
       if (config.title) {
         this.applyTitle(config.title);
       }
+      if (config.graphicDeath !== undefined) {
+        this.agentManager.setServerGraphicDeath(config.graphicDeath);
+      }
     } catch {
       console.warn('[config] Failed to fetch server config');
     }

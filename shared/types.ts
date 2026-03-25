@@ -90,4 +90,5 @@ export interface UserConfig {
 // === Server Config ===
 export interface ServerConfig {
   title: string;
+  graphicDeath?: boolean;
 }

@@ -135,8 +135,8 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.updateStatusIcon(session.activity, session.currentTool);
   }
 
-  die(onComplete?: () => void) {
-    if (this.sessionData.avatar?.graphicDeath) {
+  die(onComplete?: () => void, serverGraphicDeath?: boolean) {
+    if (serverGraphicDeath || this.sessionData.avatar?.graphicDeath) {
       this.dieGraphic(onComplete);
     } else {
       this.dieStandard(onComplete);
