@@ -40,12 +40,12 @@ export class LayoutManager {
       });
     }
 
-    // Lounge positions - on the couches (matching prop positions in FactoryScene)
-    // Couch 1 at x=560, couch 2 at x=700 (both at y=430 in scene)
-    // 2 seats per couch, agents sit slightly above couch center
+    // Lounge positions - centered on couch cushions
+    // Couches placed at (560, 430) and (700, 430) in scene, 1.5x scale (48x21 on screen)
+    // Two cushion seats per couch, centered on the cushion highlights
     const couchPositions = [
-      { x: 540, y: 420 }, { x: 580, y: 420 },  // couch 1
-      { x: 680, y: 420 }, { x: 720, y: 420 },  // couch 2
+      { x: 550, y: 424 }, { x: 570, y: 424 },  // couch 1 cushions
+      { x: 690, y: 424 }, { x: 710, y: 424 },  // couch 2 cushions
     ];
     for (const pos of couchPositions) {
       this.loungeSlots.push({ pos, occupant: null });
