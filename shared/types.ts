@@ -85,3 +85,8 @@ export interface UserConfig {
   serverUrl: string;
   avatar: AvatarConfig;
 }
+
+// === Server Config ===
+export interface ServerConfig {
+  title: string;
+}

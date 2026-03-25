@@ -6,6 +6,8 @@ import type { WSMessageToClient } from '@shared/types';
 export class FactoryScene extends Phaser.Scene {
   private socket!: SocketClient;
   private agentManager!: AgentManager;
+  private titleShadow!: Phaser.GameObjects.Text;
+  private titleText!: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: 'FactoryScene' });
@@ -27,6 +29,8 @@ export class FactoryScene extends Phaser.Scene {
     this.socket = new SocketClient();
     this.socket.onMessage((msg: WSMessageToClient) => this.handleMessage(msg));
     this.socket.connect();
+
+    this.fetchConfig();
   }
 
   update(time: number, delta: number) {
@@ -40,6 +44,29 @@ export class FactoryScene extends Phaser.Scene {
       case 'agent_remove': this.agentManager.handleAgentRemove(msg.sessionId); break;
       case 'effect': this.agentManager.handleEffect(msg.sessionId, msg.effect, msg.data); break;
     }
+  }
+
+  // ── Server config ────────────────────────────────────────────────
+  private async fetchConfig() {
+    try {
+      const res = await fetch('/api/config');
+      if (!res.ok) return;
+      const config = await res.json();
+      if (config.title) {
+        this.applyTitle(config.title);
+      }
+    } catch {
+      console.warn('[config] Failed to fetch server config');
+    }
+  }
+
+  private applyTitle(title: string) {
+    const upper = title.toUpperCase();
+    this.titleShadow.setText(upper);
+    this.titleText.setText(upper);
+    document.title = title;
+    const hudTitle = document.querySelector('.hud-title');
+    if (hudTitle) hudTitle.textContent = upper;
   }
 
   // ── Background floors ─────────────────────────────────────────────
@@ -117,12 +144,12 @@ export class FactoryScene extends Phaser.Scene {
     // Main title
     this.add.rectangle(400, 22, 220, 28, 0x0a0a1a, 0.8).setDepth(3);
 
-    const titleShadow = this.add.text(400, 22, 'AGENT FACTORY', {
+    this.titleShadow = this.add.text(400, 22, 'AGENT FACTORY', {
       fontFamily: 'monospace', fontSize: '20px', color: '#ff00ff',
     }).setOrigin(0.5).setAlpha(0.3).setDepth(3);
-    (titleShadow as any).setShadow?.(0, 0, '#ff00ff', 12);
+    (this.titleShadow as any).setShadow?.(0, 0, '#ff00ff', 12);
 
-    this.add.text(400, 22, 'AGENT FACTORY', {
+    this.titleText = this.add.text(400, 22, 'AGENT FACTORY', {
       fontFamily: 'monospace', fontSize: '20px', color: '#ff44ff', fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(3);
 
@@ -153,7 +180,6 @@ export class FactoryScene extends Phaser.Scene {
     // Wall neon signs
     this.createNeonSign(80, 15, 'NOW CODING', '#00ff66', 0.7, 2200);
     this.createNeonSign(700, 15, 'HIGH SCORE', '#ffff00', 0.6, 1800);
-    this.createNeonSign(280, 15, 'INSERT COIN', '#ff9900', 0.5, 2500);
     this.createNeonSign(60, 358, 'OPEN 24/7', '#00ccff', 0.4, 3000);
     this.createNeonSign(760, 358, 'CHILL ZONE', '#aa88ff', 0.4, 2800);
   }

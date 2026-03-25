@@ -11,6 +11,10 @@ export const DEFAULT_AVATAR = {
   trail: null,
 };
 
+export const DEFAULT_SERVER_CONFIG: import('./types.js').ServerConfig = {
+  title: 'AGENT FACTORY',
+};
+
 // Map tool names to agent activities
 export function toolToActivity(toolName: string): import('./types.js').AgentActivity {
   const readTools = ['Read', 'Glob', 'Grep', 'LSP'];

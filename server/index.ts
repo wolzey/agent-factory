@@ -4,15 +4,29 @@ import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 import { StateManager } from './state.js';
 import { BroadcastManager } from './ws/broadcast.js';
 import { registerHookRoutes } from './routes/hooks.js';
 import { startStaleReaper } from './cleanup.js';
-import { DEFAULT_PORT } from '../shared/constants.js';
+import { DEFAULT_PORT, DEFAULT_SERVER_CONFIG } from '../shared/constants.js';
+import type { ServerConfig } from '../shared/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+function loadServerConfig(): ServerConfig {
+  const configPath = resolve(__dirname, '../server-config.json');
+  try {
+    if (existsSync(configPath)) {
+      const raw = JSON.parse(readFileSync(configPath, 'utf-8'));
+      return { ...DEFAULT_SERVER_CONFIG, ...raw };
+    }
+  } catch (err) {
+    console.warn('Failed to load server-config.json, using defaults:', err);
+  }
+  return { ...DEFAULT_SERVER_CONFIG };
+}
 
 async function main() {
   const port = parseInt(process.env.PORT || String(DEFAULT_PORT), 10);
@@ -31,6 +45,9 @@ async function main() {
       prefix: '/',
     });
   }
+
+  // Server config
+  const serverConfig = loadServerConfig();
 
   // State & broadcast
   const state = new StateManager();
@@ -54,7 +71,7 @@ async function main() {
   });
 
   // HTTP routes
-  registerHookRoutes(app, state, broadcast);
+  registerHookRoutes(app, state, broadcast, serverConfig);
 
   // WebSocket endpoint
   app.get('/ws', { websocket: true }, (socket) => {

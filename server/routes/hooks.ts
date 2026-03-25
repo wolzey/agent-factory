@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { HookPayload } from '../../shared/types.js';
+import type { HookPayload, ServerConfig } from '../../shared/types.js';
 import type { StateManager } from '../state.js';
 import type { BroadcastManager } from '../ws/broadcast.js';
 
@@ -7,6 +7,7 @@ export function registerHookRoutes(
   app: FastifyInstance,
   state: StateManager,
   broadcast: BroadcastManager,
+  serverConfig: ServerConfig,
 ) {
   app.post<{ Body: HookPayload }>('/api/hooks', async (request, reply) => {
     const payload = request.body;
@@ -22,6 +23,10 @@ export function registerHookRoutes(
 
     state.handleHookEvent(payload);
     return reply.status(200).send({ ok: true });
+  });
+
+  app.get('/api/config', async (_request, reply) => {
+    return reply.send(serverConfig);
   });
 
   app.get('/api/health', async (_request, reply) => {
