@@ -77,6 +77,9 @@ export type WSMessageToServer =
   | { type: 'identify'; username: string; avatar: AvatarConfig }
   | { type: 'request_state' };
 
+// === Emote Types ===
+export type EmoteType = 'dance' | 'jump' | 'guitar' | 'gun' | 'laugh';
+
 // === Effect Types ===
 export type EffectType =
   | 'tool_start'
@@ -85,7 +88,8 @@ export type EffectType =
   | 'subagent_spawn'
   | 'subagent_despawn'
   | 'session_start'
-  | 'session_end';
+  | 'session_end'
+  | 'emote';
 
 // === User Config File Format ===
 export interface UserConfig {
@@ -94,8 +98,12 @@ export interface UserConfig {
   avatar: AvatarConfig;
 }
 
+// === Environment Types ===
+export type EnvironmentType = 'arcade' | 'farm' | 'office';
+
 // === Server Config ===
 export interface ServerConfig {
   title: string;
+  environment?: EnvironmentType;
   graphicDeath?: boolean;
 }

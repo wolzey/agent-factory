@@ -1,3 +1,5 @@
 {
-  "title": "Order Protection"
+  "title": "Order Protection",
+  "graphicDeath": true,
+  "environment": "farm"
 }

@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
-import type { AgentSession, EffectType } from '@shared/types';
+import type { AgentSession, EffectType, EnvironmentType } from '@shared/types';
 import { AgentSprite } from '../entities/AgentSprite';
 import { SubagentSprite } from '../entities/SubagentSprite';
 import { Machine } from '../entities/Machine';
 import { LayoutManager } from './LayoutManager';
+import { getTheme } from '../environments';
+import type { EnvironmentTheme } from '../environments';
 
 export class AgentManager {
   private scene: Phaser.Scene;
@@ -12,20 +14,21 @@ export class AgentManager {
   private machines: Machine[] = [];
   private layout: LayoutManager;
   private serverGraphicDeath = false;
+  private theme: EnvironmentTheme;
 
-  constructor(scene: Phaser.Scene) {
+  constructor(scene: Phaser.Scene, envType: EnvironmentType = 'arcade') {
     this.scene = scene;
+    this.theme = getTheme(envType);
     this.layout = new LayoutManager();
     this.createMachines();
   }
 
   private createMachines() {
-    // Cabinets at slot.y - 24 (smaller scale = less offset needed)
     for (let row = 0; row < 2; row++) {
       for (let col = 0; col < 6; col++) {
         const x = 80 + col * 120;
         const slotY = 110 + row * 110;
-        const machine = new Machine(this.scene, x, slotY - 24, row * 6 + col);
+        const machine = new Machine(this.scene, x, slotY - 24, row * 6 + col, this.theme.workstation);
         this.machines.push(machine);
       }
     }
@@ -88,6 +91,11 @@ export class AgentManager {
       case 'error':
         this.emitSparks(agent.x, agent.y, 0xff0000, 8);
         break;
+      case 'emote':
+        if (data?.emote) {
+          agent.playEmote(data.emote as string);
+        }
+        break;
     }
   }
 
@@ -136,10 +144,9 @@ export class AgentManager {
     const isThinking = session.activity === 'thinking';
 
     if (session.activity === 'stopped') {
-      const entrance = this.layout.entrance;
       this.layout.release(session.sessionId);
       this.deactivateMachineFor(session.sessionId);
-      agent.moveTo(entrance.x, entrance.y);
+      // Die in place — no walking to exit
     } else if (isWorking || isThinking) {
       // Working or thinking -> arcade cabinet
       const pos = this.layout.assignToArcade(session.sessionId);

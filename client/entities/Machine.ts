@@ -1,31 +1,34 @@
 import Phaser from 'phaser';
+import type { WorkstationConfig } from '../environments';
 
 export class Machine extends Phaser.GameObjects.Container {
   private cabinet: Phaser.GameObjects.Sprite;
   private glow: Phaser.GameObjects.Rectangle;
   private floorGlow: Phaser.GameObjects.Rectangle;
   private active = false;
+  private workstation: WorkstationConfig;
 
   public slotId: number;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, slotId: number) {
+  constructor(scene: Phaser.Scene, x: number, y: number, slotId: number, workstation: WorkstationConfig) {
     super(scene, x, y);
     this.slotId = slotId;
+    this.workstation = workstation;
     this.setDepth(6);
 
     // Floor reflection glow (simulates screen light on ground)
-    this.floorGlow = scene.add.rectangle(0, 30, 26, 8, 0x00ff66, 0);
+    this.floorGlow = scene.add.rectangle(0, 30, 26, 8, workstation.floorGlowColor, 0);
     this.add(this.floorGlow);
 
     // Neon glow under cabinet
-    this.glow = scene.add.rectangle(0, 10, 28, 6, 0xff00ff, 0);
+    this.glow = scene.add.rectangle(0, 10, 28, 6, workstation.glowColor, 0);
     this.add(this.glow);
 
-    // Arcade cabinet sprite (1.5x scale - smaller to give agents more room)
-    this.cabinet = scene.add.sprite(0, 0, 'arcade_cabinet', 1);
+    // Workstation sprite (1.5x scale)
+    this.cabinet = scene.add.sprite(0, 0, workstation.textureKey, 1);
     this.cabinet.setScale(1.5);
     this.cabinet.setOrigin(0.5, 0.5);
-    this.cabinet.play('arcade_idle');
+    this.cabinet.play(workstation.idleAnim);
     this.add(this.cabinet);
 
     scene.add.existing(this);
@@ -36,7 +39,7 @@ export class Machine extends Phaser.GameObjects.Container {
     this.active = active;
 
     if (active) {
-      this.cabinet.play('arcade_active');
+      this.cabinet.play(this.workstation.activeAnim);
 
       // Marquee glow
       this.scene.tweens.add({
@@ -64,7 +67,7 @@ export class Machine extends Phaser.GameObjects.Container {
         ease: 'Sine.easeInOut',
       });
     } else {
-      this.cabinet.play('arcade_idle');
+      this.cabinet.play(this.workstation.idleAnim);
 
       this.scene.tweens.killTweensOf(this.glow);
       this.scene.tweens.killTweensOf(this.floorGlow);

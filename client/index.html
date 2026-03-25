@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Agent Factory</title>
   <style>
+    :root {
+      --accent-color: #ff00ff;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a1a; }
     #game-container {
@@ -21,7 +24,7 @@
       display: none;
       position: fixed;
       background: rgba(10, 10, 26, 0.95);
-      border: 2px solid #ff00ff;
+      border: 2px solid var(--accent-color);
       border-radius: 4px;
       padding: 8px 12px;
       color: #fff;
@@ -29,7 +32,7 @@
       font-size: 12px;
       pointer-events: none;
       z-index: 1000;
-      box-shadow: 0 0 12px rgba(255, 0, 255, 0.3);
+      box-shadow: 0 0 12px color-mix(in srgb, var(--accent-color) 30%, transparent);
       max-width: 300px;
     }
     #tooltip .tooltip-name {
@@ -42,7 +45,7 @@
       margin-top: 4px;
     }
     #tooltip .tooltip-tool {
-      color: #ff00ff;
+      color: var(--accent-color);
       margin-top: 2px;
     }
 
@@ -61,10 +64,10 @@
       z-index: 999;
     }
     #hud .hud-title {
-      color: #ff00ff;
+      color: var(--accent-color);
       font-size: 13px;
       font-weight: bold;
-      text-shadow: 0 0 8px rgba(255, 0, 255, 0.5);
+      text-shadow: 0 0 8px color-mix(in srgb, var(--accent-color) 50%, transparent);
     }
     #hud .hud-stat {
       color: #00ffff;

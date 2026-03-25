@@ -32,6 +32,11 @@ function loadServerConfig(): ServerConfig {
     config.graphicDeath = process.env.GRAPHIC_DEATH === 'true' || process.env.GRAPHIC_DEATH === '1';
   }
 
+  // Env var override: ENVIRONMENT=farm|office|arcade
+  if (process.env.ENVIRONMENT) {
+    config.environment = process.env.ENVIRONMENT as import('../shared/types.js').EnvironmentType;
+  }
+
   return config;
 }
 
@@ -86,7 +91,7 @@ async function main() {
     // Send current state on connect
     broadcast.sendFullState(socket, state.getAll());
 
-    socket.on('message', (raw) => {
+    socket.on('message', (raw: string | Buffer) => {
       try {
         const msg = JSON.parse(String(raw));
         if (msg.type === 'request_state') {

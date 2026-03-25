@@ -25,4 +25,5 @@ func init() {
 	rootCmd.AddCommand(uninstallCmd)
 	rootCmd.AddCommand(avatarCmd)
 	rootCmd.AddCommand(updateCmd)
+	rootCmd.AddCommand(emoteCmd)
 }

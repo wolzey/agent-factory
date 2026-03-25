@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import type { HookPayload, ServerConfig } from '../../shared/types.js';
+import type { HookPayload, ServerConfig, EmoteType } from '../../shared/types.js';
+import { VALID_EMOTES } from '../../shared/constants.js';
 import type { StateManager } from '../state.js';
 import type { BroadcastManager } from '../ws/broadcast.js';
 
@@ -23,6 +24,26 @@ export function registerHookRoutes(
 
     state.handleHookEvent(payload);
     return reply.status(200).send({ ok: true });
+  });
+
+  app.post<{ Body: { username: string; emote: string } }>('/api/emote', async (request, reply) => {
+    const { username, emote } = request.body || {};
+
+    if (!username || !emote) {
+      return reply.status(400).send({ error: 'Missing username or emote' });
+    }
+
+    if (!VALID_EMOTES.includes(emote as EmoteType)) {
+      return reply.status(400).send({ error: `Invalid emote. Valid: ${VALID_EMOTES.join(', ')}` });
+    }
+
+    const session = state.findSessionByUsername(username);
+    if (!session) {
+      return reply.status(404).send({ error: 'No active session for username' });
+    }
+
+    state.emitEmote(session.sessionId, emote);
+    return reply.status(200).send({ ok: true, sessionId: session.sessionId });
   });
 
   app.get('/api/config', async (_request, reply) => {

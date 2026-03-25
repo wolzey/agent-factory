@@ -62,6 +62,26 @@ export class StateManager {
     }
   }
 
+  findSessionByUsername(username: string): AgentSession | undefined {
+    let best: AgentSession | undefined;
+    for (const session of this.sessions.values()) {
+      if (session.username === username && session.activity !== 'stopped') {
+        if (!best || session.lastEventAt > best.lastEventAt) {
+          best = session;
+        }
+      }
+    }
+    return best;
+  }
+
+  emitEmote(sessionId: string, emote: string): void {
+    this.emit('effect', {
+      sessionId,
+      effect: 'emote' as EffectType,
+      effectData: { emote },
+    });
+  }
+
   reapStale(): string[] {
     const now = Date.now();
     const reaped: string[] = [];

@@ -1,19 +1,25 @@
 import Phaser from 'phaser';
 import { SocketClient } from '../network/socket';
 import { AgentManager } from '../systems/AgentManager';
-import type { WSMessageToClient } from '@shared/types';
+import type { WSMessageToClient, EnvironmentType } from '@shared/types';
+import { getTheme } from '../environments';
+import type { EnvironmentTheme } from '../environments';
 
 export class FactoryScene extends Phaser.Scene {
   private socket!: SocketClient;
   private agentManager!: AgentManager;
   private titleShadow!: Phaser.GameObjects.Text;
   private titleText!: Phaser.GameObjects.Text;
+  private theme!: EnvironmentTheme;
 
   constructor() {
     super({ key: 'FactoryScene' });
   }
 
-  create() {
+  create(data?: { environment?: EnvironmentType }) {
+    const envType = data?.environment ?? 'arcade';
+    this.theme = getTheme(envType);
+
     this.drawBackground();
     this.drawWall();
     this.drawBottomStrip();
@@ -21,10 +27,16 @@ export class FactoryScene extends Phaser.Scene {
     this.drawNeonSigns();
     this.placeProps();
     this.createAmbientParticles();
-    this.addScanlineOverlay();
-    this.addVignette();
+    if (this.theme.showScanlines) {
+      this.addScanlineOverlay();
+    }
+    if (this.theme.showVignette) {
+      this.addVignette();
+    }
 
-    this.agentManager = new AgentManager(this);
+    this.applyThemeColors();
+
+    this.agentManager = new AgentManager(this, envType);
 
     this.socket = new SocketClient();
     this.socket.onMessage((msg: WSMessageToClient) => this.handleMessage(msg));
@@ -49,6 +61,14 @@ export class FactoryScene extends Phaser.Scene {
   // ── Server config ────────────────────────────────────────────────
   private async fetchConfig() {
     try {
+      // Config may already be in registry from BootScene
+      const cached = this.registry.get('serverConfig');
+      if (cached) {
+        if (cached.title) this.applyTitle(cached.title);
+        if (cached.graphicDeath !== undefined) this.agentManager.setServerGraphicDeath(cached.graphicDeath);
+        return;
+      }
+
       const res = await fetch('/api/config');
       if (!res.ok) return;
       const config = await res.json();
@@ -72,36 +92,40 @@ export class FactoryScene extends Phaser.Scene {
     if (hudTitle) hudTitle.textContent = upper;
   }
 
+  private applyThemeColors() {
+    document.documentElement.style.setProperty('--accent-color', this.theme.hudAccentColor);
+  }
+
   // ── Background floors ─────────────────────────────────────────────
   private drawBackground() {
-    this.cameras.main.setBackgroundColor('#0a0a1a');
+    this.cameras.main.setBackgroundColor(this.theme.backgroundColor);
+    const { floors } = this.theme;
 
-    // Arcade floor (y: 44 to 340)
-    this.add.tileSprite(400, 192, 800, 296, 'floor_arcade').setDepth(0);
-
-    // Bottom strip (y: 340 to 470) - counter left, lounge right
+    // Main floor (y: 44 to 340)
+    this.add.tileSprite(400, 192, 800, 296, floors.main.key).setDepth(0);
     // Counter floor (left half)
-    this.add.tileSprite(200, 405, 400, 130, 'floor_counter').setDepth(0);
+    this.add.tileSprite(200, 405, 400, 130, floors.counter.key).setDepth(0);
     // Lounge floor (right half)
-    this.add.tileSprite(600, 405, 400, 130, 'floor_lounge').setDepth(0);
-
-    // Entrance strip (y: 470 to 480)
-    this.add.tileSprite(400, 475, 800, 10, 'floor_entrance').setDepth(0);
+    this.add.tileSprite(600, 405, 400, 130, floors.lounge.key).setDepth(0);
+    // Entrance strip
+    this.add.tileSprite(400, 475, 800, 10, floors.entrance.key).setDepth(0);
   }
 
   // ── Wall with depth ───────────────────────────────────────────────
   private drawWall() {
-    this.add.rectangle(400, 22, 800, 44, 0x16213e).setDepth(0);
+    const { wall } = this.theme;
+
+    this.add.rectangle(400, 22, 800, 44, wall.baseColor).setDepth(0);
 
     for (let by = 0; by < 44; by += 8) {
-      this.add.rectangle(400, by + 0.5, 800, 1, 0x1a2544, 0.3).setDepth(1);
+      this.add.rectangle(400, by + 0.5, 800, 1, wall.stripeColor, wall.stripeAlpha).setDepth(1);
     }
 
-    this.add.rectangle(400, 43, 800, 3, 0x0f1830).setDepth(1);
-    this.add.rectangle(400, 0.5, 800, 1, 0x2a3550, 0.5).setDepth(1);
+    this.add.rectangle(400, 43, 800, 3, wall.edgeColor).setDepth(1);
+    this.add.rectangle(400, 0.5, 800, 1, wall.highlightColor, wall.highlightAlpha).setDepth(1);
 
-    const neonGlow = this.add.rectangle(400, 45, 800, 8, 0xff00ff, 0.06).setDepth(1);
-    const neonStrip = this.add.rectangle(400, 45, 800, 2, 0xff00ff, 0.8).setDepth(1);
+    const neonGlow = this.add.rectangle(400, 45, 800, 8, wall.neonStripColor, wall.neonGlowAlpha).setDepth(1);
+    const neonStrip = this.add.rectangle(400, 45, 800, 2, wall.neonStripColor, wall.neonStripAlpha).setDepth(1);
 
     this.tweens.add({
       targets: [neonStrip, neonGlow],
@@ -115,48 +139,56 @@ export class FactoryScene extends Phaser.Scene {
 
   // ── Bottom strip: counter (left) + lounge (right) ─────────────────
   private drawBottomStrip() {
-    // Counter surface (left side)
-    this.add.rectangle(200, 362, 340, 1, 0xc4991a, 0.7).setDepth(2);
-    this.add.rectangle(200, 364, 340, 4, 0x8b6914, 0.8).setDepth(2);
-    this.add.rectangle(200, 369, 340, 8, 0x5a4510, 0.7).setDepth(2);
+    const { bottomStrip } = this.theme;
 
-    // Bell on counter
-    this.add.rectangle(200, 360, 6, 4, 0xffcc00).setDepth(2);
-    this.add.rectangle(200, 358, 2, 2, 0xffffff).setDepth(2);
+    // Counter surface (left side)
+    this.add.rectangle(200, 362, 340, 1, bottomStrip.counterSurfaceColor, 0.7).setDepth(2);
+    this.add.rectangle(200, 364, 340, 4, bottomStrip.counterDarkColor, 0.8).setDepth(2);
+    this.add.rectangle(200, 369, 340, 8, bottomStrip.counterAccentColor, 0.7).setDepth(2);
+
+    // Bell on counter (only for themes that have it)
+    if (bottomStrip.showBell) {
+      this.add.rectangle(200, 360, 6, 4, 0xffcc00).setDepth(2);
+      this.add.rectangle(200, 358, 2, 2, 0xffffff).setDepth(2);
+    }
 
     // Lounge carpet border (right side)
     const carpet = this.add.rectangle(600, 405, 380, 110, 0x000000, 0).setDepth(1);
-    carpet.setStrokeStyle(1, 0x2a1050, 0.4);
+    carpet.setStrokeStyle(1, bottomStrip.loungeAccentColor, bottomStrip.loungeAccentAlpha);
   }
 
   // ── Zone dividers ─────────────────────────────────────────────────
   private drawZoneDividers() {
-    // Arcade -> bottom strip divider (dashed neon line)
+    const { zoneDividerColor, zoneDividerAlpha } = this.theme;
+
+    // Main -> bottom strip divider
     for (let dx = 30; dx < 770; dx += 12) {
-      this.add.rectangle(dx, 340, 6, 1, 0x444466, 0.4).setDepth(1);
+      this.add.rectangle(dx, 340, 6, 1, zoneDividerColor, zoneDividerAlpha).setDepth(1);
     }
 
     // Vertical divider between counter and lounge
     for (let dy = 345; dy < 465; dy += 8) {
-      this.add.rectangle(400, dy, 1, 4, 0x444466, 0.3).setDepth(1);
+      this.add.rectangle(400, dy, 1, 4, zoneDividerColor, zoneDividerAlpha * 0.75).setDepth(1);
     }
   }
 
   // ── Neon signs ────────────────────────────────────────────────────
   private drawNeonSigns() {
+    const { titleSign, labels } = this.theme;
+
     // Main title
-    this.add.rectangle(400, 22, 220, 28, 0x0a0a1a, 0.8).setDepth(3);
+    this.add.rectangle(400, 22, 220, 28, titleSign.bgColor, titleSign.bgAlpha).setDepth(3);
 
     this.titleShadow = this.add.text(400, 22, 'AGENT FACTORY', {
-      fontFamily: 'monospace', fontSize: '20px', color: '#ff00ff',
+      fontFamily: 'monospace', fontSize: '20px', color: titleSign.shadowColor,
     }).setOrigin(0.5).setAlpha(0.3).setDepth(3);
-    (this.titleShadow as any).setShadow?.(0, 0, '#ff00ff', 12);
+    (this.titleShadow as any).setShadow?.(0, 0, titleSign.shadowColor, 12);
 
     this.titleText = this.add.text(400, 22, 'AGENT FACTORY', {
-      fontFamily: 'monospace', fontSize: '20px', color: '#ff44ff', fontStyle: 'bold',
+      fontFamily: 'monospace', fontSize: '20px', color: titleSign.textColor, fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(3);
 
-    const titleGlowRect = this.add.rectangle(400, 22, 230, 32, 0xff00ff, 0.04).setDepth(2);
+    const titleGlowRect = this.add.rectangle(400, 22, 230, 32, titleSign.glowColor, 0.04).setDepth(2);
     this.tweens.add({
       targets: titleGlowRect,
       alpha: { from: 0.03, to: 0.08 },
@@ -165,26 +197,23 @@ export class FactoryScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    // Arcade label
-    this.add.text(400, 52, '[ ARCADE FLOOR ]', {
-      fontFamily: 'monospace', fontSize: '10px', color: '#00ffff',
+    // Zone labels
+    this.add.text(400, 52, labels.mainLabel, {
+      fontFamily: 'monospace', fontSize: '10px', color: labels.mainLabelColor,
     }).setOrigin(0.5).setAlpha(0.5).setDepth(3);
 
-    // Counter label (left)
-    this.add.text(200, 344, 'FRONT COUNTER', {
-      fontFamily: 'monospace', fontSize: '9px', color: '#ff9900',
+    this.add.text(200, 344, labels.counterLabel, {
+      fontFamily: 'monospace', fontSize: '9px', color: labels.counterLabelColor,
     }).setOrigin(0.5).setAlpha(0.5).setDepth(3);
 
-    // Lounge label (right)
-    this.add.text(630, 344, 'LOUNGE', {
-      fontFamily: 'monospace', fontSize: '9px', color: '#aa88ff',
+    this.add.text(630, 344, labels.loungeLabel, {
+      fontFamily: 'monospace', fontSize: '9px', color: labels.loungeLabelColor,
     }).setOrigin(0.5).setAlpha(0.5).setDepth(3);
 
-    // Wall neon signs
-    this.createNeonSign(80, 15, 'NOW CODING', '#00ff66', 0.7, 2200);
-    this.createNeonSign(700, 15, 'HIGH SCORE', '#ffff00', 0.6, 1800);
-    this.createNeonSign(60, 358, 'OPEN 24/7', '#00ccff', 0.4, 3000);
-    this.createNeonSign(760, 358, 'CHILL ZONE', '#aa88ff', 0.4, 2800);
+    // Decorative signs
+    for (const sign of this.theme.signs) {
+      this.createNeonSign(sign.x, sign.y, sign.text, sign.color, sign.baseAlpha, sign.flickerMs);
+    }
   }
 
   private createNeonSign(x: number, y: number, text: string, color: string, baseAlpha: number, flickerMs: number) {
@@ -194,7 +223,7 @@ export class FactoryScene extends Phaser.Scene {
 
     const w = textObj.width + 8;
     const h = textObj.height + 4;
-    this.add.rectangle(x, y, w, h, 0x0a0a1a, 0.7).setDepth(2);
+    this.add.rectangle(x, y, w, h, parseInt(this.theme.backgroundColor.replace('#', ''), 16), 0.7).setDepth(2);
 
     const colorNum = parseInt(color.replace('#', ''), 16);
     this.add.rectangle(x, y, w + 4, h + 4, colorNum, 0.04).setDepth(2);
@@ -213,45 +242,28 @@ export class FactoryScene extends Phaser.Scene {
 
   // ── Environmental props ───────────────────────────────────────────
   private placeProps() {
-    // Neon plants
-    const plantPositions = [
-      { x: 22, y: 58 }, { x: 778, y: 58 },
-      { x: 22, y: 420 }, { x: 778, y: 420 },
-    ];
-    for (const p of plantPositions) {
-      this.add.image(p.x, p.y, 'prop_plant').setScale(2).setDepth(4);
+    for (const prop of this.theme.props) {
+      this.add.image(prop.x, prop.y, prop.textureKey).setScale(prop.scale).setDepth(prop.depth);
     }
-
-    // Wall posters
-    this.add.image(160, 24, 'prop_poster').setScale(1.5).setDepth(3);
-    this.add.image(560, 24, 'prop_poster2').setScale(1.5).setDepth(3);
-
-    // Vending machine (between the two zones)
-    this.add.image(395, 420, 'prop_vending').setScale(1.5).setDepth(4);
-
-    // Couches in lounge (right side)
-    this.add.image(560, 430, 'prop_couch').setScale(1.5).setDepth(4);
-    this.add.image(700, 430, 'prop_couch').setScale(1.5).setDepth(4);
-
-    // Coffee machine near counter (left side)
-    this.add.image(32, 380, 'prop_coffee').setScale(1.5).setDepth(4);
   }
 
-  // ── Ambient dust particles ────────────────────────────────────────
+  // ── Ambient particles ────────────────────────────────────────
   private createAmbientParticles() {
-    for (let i = 0; i < 12; i++) {
+    const { particles } = this.theme;
+
+    for (let i = 0; i < particles.count; i++) {
       const dust = this.add.rectangle(
         Phaser.Math.Between(20, 780),
         Phaser.Math.Between(50, 450),
-        1, 1, 0xffffff, 0.12,
+        1, 1, particles.color, particles.minAlpha,
       ).setDepth(10);
 
       this.tweens.add({
         targets: dust,
-        x: dust.x + Phaser.Math.Between(-50, 50),
-        y: dust.y + Phaser.Math.Between(-25, 25),
-        alpha: { from: 0.04, to: 0.18 },
-        duration: Phaser.Math.Between(4000, 8000),
+        x: dust.x + Phaser.Math.Between(particles.driftRange[0], particles.driftRange[1]),
+        y: dust.y + Phaser.Math.Between(Math.floor(particles.driftRange[0] / 2), Math.floor(particles.driftRange[1] / 2)),
+        alpha: { from: particles.minAlpha, to: particles.maxAlpha },
+        duration: Phaser.Math.Between(particles.durationRange[0], particles.durationRange[1]),
         yoyo: true,
         repeat: -1,
         delay: Phaser.Math.Between(0, 4000),
@@ -261,7 +273,7 @@ export class FactoryScene extends Phaser.Scene {
 
   // ── CRT scanline overlay ──────────────────────────────────────────
   private addScanlineOverlay() {
-    this.add.tileSprite(400, 240, 800, 480, 'scanlines').setDepth(998).setAlpha(0.8);
+    this.add.tileSprite(400, 240, 800, 480, 'scanlines').setDepth(998).setAlpha(this.theme.scanlineAlpha);
   }
 
   // ── Vignette ──────────────────────────────────────────────────────

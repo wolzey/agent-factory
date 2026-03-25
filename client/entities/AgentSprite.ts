@@ -34,6 +34,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   private targetX = 0;
   private targetY = 0;
   private isMoving = false;
+  private isEmoting = false;
   private moveSpeed = 80; // pixels per second
 
   constructor(scene: Phaser.Scene, session: AgentSession) {
@@ -515,6 +516,434 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     });
   }
 
+  // ── Emotes ───────────────────────────────────────────────────────
+
+  playEmote(emote: string) {
+    if (this.isEmoting) return;
+    this.isEmoting = true;
+
+    switch (emote) {
+      case 'dance':  this.emoteDance(); break;
+      case 'jump':   this.emoteJump(); break;
+      case 'guitar': this.emoteGuitar(); break;
+      case 'gun':    this.emoteGun(); break;
+      case 'laugh':  this.emoteLaugh(); break;
+      default:       this.isEmoting = false; break;
+    }
+  }
+
+  private finishEmote() {
+    this.isEmoting = false;
+    // Reset sprite transform in case an emote left it altered
+    this.sprite.setAngle(0);
+    this.sprite.setPosition(0, 0);
+    this.sprite.setScale(2);
+  }
+
+  private showEmoteLabel(text: string, duration = 1200) {
+    const label = this.scene.add.text(0, -38, text, {
+      fontFamily: 'monospace',
+      fontSize: '14px',
+      color: '#ffffff',
+    }).setOrigin(0.5);
+    this.add(label);
+
+    this.scene.tweens.add({
+      targets: label,
+      y: label.y - 18,
+      alpha: 0,
+      duration,
+      ease: 'Power2',
+      onComplete: () => label.destroy(),
+    });
+  }
+
+  private emoteDance() {
+    this.showEmoteLabel('\u266b dance \u266b');
+
+    const rainbowColors = [0xff0000, 0xff8800, 0xffff00, 0x00ff00, 0x0088ff, 0xff00ff];
+
+    // Sway side-to-side
+    this.scene.tweens.add({
+      targets: this.sprite,
+      x: 6,
+      duration: 300,
+      yoyo: true,
+      repeat: 5,
+      ease: 'Sine.easeInOut',
+      onYoyo: (_tween: Phaser.Tweens.Tween, target: Phaser.GameObjects.Sprite) => {
+        target.x = target.x > 0 ? -6 : 6;
+      },
+    });
+
+    // Slight rotation bounce
+    this.scene.tweens.add({
+      targets: this.sprite,
+      angle: 10,
+      duration: 200,
+      yoyo: true,
+      repeat: 5,
+      ease: 'Sine.easeInOut',
+      onYoyo: (_tween: Phaser.Tweens.Tween, target: Phaser.GameObjects.Sprite) => {
+        target.angle = target.angle > 0 ? -10 : 10;
+      },
+    });
+
+    // Rainbow particles every 300ms
+    for (let i = 0; i < 6; i++) {
+      this.scene.time.delayedCall(i * 300, () => {
+        if (!this.scene) return;
+        const color = rainbowColors[i % rainbowColors.length];
+        for (let j = 0; j < 3; j++) {
+          const p = this.scene.add.circle(
+            this.x + Phaser.Math.Between(-10, 10),
+            this.y + Phaser.Math.Between(-15, 5),
+            Phaser.Math.Between(2, 4), color, 0.8,
+          ).setDepth(this.depth + 1);
+
+          this.scene.tweens.add({
+            targets: p,
+            y: p.y - Phaser.Math.Between(15, 30),
+            x: p.x + Phaser.Math.Between(-12, 12),
+            alpha: 0,
+            scaleX: 0.3,
+            scaleY: 0.3,
+            duration: Phaser.Math.Between(400, 700),
+            ease: 'Power2',
+            onComplete: () => p.destroy(),
+          });
+        }
+      });
+    }
+
+    // Neon glow pulses
+    const origAlpha = this.neonGlow.alpha;
+    this.scene.tweens.add({
+      targets: this.neonGlow,
+      alpha: 0.6,
+      duration: 300,
+      yoyo: true,
+      repeat: 3,
+    });
+
+    this.scene.time.delayedCall(2000, () => {
+      this.neonGlow.setAlpha(origAlpha);
+      this.finishEmote();
+    });
+  }
+
+  private emoteJump() {
+    this.showEmoteLabel('boing!');
+
+    const origY = this.sprite.y;
+
+    // Jump up
+    this.scene.tweens.add({
+      targets: this.sprite,
+      y: origY - 40,
+      duration: 400,
+      ease: 'Back.easeOut',
+      onComplete: () => {
+        // Sparkle particles at peak
+        for (let i = 0; i < 6; i++) {
+          const spark = this.scene.add.circle(
+            this.x + Phaser.Math.Between(-8, 8),
+            this.y - 40 + Phaser.Math.Between(-5, 5),
+            2, 0xffff00, 0.9,
+          ).setDepth(this.depth + 1);
+
+          const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+          this.scene.tweens.add({
+            targets: spark,
+            x: spark.x + Math.cos(angle) * 20,
+            y: spark.y + Math.sin(angle) * 20,
+            alpha: 0,
+            duration: 400,
+            ease: 'Power2',
+            onComplete: () => spark.destroy(),
+          });
+        }
+
+        // Fall back down
+        this.scene.tweens.add({
+          targets: this.sprite,
+          y: origY,
+          duration: 500,
+          ease: 'Bounce.easeOut',
+          onComplete: () => {
+            // Squash on landing
+            this.scene.tweens.add({
+              targets: this.sprite,
+              scaleY: 1.4,
+              scaleX: 2.6,
+              duration: 80,
+              yoyo: true,
+              ease: 'Power1',
+            });
+
+            // Dust particles on landing
+            for (let i = 0; i < 8; i++) {
+              const dust = this.scene.add.circle(
+                this.x + Phaser.Math.Between(-12, 12),
+                this.y + 6,
+                Phaser.Math.Between(1, 3), 0xaaaaaa, 0.5,
+              ).setDepth(this.depth + 1);
+
+              this.scene.tweens.add({
+                targets: dust,
+                x: dust.x + Phaser.Math.Between(-20, 20),
+                y: dust.y + Phaser.Math.Between(-5, 5),
+                alpha: 0,
+                duration: Phaser.Math.Between(300, 600),
+                ease: 'Power2',
+                onComplete: () => dust.destroy(),
+              });
+            }
+
+            this.scene.time.delayedCall(300, () => this.finishEmote());
+          },
+        });
+      },
+    });
+  }
+
+  private emoteGuitar() {
+    this.showEmoteLabel('\u266a \u266b \u266a');
+
+    const noteChars = ['\u266a', '\u266b', '\u2669'];
+    const noteColors = ['#ff44ff', '#44ffff', '#ffff44', '#44ff44', '#ff8844'];
+
+    // Headbang tilt
+    this.scene.tweens.add({
+      targets: this.sprite,
+      angle: 15,
+      duration: 200,
+      yoyo: true,
+      repeat: 7,
+      ease: 'Sine.easeInOut',
+      onYoyo: (_tween: Phaser.Tweens.Tween, target: Phaser.GameObjects.Sprite) => {
+        target.angle = target.angle > 0 ? -15 : 15;
+      },
+    });
+
+    // Floating musical notes
+    for (let i = 0; i < 8; i++) {
+      this.scene.time.delayedCall(i * 250, () => {
+        if (!this.scene) return;
+        const note = this.scene.add.text(
+          this.x + Phaser.Math.Between(-12, 12),
+          this.y - 20,
+          noteChars[i % noteChars.length],
+          {
+            fontFamily: 'monospace',
+            fontSize: '12px',
+            color: noteColors[i % noteColors.length],
+          },
+        ).setOrigin(0.5).setDepth(this.depth + 1);
+
+        this.scene.tweens.add({
+          targets: note,
+          y: note.y - Phaser.Math.Between(25, 45),
+          x: note.x + Phaser.Math.Between(-15, 15),
+          alpha: 0,
+          duration: Phaser.Math.Between(600, 900),
+          ease: 'Power1',
+          onComplete: () => note.destroy(),
+        });
+      });
+    }
+
+    // Yellow sparks at hand positions
+    for (let i = 0; i < 4; i++) {
+      this.scene.time.delayedCall(200 + i * 400, () => {
+        if (!this.scene) return;
+        for (let j = 0; j < 3; j++) {
+          const side = j % 2 === 0 ? -8 : 8;
+          const spark = this.scene.add.circle(
+            this.x + side, this.y + 4,
+            2, 0xffcc00, 0.8,
+          ).setDepth(this.depth + 1);
+
+          this.scene.tweens.add({
+            targets: spark,
+            y: spark.y + Phaser.Math.Between(-10, -20),
+            x: spark.x + Phaser.Math.Between(-8, 8),
+            alpha: 0,
+            duration: 400,
+            ease: 'Power2',
+            onComplete: () => spark.destroy(),
+          });
+        }
+      });
+    }
+
+    this.scene.time.delayedCall(2200, () => this.finishEmote());
+  }
+
+  private emoteGun() {
+    this.showEmoteLabel('pew pew!');
+
+    const fireShot = (delay: number) => {
+      this.scene.time.delayedCall(delay, () => {
+        if (!this.scene) return;
+
+        // Recoil
+        this.scene.tweens.add({
+          targets: this.sprite,
+          x: this.sprite.x - 3,
+          duration: 60,
+          yoyo: true,
+          ease: 'Power2',
+        });
+
+        // Muzzle flash
+        const flash = this.scene.add.circle(
+          this.x + 22, this.y - 4,
+          6, 0xffff00, 0.9,
+        ).setDepth(this.depth + 1);
+
+        this.scene.tweens.add({
+          targets: flash,
+          scaleX: 2.5,
+          scaleY: 2.5,
+          alpha: 0,
+          duration: 150,
+          ease: 'Power3',
+          onComplete: () => flash.destroy(),
+        });
+
+        // White core flash
+        const core = this.scene.add.circle(
+          this.x + 22, this.y - 4,
+          3, 0xffffff, 1,
+        ).setDepth(this.depth + 2);
+
+        this.scene.tweens.add({
+          targets: core,
+          alpha: 0,
+          scaleX: 1.5,
+          scaleY: 1.5,
+          duration: 80,
+          onComplete: () => core.destroy(),
+        });
+
+        // Bullet trails
+        for (let i = 0; i < 3; i++) {
+          const bullet = this.scene.add.rectangle(
+            this.x + 24, this.y - 4 + Phaser.Math.Between(-3, 3),
+            4, 1, 0xffff00, 0.8,
+          ).setDepth(this.depth + 1);
+
+          this.scene.tweens.add({
+            targets: bullet,
+            x: bullet.x + 80,
+            alpha: 0,
+            scaleX: 0.3,
+            duration: Phaser.Math.Between(200, 350),
+            ease: 'Power1',
+            onComplete: () => bullet.destroy(),
+          });
+        }
+
+        // Smoke
+        for (let i = 0; i < 4; i++) {
+          const smoke = this.scene.add.circle(
+            this.x + 20 + Phaser.Math.Between(-3, 3),
+            this.y - 4,
+            Phaser.Math.Between(2, 4), 0x888888, 0.3,
+          ).setDepth(this.depth + 1);
+
+          this.scene.tweens.add({
+            targets: smoke,
+            y: smoke.y - Phaser.Math.Between(10, 25),
+            x: smoke.x + Phaser.Math.Between(-5, 5),
+            alpha: 0,
+            scaleX: 2,
+            scaleY: 2,
+            duration: Phaser.Math.Between(400, 700),
+            ease: 'Power1',
+            onComplete: () => smoke.destroy(),
+          });
+        }
+      });
+    };
+
+    fireShot(100);
+    fireShot(500);
+
+    this.scene.time.delayedCall(1500, () => this.finishEmote());
+  }
+
+  private emoteLaugh() {
+    this.showEmoteLabel('haha!');
+
+    // Rapid bouncing
+    this.scene.tweens.add({
+      targets: this.sprite,
+      y: this.sprite.y - 5,
+      duration: 120,
+      yoyo: true,
+      repeat: 7,
+      ease: 'Sine.easeInOut',
+    });
+
+    // Floating "ha" text
+    const haTexts = ['ha', 'ha', 'HA', 'ha', 'HA'];
+    for (let i = 0; i < haTexts.length; i++) {
+      this.scene.time.delayedCall(i * 200, () => {
+        if (!this.scene) return;
+        const ha = this.scene.add.text(
+          this.x + Phaser.Math.Between(-15, 15),
+          this.y - 20,
+          haTexts[i],
+          {
+            fontFamily: 'monospace',
+            fontSize: i === 2 || i === 4 ? '12px' : '9px',
+            color: '#ffdd00',
+            fontStyle: 'bold',
+          },
+        ).setOrigin(0.5).setDepth(this.depth + 1);
+
+        this.scene.tweens.add({
+          targets: ha,
+          y: ha.y - Phaser.Math.Between(20, 40),
+          x: ha.x + Phaser.Math.Between(-10, 10),
+          alpha: 0,
+          duration: Phaser.Math.Between(500, 800),
+          ease: 'Power1',
+          onComplete: () => ha.destroy(),
+        });
+      });
+    }
+
+    // Cheerful particles
+    for (let i = 0; i < 3; i++) {
+      this.scene.time.delayedCall(300 + i * 250, () => {
+        if (!this.scene) return;
+        for (let j = 0; j < 3; j++) {
+          const color = j % 2 === 0 ? 0xffdd00 : 0xff8800;
+          const p = this.scene.add.circle(
+            this.x + Phaser.Math.Between(-8, 8),
+            this.y + Phaser.Math.Between(-10, 0),
+            Phaser.Math.Between(1, 3), color, 0.7,
+          ).setDepth(this.depth + 1);
+
+          this.scene.tweens.add({
+            targets: p,
+            y: p.y - Phaser.Math.Between(10, 20),
+            x: p.x + Phaser.Math.Between(-10, 10),
+            alpha: 0,
+            duration: Phaser.Math.Between(300, 500),
+            ease: 'Power2',
+            onComplete: () => p.destroy(),
+          });
+        }
+      });
+    }
+
+    this.scene.time.delayedCall(1500, () => this.finishEmote());
+  }
+
   private onArrived() {
     const activity = this.sessionData.activity;
     if (activity === 'idle' || activity === 'stopped') {
@@ -603,9 +1032,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   private computeLabel(session: AgentSession): string {
-    if (session.sessionName) return session.sessionName;
-    const cwdBase = (session.cwd || '').split('/').pop() || '';
-    return cwdBase || session.username;
+    return session.username;
   }
 
   private showTooltip() {
@@ -616,11 +1043,14 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     const detailEl = tooltip.querySelector('.tooltip-detail') as HTMLElement;
     const toolEl = tooltip.querySelector('.tooltip-tool') as HTMLElement;
 
-    nameEl.textContent = this.sessionData.sessionName || this.sessionData.username;
+    nameEl.textContent = this.sessionData.username;
 
     const cwdBase = this.sessionData.cwd?.split('/').pop() || 'unknown';
     const subCount = this.sessionData.subagents?.length || 0;
-    const parts = [this.sessionData.username, cwdBase, this.sessionData.activity];
+    const parts: string[] = [];
+    if (this.sessionData.sessionName) parts.push(this.sessionData.sessionName);
+    parts.push(cwdBase);
+    if (this.sessionData.activity) parts.push(this.sessionData.activity);
     if (subCount > 0) parts.push(`${subCount} subagent(s)`);
     detailEl.textContent = parts.join(' | ');
 
