@@ -1,0 +1,10 @@
+{
+  "username": "anonymous",
+  "serverUrl": "http://localhost:4242",
+  "avatar": {
+    "spriteIndex": 0,
+    "color": "#4a90d9",
+    "hat": null,
+    "trail": null
+  }
+}

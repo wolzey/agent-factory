@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent Factory</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a1a; }
+    #game-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+
+    /* Tooltip overlay */
+    #tooltip {
+      display: none;
+      position: fixed;
+      background: rgba(10, 10, 26, 0.95);
+      border: 2px solid #ff00ff;
+      border-radius: 4px;
+      padding: 8px 12px;
+      color: #fff;
+      font-family: monospace;
+      font-size: 12px;
+      pointer-events: none;
+      z-index: 1000;
+      box-shadow: 0 0 12px rgba(255, 0, 255, 0.3);
+      max-width: 300px;
+    }
+    #tooltip .tooltip-name {
+      color: #00ffff;
+      font-weight: bold;
+      font-size: 14px;
+    }
+    #tooltip .tooltip-detail {
+      color: #aaa;
+      margin-top: 4px;
+    }
+    #tooltip .tooltip-tool {
+      color: #ff00ff;
+      margin-top: 2px;
+    }
+
+    /* HUD */
+    #hud {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      background: rgba(10, 10, 26, 0.85);
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 8px 14px;
+      color: #666;
+      font-family: monospace;
+      font-size: 11px;
+      z-index: 999;
+    }
+    #hud .hud-title {
+      color: #ff00ff;
+      font-size: 13px;
+      font-weight: bold;
+      text-shadow: 0 0 8px rgba(255, 0, 255, 0.5);
+    }
+    #hud .hud-stat {
+      color: #00ffff;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container"></div>
+  <div id="tooltip">
+    <div class="tooltip-name"></div>
+    <div class="tooltip-detail"></div>
+    <div class="tooltip-tool"></div>
+  </div>
+  <div id="hud">
+    <div class="hud-title">AGENT FACTORY</div>
+    <div>Agents: <span class="hud-stat" id="hud-agents">0</span></div>
+    <div>Connected: <span class="hud-stat" id="hud-connected">--</span></div>
+  </div>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+{
+  "name": "agent-factory",
+  "version": "1.0.0",
+  "description": "2D pixel art visualization of Claude Code agent sessions",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"tsx watch server/index.ts\" \"vite dev\"",
+    "dev:server": "tsx watch server/index.ts",
+    "dev:client": "vite dev",
+    "build": "vite build && tsc -p tsconfig.server.json",
+    "start": "node dist/server/index.js",
+    "install-hooks": "bash hooks/install.sh"
+  },
+  "keywords": ["claude-code", "visualization", "pixel-art", "agents"],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.30.3",
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/static": "^9.0.0",
+    "@fastify/websocket": "^11.2.0",
+    "fastify": "^5.8.4"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "concurrently": "^9.2.1",
+    "phaser": "^3.90.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.2"
+  }
+}
