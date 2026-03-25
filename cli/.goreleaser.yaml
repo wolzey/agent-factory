@@ -1,9 +1,8 @@
 project_name: agent-factory
 
 builds:
-  - main: ./main.go
+  - main: .
     binary: agent-factory
-    dir: cli
     env:
       - CGO_ENABLED=0
     goos:

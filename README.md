@@ -19,16 +19,22 @@ A 2D pixel art visualization of Claude Code agent sessions. Watch your team's ag
 If someone on your team is already running the server, just install the hooks:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wolzey/agent-factory/main/install.sh -o /tmp/af-install.sh && bash /tmp/af-install.sh
+curl -fsSL https://raw.githubusercontent.com/wolzey/agent-factory/main/install-cli.sh | bash
 ```
 
-This runs an interactive wizard that:
+This downloads a small binary and runs an interactive wizard that:
 1. Asks for your display name
 2. Asks for the server URL (they'll give you this)
 3. Lets you pick an avatar color and style
 4. Installs the hooks into your Claude Code settings
 
-**Requirements:** `jq`, `curl`, Claude Code installed
+**Requirements:** `curl`, Claude Code installed
+
+For non-interactive installs (CI, scripting):
+
+```bash
+agent-factory install --non-interactive --server-url https://your-server.example.com --username alice
+```
 
 ## Running the Server
 
@@ -61,7 +67,7 @@ Use ngrok, Tailscale, or any tunnel to expose port 4242:
 ngrok http 4242
 
 # Then tell your team to install with:
-# curl -fsSL https://raw.githubusercontent.com/wolzey/agent-factory/main/install.sh -o /tmp/af-install.sh && bash /tmp/af-install.sh
+# curl -fsSL https://raw.githubusercontent.com/wolzey/agent-factory/main/install-cli.sh | bash
 # and enter the ngrok URL when prompted
 ```
 
@@ -139,10 +145,10 @@ Your config lives at `~/.config/agent-factory/config.json`:
 ## Uninstall
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wolzey/agent-factory/main/uninstall.sh -o /tmp/af-uninstall.sh && bash /tmp/af-uninstall.sh
+agent-factory uninstall
 ```
 
-This removes all hook entries from `~/.claude/settings.json` (surgically via jq, preserving your other hooks) and deletes `~/.config/agent-factory/`.
+This removes all hook entries from `~/.claude/settings.json` (surgically, preserving your other hooks) and deletes `~/.config/agent-factory/`.
 
 ## Architecture
 
@@ -160,10 +166,12 @@ agent-factory/
 │   ├── systems/      # AgentManager, LayoutManager
 │   └── network/      # WebSocket client with auto-reconnect
 ├── shared/           # Types and constants shared between server/client
-├── hooks/            # Claude Code hook scripts
-│   ├── install.sh    # Full installer (for server operators)
-│   └── team-install.sh  # Lightweight team installer
-└── install.sh        # Interactive wizard installer (curl-friendly)
+├── cli/              # Go CLI binary (install/uninstall wizard)
+│   ├── cmd/          # Cobra commands (install, uninstall)
+│   ├── internal/     # Config, hooks, wizard, UI helpers
+│   └── main.go       # Entry point
+├── hooks/            # Claude Code hook scripts (legacy)
+└── install-cli.sh    # Bootstrap script (downloads CLI binary)
 ```
 
 ## API
