@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { AgentSession, EffectType, EnvironmentType } from '@shared/types';
+import { TOMBSTONE_DURATION_MS } from '@shared/constants';
 import { AgentSprite } from '../entities/AgentSprite';
 import { SubagentSprite } from '../entities/SubagentSprite';
 import { Machine } from '../entities/Machine';
@@ -15,6 +16,9 @@ export class AgentManager {
   private layout: LayoutManager;
   private serverGraphicDeath = false;
   private theme: EnvironmentTheme;
+  private tombstones = new Map<string, { container: Phaser.GameObjects.Container; x: number; y: number }>();
+  private flowerVisitors = new Map<string, string>(); // agentId → deadSessionId they're visiting
+  private zombieRising = new Set<string>(); // agents currently rising from grave (skip routing)
 
   constructor(scene: Phaser.Scene, envType: EnvironmentType = 'arcade') {
     this.scene = scene;
@@ -120,31 +124,57 @@ export class AgentManager {
   }
 
   private upsertAgent(session: AgentSession) {
+    // Clear flower visitor status — agent got a real update, stop mourning
+    this.flowerVisitors.delete(session.sessionId);
+
     let agent = this.agents.get(session.sessionId);
 
     if (!agent) {
-      // New agent - spawn at entrance
       agent = new AgentSprite(this.scene, session);
-      const entrance = this.layout.entrance;
-      agent.setPosition(entrance.x, entrance.y);
+      const tomb = this.tombstones.get(session.sessionId);
+      if (tomb) {
+        // Zombie resurrection from tombstone
+        agent.riseFromGrave(tomb.x, tomb.y, tomb.container);
+        this.tombstones.delete(session.sessionId);
+        this.layout.releaseTombstone(session.sessionId);
+
+        // Send flower visitors home — tombstone is gone
+        this.cancelFlowerVisitors(session.sessionId);
+
+        // Prevent routing until rise animation finishes (~3s)
+        this.zombieRising.add(session.sessionId);
+        this.scene.time.delayedCall(3000, () => {
+          this.zombieRising.delete(session.sessionId);
+        });
+      } else {
+        // New agent - spawn at entrance
+        const entrance = this.layout.entrance;
+        agent.setPosition(entrance.x, entrance.y);
+      }
       this.agents.set(session.sessionId, agent);
     }
 
     agent.updateSession(session);
+
+    // Skip routing while zombie is rising from grave
+    if (this.zombieRising.has(session.sessionId)) {
+      this.syncSubagents(session);
+      return;
+    }
 
     // Route agent to the right area based on activity:
     //   working (reading/writing/running/searching/chatting/planning) -> arcade cabinet
     //   thinking (between tool calls) -> stay at arcade cabinet (thought bubble shown by AgentSprite)
     //   waiting (waiting for user prompt) -> front counter
     //   idle (session started, no activity yet) -> lounge
-    //   stopped -> walk to exit
+    //   stopped -> die in place (slot kept for tombstone, removeAgent handles release)
 
     const workingStates = ['reading', 'writing', 'running', 'searching', 'chatting', 'planning'];
     const isWorking = workingStates.includes(session.activity);
     const isThinking = session.activity === 'thinking';
 
     if (session.activity === 'stopped') {
-      this.layout.release(session.sessionId);
+      // Don't release the arcade slot here — removeAgent will reserve it for the tombstone
       this.deactivateMachineFor(session.sessionId);
       // Die in place — no walking to exit
     } else if (isWorking || isThinking) {
@@ -173,11 +203,31 @@ export class AgentManager {
   private removeAgent(sessionId: string) {
     const agent = this.agents.get(sessionId);
     if (agent) {
-      agent.die(undefined, this.serverGraphicDeath);
+      // Deactivate machine while slot still has the agent's sessionId
+      this.deactivateMachineFor(sessionId);
+      // Reserve the workstation slot for the tombstone (changes occupant to __tomb__ prefix)
+      this.layout.reserveForTombstone(sessionId);
+      // Release any non-arcade slots (counter/lounge) the agent may hold
+      this.layout.release(sessionId);
+
+      agent.die(() => {
+        const tombData = agent.spawnTombstone();
+        this.tombstones.set(sessionId, tombData);
+
+        // Trigger flower-bringing from other idle agents
+        this.triggerFlowerVisits(sessionId);
+
+        // Remove tombstone + free workstation slot after it expires
+        this.scene.time.delayedCall(TOMBSTONE_DURATION_MS, () => {
+          this.tombstones.delete(sessionId);
+          this.layout.releaseTombstone(sessionId);
+        });
+      }, this.serverGraphicDeath);
       this.agents.delete(sessionId);
+    } else {
+      this.layout.release(sessionId);
+      this.deactivateMachineFor(sessionId);
     }
-    this.layout.release(sessionId);
-    this.deactivateMachineFor(sessionId);
 
     // Remove associated subagents
     for (const [key, sub] of this.subagents) {
@@ -286,5 +336,114 @@ export class AgentManager {
   private updateHud() {
     const el = document.getElementById('hud-agents');
     if (el) el.textContent = String(this.agents.size);
+  }
+
+  /**
+   * Send all idle/waiting agents to walk over and place flowers at a tombstone.
+   */
+  private triggerFlowerVisits(deadSessionId: string) {
+    const tomb = this.tombstones.get(deadSessionId);
+    if (!tomb) return;
+
+    // Find agents that are idle or waiting (not busy working) and not already visiting
+    const candidates: { id: string; agent: AgentSprite }[] = [];
+    for (const [id, agent] of this.agents) {
+      const activity = agent.sessionData.activity;
+      if ((activity === 'idle' || activity === 'waiting') && !this.flowerVisitors.has(id)) {
+        candidates.push({ id, agent });
+      }
+    }
+
+    if (candidates.length === 0) return;
+
+    for (let i = 0; i < candidates.length; i++) {
+      const { id } = candidates[i];
+      this.flowerVisitors.set(id, deadSessionId);
+
+      // Stagger visits so they don't all arrive at once
+      const delay = Phaser.Math.Between(1500, 4000) + i * 2000;
+
+      this.scene.time.delayedCall(delay, () => {
+        // Check the tombstone still exists and the agent is still alive and still a visitor
+        const currentTomb = this.tombstones.get(deadSessionId);
+        const currentAgent = this.agents.get(id);
+        if (!currentTomb || !currentAgent || this.flowerVisitors.get(id) !== deadSessionId) {
+          this.flowerVisitors.delete(id);
+          return;
+        }
+
+        // Save original position to return to
+        const returnX = currentAgent.x;
+        const returnY = currentAgent.y;
+
+        // Walk to tombstone (offset slightly so they stand beside it)
+        const offsetX = Phaser.Math.Between(-16, 16);
+        const destX = currentTomb.x + offsetX;
+        const destY = currentTomb.y + 14;
+        currentAgent.moveTo(destX, destY);
+
+        // Calculate walk time from distance (agent speed is 80px/s) + buffer
+        const dx = destX - currentAgent.x;
+        const dy = destY - currentAgent.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const walkTime = (dist / 80) * 1000 + 500;
+
+        // Place flower after agent actually arrives
+        this.scene.time.delayedCall(walkTime, () => {
+          if (!this.agents.has(id) || !this.tombstones.has(deadSessionId) || this.flowerVisitors.get(id) !== deadSessionId) {
+            this.flowerVisitors.delete(id);
+            return;
+          }
+
+          const tombNow = this.tombstones.get(deadSessionId)!;
+
+          // Place flower at tombstone base
+          const flower = this.scene.add.image(
+            Phaser.Math.Between(-8, 8),
+            Phaser.Math.Between(10, 16),
+            'flower',
+          );
+          flower.setScale(1.5);
+          flower.setAlpha(0);
+          flower.setTint([0xff4466, 0xffaa00, 0xff66cc, 0x66aaff, 0xffff44][Phaser.Math.Between(0, 4)]);
+          tombNow.container.add(flower);
+
+          // Flower fade in
+          this.scene.tweens.add({
+            targets: flower,
+            alpha: 1,
+            y: flower.y - 2,
+            duration: 400,
+            ease: 'Power2',
+          });
+
+          // Sad pause, then walk back
+          this.scene.time.delayedCall(1500, () => {
+            this.flowerVisitors.delete(id);
+            if (this.agents.has(id)) {
+              const a = this.agents.get(id)!;
+              a.moveTo(returnX, returnY);
+            }
+          });
+        });
+      });
+    }
+  }
+
+  /**
+   * Cancel all flower visitors headed to a specific tombstone and send them back.
+   */
+  private cancelFlowerVisitors(deadSessionId: string) {
+    for (const [agentId, tombId] of this.flowerVisitors) {
+      if (tombId === deadSessionId) {
+        this.flowerVisitors.delete(agentId);
+        const agent = this.agents.get(agentId);
+        if (agent) {
+          // Send them to their normal routing position (lounge for idle)
+          const pos = this.layout.assignToLounge(agentId);
+          agent.moveTo(pos.x, pos.y);
+        }
+      }
+    }
   }
 }

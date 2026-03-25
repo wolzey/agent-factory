@@ -30,6 +30,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   private thoughtBubble: Phaser.GameObjects.Container | null = null;
 
   public sessionData: AgentSession;
+  public isZombie = false;
   private spriteKey: string;
   private currentAnim = '';
   private targetX = 0;
@@ -37,6 +38,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   private isMoving = false;
   private isEmoting = false;
   private moveSpeed = 80; // pixels per second
+  private zombieStaggerTimer: Phaser.Time.TimerEvent | null = null;
 
   constructor(scene: Phaser.Scene, session: AgentSession) {
     super(scene, 0, 0);
@@ -188,7 +190,6 @@ export class AgentSprite extends Phaser.GameObjects.Container {
 
         // After a pause, fade everything out
         this.scene.time.delayedCall(1500, () => {
-          this.spawnTombstone();
           this.scene.tweens.add({
             targets: this,
             alpha: 0,
@@ -505,7 +506,6 @@ export class AgentSprite extends Phaser.GameObjects.Container {
 
     // Phase 4: Fade everything out after the carnage
     this.scene.time.delayedCall(3500, () => {
-      this.spawnTombstone();
       this.scene.tweens.add({
         targets: this,
         alpha: 0,
@@ -947,23 +947,24 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.scene.time.delayedCall(1500, () => this.finishEmote());
   }
 
-  private spawnTombstone() {
+  spawnTombstone(): { container: Phaser.GameObjects.Container; x: number; y: number } {
     const worldX = this.x;
     const worldY = this.y;
     const label = this.computeLabel(this.sessionData);
+    const scene = this.scene; // Capture before this sprite is destroyed
 
-    const container = this.scene.add.container(worldX, worldY + 4);
+    const container = scene.add.container(worldX, worldY + 4);
     container.setDepth(7 + worldY * 0.001);
     container.setAlpha(0);
     container.setScale(0.5);
 
     // Tombstone image
-    const stone = this.scene.add.image(0, 0, 'tombstone');
+    const stone = scene.add.image(0, 0, 'tombstone');
     stone.setScale(2);
     container.add(stone);
 
     // Name text above tombstone
-    const name = this.scene.add.text(0, -26, label, {
+    const name = scene.add.text(0, -26, label, {
       fontFamily: 'monospace',
       fontSize: '7px',
       color: '#aaaacc',
@@ -974,7 +975,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     container.add(name);
 
     // Rise up from the ground
-    this.scene.tweens.add({
+    scene.tweens.add({
       targets: container,
       alpha: 1,
       scaleX: 1,
@@ -985,17 +986,155 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     });
 
     // Fade out and sink after duration
-    this.scene.time.delayedCall(TOMBSTONE_DURATION_MS, () => {
-      if (!this.scene) return;
+    scene.time.delayedCall(TOMBSTONE_DURATION_MS, () => {
+      if (container.scene) {
+        container.scene.tweens.add({
+          targets: container,
+          alpha: 0,
+          y: container.y + 10,
+          scaleX: 0.6,
+          scaleY: 0.6,
+          duration: 800,
+          ease: 'Power2',
+          onComplete: () => container.destroy(),
+        });
+      }
+    });
+
+    return { container, x: worldX, y: worldY };
+  }
+
+  riseFromGrave(graveX: number, graveY: number, tombstone: Phaser.GameObjects.Container) {
+    this.isZombie = true;
+
+    // Position at grave
+    this.setPosition(graveX, graveY);
+    this.setAlpha(0);
+    this.sprite.setAngle(0);
+
+    // Start buried — offset down and invisible
+    this.sprite.setY(16);
+    this.nametag.setAlpha(0);
+    this.neonGlow.setAlpha(0);
+
+    // Permanent zombie look: sickly green tint, green glow, zombie nametag
+    this.sprite.setTint(0x55aa55);
+    this.neonGlow.setFillStyle(0x00ff00, 0.25);
+    this.nametag.setColor('#55cc55');
+    this.nametag.setText(`☠ ${this.computeLabel(this.sessionData)}`);
+
+    // Slower zombie walk speed
+    this.moveSpeed = 45;
+
+    // Shake and destroy tombstone
+    this.scene.tweens.add({
+      targets: tombstone,
+      x: tombstone.x + 2,
+      duration: 60,
+      yoyo: true,
+      repeat: 8,
+      ease: 'Sine.easeInOut',
+      onComplete: () => {
+        // Tombstone cracks apart
+        this.scene.tweens.add({
+          targets: tombstone,
+          alpha: 0,
+          scaleX: 1.3,
+          scaleY: 0.4,
+          y: tombstone.y + 8,
+          duration: 300,
+          ease: 'Power2',
+          onComplete: () => tombstone.destroy(),
+        });
+      },
+    });
+
+    // Emit dirt particles
+    this.scene.time.delayedCall(500, () => {
+      for (let i = 0; i < 12; i++) {
+        const dirt = this.scene.add.circle(
+          graveX + Phaser.Math.Between(-10, 10),
+          graveY + Phaser.Math.Between(-4, 4),
+          Phaser.Math.Between(1, 3),
+          Phaser.Math.Between(0, 1) ? 0x3a2a1a : 0x2a5a2a,
+        ).setDepth(9);
+
+        this.scene.tweens.add({
+          targets: dirt,
+          x: dirt.x + Phaser.Math.Between(-20, 20),
+          y: dirt.y - Phaser.Math.Between(10, 30),
+          alpha: 0,
+          duration: Phaser.Math.Between(400, 700),
+          ease: 'Power2',
+          onComplete: () => dirt.destroy(),
+        });
+      }
+    });
+
+    // Agent rises up from the ground
+    this.scene.time.delayedCall(600, () => {
+      this.setAlpha(1);
+
+      // Rise sprite from below
       this.scene.tweens.add({
-        targets: container,
-        alpha: 0,
-        y: container.y + 10,
-        scaleX: 0.6,
-        scaleY: 0.6,
+        targets: this.sprite,
+        y: 0,
         duration: 800,
         ease: 'Power2',
-        onComplete: () => container.destroy(),
+      });
+
+      // Fade in nametag
+      this.scene.tweens.add({
+        targets: this.nametag,
+        alpha: 1,
+        duration: 400,
+        delay: 400,
+      });
+
+      // Fade in glow
+      this.scene.tweens.add({
+        targets: this.neonGlow,
+        alpha: 0.25,
+        duration: 400,
+        delay: 400,
+      });
+
+      // Zombie stagger on rise
+      this.scene.tweens.add({
+        targets: this.sprite,
+        x: this.sprite.x + 3,
+        duration: 100,
+        yoyo: true,
+        repeat: 3,
+        delay: 800,
+        ease: 'Sine.easeInOut',
+      });
+
+      // Continuous zombie idle stagger — tilts back and forth periodically
+      this.zombieStaggerTimer = this.scene.time.addEvent({
+        delay: 2000,
+        loop: true,
+        callback: () => {
+          if (!this.scene || !this.sprite) return;
+          this.scene.tweens.add({
+            targets: this.sprite,
+            angle: Phaser.Math.Between(-4, 4),
+            duration: 300,
+            yoyo: true,
+            ease: 'Sine.easeInOut',
+          });
+        },
+      });
+
+      // Green spark burst
+      this.scene.time.delayedCall(1500, () => {
+        if (!this.scene) return;
+        this.scene.tweens.add({
+          targets: this.neonGlow,
+          alpha: 0.5,
+          duration: 200,
+          yoyo: true,
+        });
       });
     });
   }
