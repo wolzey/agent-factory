@@ -1025,11 +1025,13 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.nametag.setAlpha(0);
     this.neonGlow.setAlpha(0);
 
-    // Permanent zombie look: sickly green tint, green glow, zombie nametag
-    this.sprite.setTint(0x55aa55);
-    this.neonGlow.setFillStyle(0x00ff00, 0.25);
-    this.nametag.setColor('#55cc55');
-    this.nametag.setText(`☠ ${this.computeLabel(this.sessionData)}`);
+    // Permanent zombie look: dark sickly green tint, toxic glow, zombie nametag
+    this.sprite.setTint(0x448833);
+    this.neonGlow.setFillStyle(0x33ff00, 0.4);
+    this.neonGlow.setScale(1.5, 1);
+    this.nametag.setColor('#33ff00');
+    this.nametag.setBackgroundColor('rgba(0, 20, 0, 0.9)');
+    this.nametag.setText(`☠ ${this.computeLabel(this.sessionData)} ☠`);
 
     // Slower zombie walk speed
     this.moveSpeed = 45;
@@ -1118,31 +1120,49 @@ export class AgentSprite extends Phaser.GameObjects.Container {
         ease: 'Sine.easeInOut',
       });
 
-      // Continuous zombie idle stagger — tilts back and forth periodically
+      // Continuous zombie effects: stagger + glow pulse + green drip particles
       this.zombieStaggerTimer = this.scene.time.addEvent({
-        delay: 2000,
+        delay: 1500,
         loop: true,
         callback: () => {
           if (!this.scene || !this.sprite) return;
+
+          // Stagger tilt
           this.scene.tweens.add({
             targets: this.sprite,
-            angle: Phaser.Math.Between(-4, 4),
+            angle: Phaser.Math.Between(-6, 6),
             duration: 300,
             yoyo: true,
             ease: 'Sine.easeInOut',
           });
-        },
-      });
 
-      // Green spark burst
-      this.scene.time.delayedCall(1500, () => {
-        if (!this.scene) return;
-        this.scene.tweens.add({
-          targets: this.neonGlow,
-          alpha: 0.5,
-          duration: 200,
-          yoyo: true,
-        });
+          // Pulsing toxic glow
+          this.scene.tweens.add({
+            targets: this.neonGlow,
+            alpha: 0.6,
+            duration: 400,
+            yoyo: true,
+            ease: 'Sine.easeInOut',
+          });
+
+          // Green drip particle
+          const drip = this.scene.add.circle(
+            this.x + Phaser.Math.Between(-4, 4),
+            this.y + Phaser.Math.Between(-8, 0),
+            Phaser.Math.Between(1, 2),
+            0x33ff00,
+            0.7,
+          ).setDepth(this.depth + 1);
+
+          this.scene.tweens.add({
+            targets: drip,
+            y: drip.y + Phaser.Math.Between(8, 16),
+            alpha: 0,
+            duration: Phaser.Math.Between(500, 900),
+            ease: 'Power2',
+            onComplete: () => drip.destroy(),
+          });
+        },
       });
     });
   }
