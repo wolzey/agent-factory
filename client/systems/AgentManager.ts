@@ -19,13 +19,12 @@ export class AgentManager {
   }
 
   private createMachines() {
-    // Create arcade cabinets matching LayoutManager slot positions
-    // Cabinet sits at slot.y - 30, agent stands at slot.y + 30
+    // Cabinets at slot.y - 24 (smaller scale = less offset needed)
     for (let row = 0; row < 2; row++) {
       for (let col = 0; col < 6; col++) {
-        const x = 80 + col * 110;
-        const slotY = 90 + row * 110;
-        const machine = new Machine(this.scene, x, slotY - 30, row * 6 + col);
+        const x = 80 + col * 120;
+        const slotY = 110 + row * 110;
+        const machine = new Machine(this.scene, x, slotY - 24, row * 6 + col);
         this.machines.push(machine);
       }
     }
@@ -139,7 +138,7 @@ export class AgentManager {
     } else if (isWorking || isThinking) {
       // Working or thinking -> arcade cabinet
       const pos = this.layout.assignToArcade(session.sessionId);
-      agent.moveTo(pos.x, pos.y + 30); // Stand in front of cabinet
+      agent.moveTo(pos.x, pos.y + 24); // Stand in front of cabinet
       this.activateMachineFor(session.sessionId);
     } else if (session.activity === 'waiting') {
       // Waiting for user prompt -> front counter
@@ -216,9 +215,8 @@ export class AgentManager {
   private activateMachineFor(sessionId: string) {
     const slot = this.layout.getArcadeSlotFor(sessionId);
     if (slot) {
-      // Machine is at (slot.x, slot.y - 30)
       const machine = this.machines.find(
-        m => Math.abs(m.x - slot.pos.x) < 15 && Math.abs(m.y - (slot.pos.y - 30)) < 15,
+        m => Math.abs(m.x - slot.pos.x) < 15 && Math.abs(m.y - (slot.pos.y - 24)) < 15,
       );
       machine?.setActive(true);
     }
@@ -228,7 +226,7 @@ export class AgentManager {
     const slot = this.layout.getArcadeSlotFor(sessionId);
     if (slot) {
       const machine = this.machines.find(
-        m => Math.abs(m.x - slot.pos.x) < 15 && Math.abs(m.y - (slot.pos.y - 30)) < 15,
+        m => Math.abs(m.x - slot.pos.x) < 15 && Math.abs(m.y - (slot.pos.y - 24)) < 15,
       );
       machine?.setActive(false);
     }

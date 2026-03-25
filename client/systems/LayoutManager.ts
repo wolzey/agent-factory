@@ -8,36 +8,42 @@ interface Slot {
   occupant: string | null;
 }
 
-/** Manages spatial assignment of agents to arcade cabinets, front counter, and lounge */
+/**
+ * Layout zones:
+ *   Wall/header:    y 0-44
+ *   Arcade floor:   y 55-330  (2 rows of 6 cabinets)
+ *   Bottom strip:   y 340-470 (counter LEFT, lounge RIGHT, side by side)
+ *   Entrance:       y 470     (center bottom)
+ */
 export class LayoutManager {
   private arcadeSlots: Slot[] = [];
   private counterSlots: Slot[] = [];
   private loungeSlots: Slot[] = [];
-  private entrancePos: Position = { x: 400, y: 460 };
+  private entrancePos: Position = { x: 400, y: 470 };
 
   constructor() {
-    // Arcade cabinet positions (2 rows of 6, wide spacing so agents aren't hidden)
+    // Arcade cabinet positions (2 rows of 6)
     for (let row = 0; row < 2; row++) {
       for (let col = 0; col < 6; col++) {
         this.arcadeSlots.push({
-          pos: { x: 80 + col * 110, y: 90 + row * 110 },
+          pos: { x: 80 + col * 120, y: 110 + row * 110 },
           occupant: null,
         });
       }
     }
 
-    // Front counter positions (middle strip - agents waiting for user input)
-    for (let i = 0; i < 8; i++) {
+    // Front counter positions (LEFT side of bottom strip, y ~380)
+    for (let i = 0; i < 4; i++) {
       this.counterSlots.push({
-        pos: { x: 60 + i * 95, y: 310 },
+        pos: { x: 60 + i * 90, y: 390 },
         occupant: null,
       });
     }
 
-    // Lounge area positions (bottom - relaxing/idle between sessions)
-    for (let i = 0; i < 8; i++) {
+    // Lounge positions (RIGHT side of bottom strip, y ~390)
+    for (let i = 0; i < 4; i++) {
       this.loungeSlots.push({
-        pos: { x: 80 + i * 90, y: 400 },
+        pos: { x: 440 + i * 90, y: 390 },
         occupant: null,
       });
     }
@@ -61,7 +67,7 @@ export class LayoutManager {
     const row = Math.floor(idx / 6);
     const col = idx % 6;
     const slot: Slot = {
-      pos: { x: 80 + col * 110, y: 100 + row * 90 },
+      pos: { x: 80 + col * 120, y: 110 + row * 110 },
       occupant: sessionId,
     };
     this.arcadeSlots.push(slot);
@@ -80,7 +86,7 @@ export class LayoutManager {
 
     const idx = this.counterSlots.length;
     const slot: Slot = {
-      pos: { x: 60 + (idx % 8) * 95, y: 310 + Math.floor(idx / 8) * 25 },
+      pos: { x: 60 + (idx % 4) * 90, y: 390 + Math.floor(idx / 4) * 30 },
       occupant: sessionId,
     };
     this.counterSlots.push(slot);
@@ -99,7 +105,7 @@ export class LayoutManager {
 
     const idx = this.loungeSlots.length;
     const slot: Slot = {
-      pos: { x: 80 + (idx % 8) * 90, y: 400 + Math.floor(idx / 8) * 25 },
+      pos: { x: 440 + (idx % 4) * 90, y: 390 + Math.floor(idx / 4) * 30 },
       occupant: sessionId,
     };
     this.loungeSlots.push(slot);

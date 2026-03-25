@@ -14,16 +14,16 @@ export class Machine extends Phaser.GameObjects.Container {
     this.setDepth(6);
 
     // Floor reflection glow (simulates screen light on ground)
-    this.floorGlow = scene.add.rectangle(0, 38, 32, 10, 0x00ff66, 0);
+    this.floorGlow = scene.add.rectangle(0, 30, 26, 8, 0x00ff66, 0);
     this.add(this.floorGlow);
 
     // Neon glow under cabinet
-    this.glow = scene.add.rectangle(0, 12, 36, 8, 0xff00ff, 0);
+    this.glow = scene.add.rectangle(0, 10, 28, 6, 0xff00ff, 0);
     this.add(this.glow);
 
-    // Arcade cabinet sprite
+    // Arcade cabinet sprite (1.5x scale - smaller to give agents more room)
     this.cabinet = scene.add.sprite(0, 0, 'arcade_cabinet', 1);
-    this.cabinet.setScale(2);
+    this.cabinet.setScale(1.5);
     this.cabinet.setOrigin(0.5, 0.5);
     this.cabinet.play('arcade_idle');
     this.add(this.cabinet);
