@@ -19,7 +19,7 @@ A 2D pixel art visualization of Claude Code agent sessions. Watch your team's ag
 If someone on your team is already running the server, just install the hooks:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wolzey/agent-factory/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/wolzey/agent-factory/main/install.sh -o /tmp/af-install.sh && bash /tmp/af-install.sh
 ```
 
 This runs an interactive wizard that:
@@ -61,7 +61,7 @@ Use ngrok, Tailscale, or any tunnel to expose port 4242:
 ngrok http 4242
 
 # Then tell your team to install with:
-# curl -fsSL https://raw.githubusercontent.com/wolzey/agent-factory/main/install.sh | bash
+# curl -fsSL https://raw.githubusercontent.com/wolzey/agent-factory/main/install.sh -o /tmp/af-install.sh && bash /tmp/af-install.sh
 # and enter the ngrok URL when prompted
 ```
 
@@ -139,7 +139,7 @@ Your config lives at `~/.config/agent-factory/config.json`:
 ## Uninstall
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wolzey/agent-factory/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/wolzey/agent-factory/main/uninstall.sh -o /tmp/af-uninstall.sh && bash /tmp/af-uninstall.sh
 ```
 
 This removes all hook entries from `~/.claude/settings.json` (surgically via jq, preserving your other hooks) and deletes `~/.config/agent-factory/`.

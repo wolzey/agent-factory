@@ -1,6 +1,8 @@
 #!/bin/bash
 # Agent Factory - Interactive Installer
-# Install with: curl -fsSL https://raw.githubusercontent.com/wolzey/agent-factory/main/install.sh | bash
+#
+# Install with:
+#   curl -fsSL https://raw.githubusercontent.com/wolzey/agent-factory/main/install.sh -o /tmp/af-install.sh && bash /tmp/af-install.sh
 #
 # What this does:
 #   1. Walks you through configuration (username, server URL, avatar)
@@ -25,36 +27,32 @@ NEON_MAGENTA='\033[95m'
 NEON_CYAN='\033[96m'
 NEON_GREEN='\033[92m'
 
-# ── Redirect all display to /dev/tty so it works with curl | bash ────
-# When piped, stdout goes to bash. /dev/tty always goes to the terminal.
-TTY=/dev/tty
-
 # ── Banner ───────────────────────────────────────────────────────────
 banner() {
-  echo "" >$TTY
-  echo -e "${NEON_MAGENTA}${BOLD}" >$TTY
-  echo "    ╔═══════════════════════════════════════╗" >$TTY
-  echo "    ║         🕹️  AGENT FACTORY  🕹️          ║" >$TTY
-  echo "    ║   2D pixel art agent visualization    ║" >$TTY
-  echo "    ╚═══════════════════════════════════════╝" >$TTY
-  echo -e "${RESET}" >$TTY
-  echo -e "  ${DIM}See your team's Claude agents working in a retro arcade${RESET}" >$TTY
-  echo "" >$TTY
+  echo ""
+  echo -e "${NEON_MAGENTA}${BOLD}"
+  echo "    ╔═══════════════════════════════════════╗"
+  echo "    ║         🕹️  AGENT FACTORY  🕹️          ║"
+  echo "    ║   2D pixel art agent visualization    ║"
+  echo "    ╚═══════════════════════════════════════╝"
+  echo -e "${RESET}"
+  echo -e "  ${DIM}See your team's Claude agents working in a retro arcade${RESET}"
+  echo ""
 }
 
 # ── Helpers ──────────────────────────────────────────────────────────
-info()    { echo -e "  ${CYAN}>${RESET} $1" >$TTY; }
-success() { echo -e "  ${GREEN}✓${RESET} $1" >$TTY; }
-warn()    { echo -e "  ${YELLOW}!${RESET} $1" >$TTY; }
-fail()    { echo -e "  ${RED}✗${RESET} $1" >$TTY; exit 1; }
+info()    { echo -e "  ${CYAN}>${RESET} $1"; }
+success() { echo -e "  ${GREEN}✓${RESET} $1"; }
+warn()    { echo -e "  ${YELLOW}!${RESET} $1"; }
+fail()    { echo -e "  ${RED}✗${RESET} $1"; exit 1; }
 
 prompt_with_default() {
   local prompt="$1"
   local default="$2"
   local result
 
-  echo -ne "  ${CYAN}?${RESET} ${prompt} ${DIM}(${default})${RESET}: " >/dev/tty
-  read -r result < /dev/tty
+  echo -ne "  ${CYAN}?${RESET} ${prompt} ${DIM}(${default})${RESET}: "
+  read -r result
   echo "${result:-$default}"
 }
 
@@ -63,14 +61,14 @@ prompt_choice() {
   shift
   local options=("$@")
 
-  echo -e "\n  ${CYAN}?${RESET} ${prompt}" >/dev/tty
+  echo -e "\n  ${CYAN}?${RESET} ${prompt}"
   for i in "${!options[@]}"; do
-    echo -e "    ${BOLD}$((i + 1))${RESET}) ${options[$i]}" >/dev/tty
+    echo -e "    ${BOLD}$((i + 1))${RESET}) ${options[$i]}"
   done
 
   local choice
-  echo -ne "  ${DIM}Enter number${RESET}: " >/dev/tty
-  read -r choice < /dev/tty
+  echo -ne "  ${DIM}Enter number${RESET}: "
+  read -r choice
 
   # Default to 1 if empty
   choice="${choice:-1}"
@@ -99,16 +97,16 @@ preflight() {
 
   # Check if already installed
   if [ -f "${HOME}/.config/agent-factory/config.json" ]; then
-    echo "" >$TTY
+    echo ""
     warn "Agent Factory is already installed!"
-    echo -ne "  ${CYAN}?${RESET} Reinstall and reconfigure? ${DIM}(y/N)${RESET}: " >/dev/tty
-    read -r reinstall < /dev/tty
+    echo -ne "  ${CYAN}?${RESET} Reinstall and reconfigure? ${DIM}(y/N)${RESET}: "
+    read -r reinstall
     if [[ ! "$reinstall" =~ ^[Yy] ]]; then
-      echo "" >$TTY
+      echo ""
       info "Exiting. Your existing config is at ~/.config/agent-factory/config.json"
       exit 0
     fi
-    echo "" >$TTY
+    echo ""
   fi
 
   success "All requirements met"
@@ -116,9 +114,9 @@ preflight() {
 
 # ── Wizard ───────────────────────────────────────────────────────────
 run_wizard() {
-  echo "" >$TTY
-  echo -e "  ${BOLD}Let's set up your agent avatar${RESET}" >$TTY
-  echo -e "  ${DIM}─────────────────────────────────${RESET}" >$TTY
+  echo ""
+  echo -e "  ${BOLD}Let's set up your agent avatar${RESET}"
+  echo -e "  ${DIM}─────────────────────────────────${RESET}"
 
   # Username
   local default_user
@@ -126,9 +124,9 @@ run_wizard() {
   USERNAME=$(prompt_with_default "What's your display name?" "$default_user")
 
   # Server URL
-  echo "" >$TTY
-  echo -e "  ${BOLD}Server connection${RESET}" >$TTY
-  echo -e "  ${DIM}─────────────────────────────────${RESET}" >$TTY
+  echo ""
+  echo -e "  ${BOLD}Server connection${RESET}"
+  echo -e "  ${DIM}─────────────────────────────────${RESET}"
   local mode_idx
   mode_idx=$(prompt_choice "How are you connecting?" \
     "Local server (I'm running it myself)" \
@@ -142,9 +140,9 @@ run_wizard() {
   fi
 
   # Avatar
-  echo "" >$TTY
-  echo -e "  ${BOLD}Choose your avatar${RESET}" >$TTY
-  echo -e "  ${DIM}─────────────────────────────────${RESET}" >$TTY
+  echo ""
+  echo -e "  ${BOLD}Choose your avatar${RESET}"
+  echo -e "  ${DIM}─────────────────────────────────${RESET}"
 
   local color_idx
   color_idx=$(prompt_choice "Pick a color" \
@@ -166,19 +164,19 @@ run_wizard() {
   AVATAR_SPRITE="$sprite_idx"
 
   # Confirm
-  echo "" >$TTY
-  echo -e "  ${DIM}─────────────────────────────────${RESET}" >$TTY
-  echo -e "  ${BOLD}Your config:${RESET}" >$TTY
-  echo -e "    Name:   ${NEON_CYAN}${USERNAME}${RESET}" >$TTY
-  echo -e "    Server: ${DIM}${SERVER_URL}${RESET}" >$TTY
-  echo -e "    Color:  ${AVATAR_COLOR}" >$TTY
-  echo -e "    Style:  ${COLOR_NAMES[$color_idx]} ${sprite_idx}" >$TTY
-  echo "" >$TTY
+  echo ""
+  echo -e "  ${DIM}─────────────────────────────────${RESET}"
+  echo -e "  ${BOLD}Your config:${RESET}"
+  echo -e "    Name:   ${NEON_CYAN}${USERNAME}${RESET}"
+  echo -e "    Server: ${DIM}${SERVER_URL}${RESET}"
+  echo -e "    Color:  ${AVATAR_COLOR}"
+  echo -e "    Style:  ${COLOR_NAMES[$color_idx]} ${sprite_idx}"
+  echo ""
 
-  echo -ne "  ${CYAN}?${RESET} Look good? ${DIM}(Y/n)${RESET}: " >/dev/tty
-  read -r confirm < /dev/tty
+  echo -ne "  ${CYAN}?${RESET} Look good? ${DIM}(Y/n)${RESET}: "
+  read -r confirm
   if [[ "$confirm" =~ ^[Nn] ]]; then
-    echo "" >$TTY
+    echo ""
     info "Run the installer again to reconfigure."
     exit 0
   fi
@@ -300,37 +298,37 @@ main() {
   preflight
   run_wizard
 
-  echo "" >$TTY
-  echo -e "  ${BOLD}Installing...${RESET}" >$TTY
-  echo -e "  ${DIM}─────────────────────────────────${RESET}" >$TTY
+  echo ""
+  echo -e "  ${BOLD}Installing...${RESET}"
+  echo -e "  ${DIM}─────────────────────────────────${RESET}"
 
   install_hook_script
   install_config
   register_hooks
 
-  echo "" >$TTY
-  echo -e "  ${NEON_GREEN}${BOLD}Installation complete!${RESET}" >$TTY
-  echo "" >$TTY
-  echo -e "  ${BOLD}What now?${RESET}" >$TTY
-  echo "" >$TTY
+  echo ""
+  echo -e "  ${NEON_GREEN}${BOLD}Installation complete!${RESET}"
+  echo ""
+  echo -e "  ${BOLD}What now?${RESET}"
+  echo ""
 
   if [[ "$SERVER_URL" == *"localhost"* ]]; then
-    echo -e "  To run the server locally:" >$TTY
-    echo -e "    ${DIM}git clone https://github.com/wolzey/agent-factory.git${RESET}" >$TTY
-    echo -e "    ${DIM}cd agent-factory && pnpm install && pnpm dev${RESET}" >$TTY
-    echo "" >$TTY
+    echo -e "  To run the server locally:"
+    echo -e "    ${DIM}git clone https://github.com/wolzey/agent-factory.git${RESET}"
+    echo -e "    ${DIM}cd agent-factory && pnpm install && pnpm dev${RESET}"
+    echo ""
   fi
 
-  echo -e "  Your avatar will appear in Agent Factory when" >$TTY
-  echo -e "  you start your next Claude Code session." >$TTY
-  echo "" >$TTY
-  echo -e "  ${DIM}Config:  ~/.config/agent-factory/config.json${RESET}" >$TTY
-  echo -e "  ${DIM}Hooks:   ~/.config/agent-factory/hooks/agent-factory-hook.sh${RESET}" >$TTY
-  echo -e "  ${DIM}Backup:  ~/.claude/settings.json.agent-factory-backup${RESET}" >$TTY
-  echo "" >$TTY
-  echo -e "  ${DIM}To uninstall, run:${RESET}" >$TTY
-  echo -e "  ${DIM}  curl -fsSL https://raw.githubusercontent.com/wolzey/agent-factory/main/uninstall.sh | bash${RESET}" >$TTY
-  echo "" >$TTY
+  echo -e "  Your avatar will appear in Agent Factory when"
+  echo -e "  you start your next Claude Code session."
+  echo ""
+  echo -e "  ${DIM}Config:  ~/.config/agent-factory/config.json${RESET}"
+  echo -e "  ${DIM}Hooks:   ~/.config/agent-factory/hooks/agent-factory-hook.sh${RESET}"
+  echo -e "  ${DIM}Backup:  ~/.claude/settings.json.agent-factory-backup${RESET}"
+  echo ""
+  echo -e "  ${DIM}To uninstall, run:${RESET}"
+  echo -e "  ${DIM}  curl -fsSL https://raw.githubusercontent.com/wolzey/agent-factory/main/uninstall.sh -o /tmp/af-uninstall.sh && bash /tmp/af-uninstall.sh${RESET}"
+  echo ""
 }
 
 main
