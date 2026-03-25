@@ -64,7 +64,7 @@ export const SHOE_COLORS = [
   { name: 'White', hex: '#ffffff' },
 ];
 
-export const VALID_EMOTES: import('./types.js').EmoteType[] = ['dance', 'jump', 'guitar', 'gun', 'laugh'];
+export const VALID_EMOTES: import('./types.js').EmoteType[] = ['dance', 'jump', 'guitar', 'gun', 'laugh', 'wave', 'sleep', 'explode', 'dizzy', 'flex', 'rage'];
 
 export const DEFAULT_SERVER_CONFIG: import('./types.js').ServerConfig = {
   title: 'AGENT FACTORY',

@@ -78,7 +78,7 @@ export type WSMessageToServer =
   | { type: 'request_state' };
 
 // === Emote Types ===
-export type EmoteType = 'dance' | 'jump' | 'guitar' | 'gun' | 'laugh';
+export type EmoteType = 'dance' | 'jump' | 'guitar' | 'gun' | 'laugh' | 'wave' | 'sleep' | 'explode' | 'dizzy' | 'flex' | 'rage';
 
 // === Effect Types ===
 export type EffectType =
