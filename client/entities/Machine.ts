@@ -3,6 +3,7 @@ import Phaser from 'phaser';
 export class Machine extends Phaser.GameObjects.Container {
   private cabinet: Phaser.GameObjects.Sprite;
   private glow: Phaser.GameObjects.Rectangle;
+  private floorGlow: Phaser.GameObjects.Rectangle;
   private active = false;
 
   public slotId: number;
@@ -10,6 +11,11 @@ export class Machine extends Phaser.GameObjects.Container {
   constructor(scene: Phaser.Scene, x: number, y: number, slotId: number) {
     super(scene, x, y);
     this.slotId = slotId;
+    this.setDepth(6);
+
+    // Floor reflection glow (simulates screen light on ground)
+    this.floorGlow = scene.add.rectangle(0, 38, 32, 10, 0x00ff66, 0);
+    this.add(this.floorGlow);
 
     // Neon glow under cabinet
     this.glow = scene.add.rectangle(0, 12, 36, 8, 0xff00ff, 0);
@@ -31,7 +37,8 @@ export class Machine extends Phaser.GameObjects.Container {
 
     if (active) {
       this.cabinet.play('arcade_active');
-      // Neon glow pulse
+
+      // Marquee glow
       this.scene.tweens.add({
         targets: this.glow,
         alpha: 0.5,
@@ -46,14 +53,24 @@ export class Machine extends Phaser.GameObjects.Container {
         repeat: -1,
         ease: 'Sine.easeInOut',
       });
+
+      // Screen floor reflection
+      this.scene.tweens.add({
+        targets: this.floorGlow,
+        alpha: { from: 0.04, to: 0.1 },
+        duration: 1200,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
     } else {
       this.cabinet.play('arcade_idle');
+
       this.scene.tweens.killTweensOf(this.glow);
-      this.scene.tweens.add({
-        targets: this.glow,
-        alpha: 0,
-        duration: 500,
-      });
+      this.scene.tweens.killTweensOf(this.floorGlow);
+
+      this.scene.tweens.add({ targets: this.glow, alpha: 0, duration: 500 });
+      this.scene.tweens.add({ targets: this.floorGlow, alpha: 0, duration: 500 });
     }
   }
 }

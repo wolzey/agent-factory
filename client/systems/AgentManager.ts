@@ -116,7 +116,8 @@ export class AgentManager {
     // Route agent to the right area based on activity:
     //   working (reading/writing/running/searching/chatting/planning) -> arcade cabinet
     //   thinking (between tool calls) -> stay at arcade cabinet (thought bubble shown by AgentSprite)
-    //   idle (waiting for user input) -> front counter
+    //   waiting (waiting for user prompt) -> front counter
+    //   idle (session started, no activity yet) -> lounge
     //   stopped -> walk to exit
 
     const workingStates = ['reading', 'writing', 'running', 'searching', 'chatting', 'planning'];
@@ -133,14 +134,14 @@ export class AgentManager {
       const pos = this.layout.assignToArcade(session.sessionId);
       agent.moveTo(pos.x, pos.y + 30); // Stand in front of cabinet
       this.activateMachineFor(session.sessionId);
-    } else if (session.activity === 'idle') {
-      // Waiting for user input -> front counter
+    } else if (session.activity === 'waiting') {
+      // Waiting for user prompt -> front counter
       this.deactivateMachineFor(session.sessionId);
       this.layout.release(session.sessionId);
       const pos = this.layout.assignToCounter(session.sessionId);
       agent.moveTo(pos.x, pos.y);
     } else {
-      // Fallback -> lounge
+      // idle / fallback -> lounge
       this.layout.release(session.sessionId);
       this.deactivateMachineFor(session.sessionId);
       const pos = this.layout.assignToLounge(session.sessionId);
@@ -226,22 +227,37 @@ export class AgentManager {
   }
 
   private emitSparks(x: number, y: number, color: number, count = 5) {
+    // Flash pop at origin
+    const flash = this.scene.add.circle(x, y, 10, color, 0.25).setDepth(9);
+    this.scene.tweens.add({
+      targets: flash,
+      alpha: 0,
+      scaleX: 2,
+      scaleY: 2,
+      duration: 200,
+      ease: 'Power2',
+      onComplete: () => flash.destroy(),
+    });
+
+    // Cross-shaped particles
     for (let i = 0; i < count; i++) {
-      const particle = this.scene.add.rectangle(
-        x + Phaser.Math.Between(-8, 8),
-        y + Phaser.Math.Between(-8, 8),
-        3, 3,
-        color,
-      );
-      particle.setAlpha(1);
+      const particle = this.scene.add.image(
+        x + Phaser.Math.Between(-6, 6),
+        y + Phaser.Math.Between(-6, 6),
+        'particle',
+      ).setTint(color).setScale(Phaser.Math.FloatBetween(0.5, 1.5)).setDepth(9);
+
+      const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+      const dist = Phaser.Math.Between(15, 35);
 
       this.scene.tweens.add({
         targets: particle,
-        x: particle.x + Phaser.Math.Between(-20, 20),
-        y: particle.y + Phaser.Math.Between(-30, -5),
+        x: particle.x + Math.cos(angle) * dist,
+        y: particle.y + Math.sin(angle) * dist - Phaser.Math.Between(5, 15),
         alpha: 0,
-        scaleX: 0.2,
-        scaleY: 0.2,
+        angle: Phaser.Math.Between(-180, 180),
+        scaleX: 0.1,
+        scaleY: 0.1,
         duration: Phaser.Math.Between(400, 800),
         ease: 'Power2',
         onComplete: () => particle.destroy(),

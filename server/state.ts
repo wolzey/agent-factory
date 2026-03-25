@@ -206,7 +206,7 @@ export class StateManager {
 
   private handleStop(payload: HookPayload): void {
     const session = this.ensureSession(payload);
-    session.activity = 'idle';
+    session.activity = 'waiting';
     session.currentTool = null;
     session.currentToolInput = null;
     session.lastEventAt = Date.now();

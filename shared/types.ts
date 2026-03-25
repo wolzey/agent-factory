@@ -1,6 +1,7 @@
 // === Agent Activity States ===
 export type AgentActivity =
   | 'idle'
+  | 'waiting'
   | 'thinking'
   | 'reading'
   | 'writing'
