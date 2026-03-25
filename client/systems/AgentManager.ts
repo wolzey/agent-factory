@@ -19,12 +19,13 @@ export class AgentManager {
   }
 
   private createMachines() {
-    // Create arcade cabinets at machine slot positions (matching LayoutManager)
+    // Create arcade cabinets matching LayoutManager slot positions
+    // Cabinet sits at slot.y - 30, agent stands at slot.y + 30
     for (let row = 0; row < 2; row++) {
       for (let col = 0; col < 6; col++) {
         const x = 80 + col * 110;
-        const y = 70 + row * 90; // Cabinets sit above the agent standing position
-        const machine = new Machine(this.scene, x, y, row * 6 + col);
+        const slotY = 90 + row * 110;
+        const machine = new Machine(this.scene, x, slotY - 30, row * 6 + col);
         this.machines.push(machine);
       }
     }
@@ -89,14 +90,20 @@ export class AgentManager {
   update(time: number, delta: number) {
     for (const agent of this.agents.values()) {
       agent.update(time, delta);
+      // Y-based depth: entities further down screen render on top
+      agent.setDepth(7 + agent.y * 0.001);
     }
     for (const sub of this.subagents.values()) {
-      // Update parent position for orbit
       const parent = this.agents.get(sub.parentSessionId);
       if (parent) {
         sub.setParentPosition(parent.x, parent.y);
       }
       sub.update(time, delta);
+      sub.setDepth(7 + sub.y * 0.001);
+    }
+    // Machines also need Y-based depth
+    for (const machine of this.machines) {
+      machine.setDepth(6 + machine.y * 0.001);
     }
   }
 
@@ -209,8 +216,9 @@ export class AgentManager {
   private activateMachineFor(sessionId: string) {
     const slot = this.layout.getArcadeSlotFor(sessionId);
     if (slot) {
+      // Machine is at (slot.x, slot.y - 30)
       const machine = this.machines.find(
-        m => Math.abs(m.x - slot.pos.x) < 10 && Math.abs(m.y - slot.pos.y + 30) < 10,
+        m => Math.abs(m.x - slot.pos.x) < 15 && Math.abs(m.y - (slot.pos.y - 30)) < 15,
       );
       machine?.setActive(true);
     }
@@ -220,7 +228,7 @@ export class AgentManager {
     const slot = this.layout.getArcadeSlotFor(sessionId);
     if (slot) {
       const machine = this.machines.find(
-        m => Math.abs(m.x - slot.pos.x) < 10 && Math.abs(m.y - slot.pos.y + 30) < 10,
+        m => Math.abs(m.x - slot.pos.x) < 15 && Math.abs(m.y - (slot.pos.y - 30)) < 15,
       );
       machine?.setActive(false);
     }

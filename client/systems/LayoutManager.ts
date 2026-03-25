@@ -16,11 +16,11 @@ export class LayoutManager {
   private entrancePos: Position = { x: 400, y: 460 };
 
   constructor() {
-    // Arcade cabinet positions (2 rows of 6)
+    // Arcade cabinet positions (2 rows of 6, wide spacing so agents aren't hidden)
     for (let row = 0; row < 2; row++) {
       for (let col = 0; col < 6; col++) {
         this.arcadeSlots.push({
-          pos: { x: 80 + col * 110, y: 100 + row * 90 },
+          pos: { x: 80 + col * 110, y: 90 + row * 110 },
           occupant: null,
         });
       }
