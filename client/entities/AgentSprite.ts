@@ -61,11 +61,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.add(this.sprite);
 
     // Nametag
-    const cwd = session.cwd || '';
-    const cwdBase = cwd.split('/').pop() || '';
-    const label = cwdBase ? `${session.username}/${cwdBase}` : session.username;
-
-    this.nametag = scene.add.text(0, -24, label, {
+    this.nametag = scene.add.text(0, -24, this.computeLabel(session), {
       fontFamily: 'monospace',
       fontSize: '8px',
       color: '#00ffff',
@@ -137,10 +133,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.sessionData = session;
 
     // Update nametag
-    const cwd = session.cwd || '';
-    const cwdBase = cwd.split('/').pop() || '';
-    const label = cwdBase ? `${session.username}/${cwdBase}` : session.username;
-    this.nametag.setText(label);
+    this.nametag.setText(this.computeLabel(session));
 
     // Update status icon
     this.updateStatusIcon(session.activity, session.currentTool);
@@ -609,6 +602,12 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.thoughtBubble = null;
   }
 
+  private computeLabel(session: AgentSession): string {
+    if (session.sessionName) return session.sessionName;
+    const cwdBase = (session.cwd || '').split('/').pop() || '';
+    return cwdBase || session.username;
+  }
+
   private showTooltip() {
     const tooltip = document.getElementById('tooltip');
     if (!tooltip) return;
@@ -617,11 +616,13 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     const detailEl = tooltip.querySelector('.tooltip-detail') as HTMLElement;
     const toolEl = tooltip.querySelector('.tooltip-tool') as HTMLElement;
 
-    nameEl.textContent = this.sessionData.username;
+    nameEl.textContent = this.sessionData.sessionName || this.sessionData.username;
 
     const cwdBase = this.sessionData.cwd?.split('/').pop() || 'unknown';
     const subCount = this.sessionData.subagents?.length || 0;
-    detailEl.textContent = `${cwdBase} | ${this.sessionData.activity}${subCount > 0 ? ` | ${subCount} subagent(s)` : ''}`;
+    const parts = [this.sessionData.username, cwdBase, this.sessionData.activity];
+    if (subCount > 0) parts.push(`${subCount} subagent(s)`);
+    detailEl.textContent = parts.join(' | ');
 
     if (this.sessionData.currentTool) {
       toolEl.textContent = `Tool: ${this.sessionData.currentTool}`;
