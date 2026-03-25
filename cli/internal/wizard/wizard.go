@@ -1,43 +1,19 @@
 package wizard
 
 import (
+	"fmt"
 	"os/user"
 
 	"github.com/charmbracelet/huh"
 	"github.com/wolzey/agent-factory/cli/internal/config"
+	"github.com/wolzey/agent-factory/cli/internal/designer"
 )
-
-type colorOption struct {
-	Name string
-	Hex  string
-}
-
-type styleOption struct {
-	Name  string
-	Index int
-}
-
-var colors = []colorOption{
-	{"Blue", "#4a90d9"},
-	{"Red", "#ff6b6b"},
-	{"Green", "#51cf66"},
-	{"Yellow", "#ffd43b"},
-}
-
-var styles = []styleOption{
-	{"Engineer", 0},
-	{"Hacker", 1},
-	{"Designer", 2},
-	{"Manager", 3},
-}
 
 func Run() (config.UserConfig, error) {
 	var (
-		username    string
-		serverMode  string
-		serverURL   string
-		colorChoice string
-		styleChoice int
+		username   string
+		serverMode string
+		serverURL  string
 	)
 
 	// Default username
@@ -46,18 +22,6 @@ func Run() (config.UserConfig, error) {
 		defaultUser = u.Username
 	}
 	username = defaultUser
-
-	// Color select options
-	colorOptions := make([]huh.Option[string], len(colors))
-	for i, c := range colors {
-		colorOptions[i] = huh.NewOption(c.Name+" ("+c.Hex+")", c.Hex)
-	}
-
-	// Style select options
-	styleOptions := make([]huh.Option[int], len(styles))
-	for i, s := range styles {
-		styleOptions[i] = huh.NewOption(s.Name, s.Index)
-	}
 
 	form := huh.NewForm(
 		huh.NewGroup(
@@ -85,20 +49,6 @@ func Run() (config.UserConfig, error) {
 		).WithHideFunc(func() bool {
 			return serverMode != "remote"
 		}),
-
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("Pick your avatar color").
-				Options(colorOptions...).
-				Value(&colorChoice),
-		),
-
-		huh.NewGroup(
-			huh.NewSelect[int]().
-				Title("Pick your character style").
-				Options(styleOptions...).
-				Value(&styleChoice),
-		),
 	)
 
 	if err := form.Run(); err != nil {
@@ -109,14 +59,20 @@ func Run() (config.UserConfig, error) {
 		serverURL = "http://localhost:4242"
 	}
 
+	// Launch avatar designer
+	fmt.Println()
+	result, err := designer.Run(nil)
+	if err != nil {
+		return config.UserConfig{}, fmt.Errorf("avatar designer error: %w", err)
+	}
+
+	if result.Cancelled {
+		return config.UserConfig{}, fmt.Errorf("avatar design cancelled")
+	}
+
 	return config.UserConfig{
 		Username:  username,
 		ServerURL: serverURL,
-		Avatar: config.AvatarConfig{
-			SpriteIndex: styleChoice,
-			Color:       colorChoice,
-			Hat:         nil,
-			Trail:       nil,
-		},
+		Avatar:    result.Avatar,
 	}, nil
 }

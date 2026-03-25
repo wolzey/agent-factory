@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import type { AvatarConfig } from '@shared/types';
 
 const AGENT_COLORS = [
   0x4a90d9, // blue
@@ -11,7 +12,7 @@ const AGENT_COLORS = [
   0xf06595, // pink
 ];
 
-const HAIR_COLORS = [
+const HAIR_COLOR_HEXES = [
   '#332211', // dark brown
   '#664422', // medium brown
   '#222222', // black
@@ -43,6 +44,31 @@ const HAIR_STYLES: HairDrawFn[] = [
   // 7: Bandana (body colored)
   (ctx, x, y, _hc, bc) => { ctx.fillStyle = bc; ctx.fillRect(x + 4, y, 8, 2); ctx.fillRect(x + 3, y + 1, 1, 1); ctx.fillRect(x + 12, y + 1, 1, 1); },
 ];
+
+/** Resolve granular avatar fields with backwards-compat fallbacks. */
+function resolveAvatar(avatar: AvatarConfig) {
+  const spriteIdx = avatar.spriteIndex ?? 0;
+  const shirtHex = avatar.shirtColor ?? avatar.color ?? '#4a90d9';
+  return {
+    hairStyle: avatar.hairStyle ?? (spriteIdx % 8),
+    hairColor: avatar.hairColor ?? HAIR_COLOR_HEXES[spriteIdx % HAIR_COLOR_HEXES.length],
+    skinTone: avatar.skinTone ?? '#ffcc99',
+    shirtColor: shirtHex,
+    pantsColor: avatar.pantsColor ?? '#2a2a3e',
+    shoeColor: avatar.shoeColor ?? '#222222',
+  };
+}
+
+/** Generate a deterministic texture key for an avatar config. */
+function avatarTextureKey(avatar: AvatarConfig): string {
+  const r = resolveAvatar(avatar);
+  return `avatar_${r.hairStyle}_${r.hairColor}_${r.skinTone}_${r.shirtColor}_${r.pantsColor}_${r.shoeColor}`.replace(/#/g, '');
+}
+
+/** Convert hex color string to integer. */
+function hexToInt(hex: string): number {
+  return parseInt(hex.replace('#', ''), 16);
+}
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -141,42 +167,85 @@ export class BootScene extends Phaser.Scene {
     const sheetW = framesPerRow * size;
     const sheetH = rows * size;
 
+    // Pre-generate legacy sprites for backwards compat (agent_0..agent_7)
     for (let ci = 0; ci < AGENT_COLORS.length; ci++) {
       const color = AGENT_COLORS[ci];
-      const canvas = this.textures.createCanvas(`agent_${ci}`, sheetW, sheetH)!;
-      const ctx = canvas.getContext();
+      const r = (color >> 16) & 0xff;
+      const g = (color >> 8) & 0xff;
+      const b = color & 0xff;
+      const shirtHex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 
-      for (let row = 0; row < rows; row++) {
-        for (let frame = 0; frame < framesPerRow; frame++) {
-          this.drawCharacter(ctx, frame * size, row * size, size, color, animations[row], frame, ci);
-        }
-      }
+      this.generateSpriteSheet(`agent_${ci}`, {
+        hairStyle: ci % 8,
+        hairColor: HAIR_COLOR_HEXES[ci % HAIR_COLOR_HEXES.length],
+        skinTone: '#ffcc99',
+        shirtColor: shirtHex,
+        pantsColor: '#2a2a3e',
+        shoeColor: '#222222',
+      }, sheetW, sheetH, size, framesPerRow, animations, rows);
+    }
+  }
 
-      canvas.refresh();
+  /**
+   * Generate a sprite sheet for a given avatar config.
+   * Returns the texture key. Caches by key so the same config is only generated once.
+   */
+  public generateAgentSprite(avatar: AvatarConfig): string {
+    const key = avatarTextureKey(avatar);
+    if (this.textures.exists(key)) return key;
 
-      const tex = this.textures.get(`agent_${ci}`);
-      tex.add(0, 0, 0, 0, sheetW, sheetH);
-      let frameIdx = 0;
-      for (let row = 0; row < rows; row++) {
-        for (let frame = 0; frame < framesPerRow; frame++) {
-          tex.add(frameIdx + 1, 0, frame * size, row * size, size, size);
-          frameIdx++;
-        }
+    const resolved = resolveAvatar(avatar);
+    const size = 16;
+    const framesPerRow = 4;
+    const animations = ['idle', 'walk_right', 'walk_left', 'walk_down', 'walk_up', 'work', 'sit'];
+    const rows = animations.length;
+    const sheetW = framesPerRow * size;
+    const sheetH = rows * size;
+
+    this.generateSpriteSheet(key, resolved, sheetW, sheetH, size, framesPerRow, animations, rows);
+    return key;
+  }
+
+  private generateSpriteSheet(
+    key: string,
+    colors: { hairStyle: number; hairColor: string; skinTone: string; shirtColor: string; pantsColor: string; shoeColor: string },
+    sheetW: number, sheetH: number, size: number, framesPerRow: number,
+    animations: string[], rows: number,
+  ) {
+    const shirtInt = hexToInt(colors.shirtColor);
+    const canvas = this.textures.createCanvas(key, sheetW, sheetH)!;
+    const ctx = canvas.getContext();
+
+    for (let row = 0; row < rows; row++) {
+      for (let frame = 0; frame < framesPerRow; frame++) {
+        this.drawCharacter(ctx, frame * size, row * size, size, shirtInt, animations[row], frame, colors);
       }
     }
 
-    for (let ci = 0; ci < AGENT_COLORS.length; ci++) {
-      const key = `agent_${ci}`;
-      let base = 1;
-      for (const anim of animations) {
+    canvas.refresh();
+
+    const tex = this.textures.get(key);
+    tex.add(0, 0, 0, 0, sheetW, sheetH);
+    let frameIdx = 0;
+    for (let row = 0; row < rows; row++) {
+      for (let frame = 0; frame < framesPerRow; frame++) {
+        tex.add(frameIdx + 1, 0, frame * size, row * size, size, size);
+        frameIdx++;
+      }
+    }
+
+    let base = 1;
+    for (const anim of animations) {
+      const animKey = `${key}_${anim}`;
+      if (!this.anims.exists(animKey)) {
         this.anims.create({
-          key: `${key}_${anim}`,
+          key: animKey,
           frames: Array.from({ length: framesPerRow }, (_, i) => ({ key, frame: base + i })),
           frameRate: anim === 'idle' || anim === 'sit' ? 2 : 6,
           repeat: -1,
         });
-        base += framesPerRow;
       }
+      base += framesPerRow;
     }
   }
 
@@ -187,7 +256,7 @@ export class BootScene extends Phaser.Scene {
     color: number,
     anim: string,
     frame: number,
-    spriteIdx: number,
+    colors: { hairStyle: number; hairColor: string; skinTone: string; shirtColor: string; pantsColor: string; shoeColor: string },
   ) {
     const r = (color >> 16) & 0xff;
     const g = (color >> 8) & 0xff;
@@ -195,8 +264,8 @@ export class BootScene extends Phaser.Scene {
     const bodyColor = `rgb(${r}, ${g}, ${b})`;
     const darkColor = `rgb(${Math.floor(r * 0.6)}, ${Math.floor(g * 0.6)}, ${Math.floor(b * 0.6)})`;
     const lightColor = `rgb(${Math.min(255, r + 40)}, ${Math.min(255, g + 40)}, ${Math.min(255, b + 40)})`;
-    const skinColor = '#ffcc99';
-    const hairColor = HAIR_COLORS[spriteIdx % HAIR_COLORS.length];
+    const skinColor = colors.skinTone;
+    const hairColor = colors.hairColor;
 
     ctx.clearRect(x, y, size, size);
 
@@ -207,8 +276,8 @@ export class BootScene extends Phaser.Scene {
     ctx.fillStyle = skinColor;
     ctx.fillRect(x + 5, y + 2 + bounce, 6, 5);
 
-    // Hair/hat (varies by spriteIdx)
-    const drawHair = HAIR_STYLES[spriteIdx % HAIR_STYLES.length];
+    // Hair/hat (varies by hairStyle)
+    const drawHair = HAIR_STYLES[colors.hairStyle % HAIR_STYLES.length];
     drawHair(ctx, x, y + 2 + bounce, hairColor, bodyColor);
 
     // Eyes - blink on idle frame 2
@@ -241,7 +310,7 @@ export class BootScene extends Phaser.Scene {
     }
 
     // Pants
-    ctx.fillStyle = '#2a2a3e';
+    ctx.fillStyle = colors.pantsColor;
     if (anim === 'sit') {
       ctx.fillRect(x + 4, y + 11, 8, 2);
     } else if (anim === 'work') {
@@ -283,7 +352,7 @@ export class BootScene extends Phaser.Scene {
     }
 
     // Shoes
-    ctx.fillStyle = '#222';
+    ctx.fillStyle = colors.shoeColor;
     if (anim !== 'sit') {
       const legOffset = anim.startsWith('walk') ? (frame % 2 === 0 ? 1 : -1) : 0;
       ctx.fillRect(x + 5, y + 15 + bounce, 2, 1);

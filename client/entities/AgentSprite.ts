@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { AgentSession, AgentActivity } from '@shared/types';
+import { BootScene } from '../scenes/BootScene';
 
 const ACTIVITY_ICONS: Record<string, string> = {
   running: 'terminal',
@@ -39,8 +40,15 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     super(scene, 0, 0);
 
     this.sessionData = session;
-    const spriteIdx = session.avatar?.spriteIndex ?? 0;
-    this.spriteKey = `agent_${spriteIdx % 8}`;
+
+    // Generate a custom sprite sheet for this avatar's config
+    const bootScene = scene.scene.get('BootScene') as BootScene;
+    if (session.avatar?.hairStyle !== undefined && bootScene) {
+      this.spriteKey = bootScene.generateAgentSprite(session.avatar);
+    } else {
+      const spriteIdx = session.avatar?.spriteIndex ?? 0;
+      this.spriteKey = `agent_${spriteIdx % 8}`;
+    }
 
     // Neon glow under feet
     this.neonGlow = scene.add.rectangle(0, 6, 20, 6, 0xff00ff, 0.15);
@@ -68,11 +76,14 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.nametag.setOrigin(0.5, 1);
     this.add(this.nametag);
 
-    // Apply tint if custom color
+    // For new-style avatars, colors are baked into the sprite — tint the glow only.
+    // For legacy avatars (no hairStyle), apply tint to the sprite too.
     if (session.avatar?.color) {
       const hex = parseInt(session.avatar.color.replace('#', ''), 16);
       if (!isNaN(hex)) {
-        this.sprite.setTint(hex);
+        if (session.avatar.hairStyle === undefined) {
+          this.sprite.setTint(hex);
+        }
         this.neonGlow.setFillStyle(hex, 0.15);
       }
     }

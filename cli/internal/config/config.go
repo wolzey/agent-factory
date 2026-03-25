@@ -11,6 +11,12 @@ type AvatarConfig struct {
 	Color       string  `json:"color"`
 	Hat         *string `json:"hat"`
 	Trail       *string `json:"trail"`
+	HairStyle   *int    `json:"hairStyle,omitempty"`
+	HairColor   *string `json:"hairColor,omitempty"`
+	SkinTone    *string `json:"skinTone,omitempty"`
+	ShirtColor  *string `json:"shirtColor,omitempty"`
+	PantsColor  *string `json:"pantsColor,omitempty"`
+	ShoeColor   *string `json:"shoeColor,omitempty"`
 }
 
 type UserConfig struct {
