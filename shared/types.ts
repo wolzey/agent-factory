@@ -17,6 +17,7 @@ export interface AvatarConfig {
   color: string;
   hat: string | null;
   trail: string | null;
+  graphicDeath?: boolean;
 }
 
 // === Subagent Info ===

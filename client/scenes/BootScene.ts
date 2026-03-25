@@ -57,6 +57,7 @@ export class BootScene extends Phaser.Scene {
     this.generateMachineSprites();
     this.generateEnvironmentSprites();
     this.generateSkullSprite();
+    this.generateBloodSprites();
     this.generateParticleSprites();
     this.generateIcons();
     this.generateScanlineTexture();
@@ -585,6 +586,54 @@ export class BootScene extends Phaser.Scene {
     ctx.fillRect(11, 11, 1, 1);
 
     canvas.refresh();
+  }
+
+  // ── Blood sprites for graphic death animation ────────────────────
+  private generateBloodSprites() {
+    // Blood drop particle
+    const dropCanvas = this.textures.createCanvas('blood_drop', 4, 6)!;
+    const dctx = dropCanvas.getContext();
+    dctx.fillStyle = '#cc0000';
+    dctx.fillRect(1, 0, 2, 1);
+    dctx.fillRect(0, 1, 4, 2);
+    dctx.fillRect(0, 3, 4, 1);
+    dctx.fillStyle = '#990000';
+    dctx.fillRect(1, 4, 2, 1);
+    dctx.fillRect(1, 5, 1, 1);
+    dropCanvas.refresh();
+
+    // Blood splat (pool on ground)
+    const splatCanvas = this.textures.createCanvas('blood_splat', 24, 10)!;
+    const sctx = splatCanvas.getContext();
+    // Main pool
+    sctx.fillStyle = '#880000';
+    sctx.fillRect(4, 2, 16, 6);
+    sctx.fillRect(2, 3, 20, 4);
+    sctx.fillRect(6, 1, 12, 8);
+    // Darker center
+    sctx.fillStyle = '#660000';
+    sctx.fillRect(8, 3, 8, 4);
+    // Bright highlight
+    sctx.fillStyle = '#cc0000';
+    sctx.fillRect(10, 2, 4, 2);
+    // Splatter edges
+    sctx.fillStyle = '#990000';
+    sctx.fillRect(0, 4, 3, 2);
+    sctx.fillRect(21, 3, 3, 2);
+    sctx.fillRect(1, 6, 2, 1);
+    sctx.fillRect(22, 5, 2, 1);
+    splatCanvas.refresh();
+
+    // Throat slash line
+    const slashCanvas = this.textures.createCanvas('blood_slash', 8, 3)!;
+    const slctx = slashCanvas.getContext();
+    slctx.fillStyle = '#cc0000';
+    slctx.fillRect(0, 1, 8, 1);
+    slctx.fillStyle = '#ff0000';
+    slctx.fillRect(1, 0, 6, 1);
+    slctx.fillStyle = '#990000';
+    slctx.fillRect(1, 2, 6, 1);
+    slashCanvas.refresh();
   }
 
   // ── Particle sprites ──────────────────────────────────────────────

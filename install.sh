@@ -163,6 +163,21 @@ run_wizard() {
     "Manager")
   AVATAR_SPRITE="$sprite_idx"
 
+  # Graphic death animation
+  echo ""
+  echo -e "  ${BOLD}Death animation${RESET}"
+  echo -e "  ${DIM}─────────────────────────────────${RESET}"
+  echo -e "  ${DIM}When your session ends, your agent plays a death animation.${RESET}"
+  echo -e "  ${DIM}The graphic version is... ${RED}very bloody${RESET}${DIM}. 🩸${RESET}"
+  echo ""
+  echo -ne "  ${CYAN}?${RESET} Allow graphic death animation? ${DIM}(y/N)${RESET}: "
+  read -r graphic_death
+  if [[ "$graphic_death" =~ ^[Yy] ]]; then
+    GRAPHIC_DEATH=true
+  else
+    GRAPHIC_DEATH=false
+  fi
+
   # Confirm
   echo ""
   echo -e "  ${DIM}─────────────────────────────────${RESET}"
@@ -171,6 +186,11 @@ run_wizard() {
   echo -e "    Server: ${DIM}${SERVER_URL}${RESET}"
   echo -e "    Color:  ${AVATAR_COLOR}"
   echo -e "    Style:  ${COLOR_NAMES[$color_idx]} ${sprite_idx}"
+  if [ "$GRAPHIC_DEATH" = "true" ]; then
+    echo -e "    Death:  ${RED}☠ GRAPHIC${RESET}"
+  else
+    echo -e "    Death:  ${DIM}💀 Standard${RESET}"
+  fi
   echo ""
 
   echo -ne "  ${CYAN}?${RESET} Look good? ${DIM}(Y/n)${RESET}: "
@@ -240,7 +260,8 @@ install_config() {
     "spriteIndex": ${AVATAR_SPRITE},
     "color": "${AVATAR_COLOR}",
     "hat": null,
-    "trail": null
+    "trail": null,
+    "graphicDeath": ${GRAPHIC_DEATH}
   }
 }
 EOF
