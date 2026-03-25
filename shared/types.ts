@@ -18,6 +18,12 @@ export interface AvatarConfig {
   hat: string | null;
   trail: string | null;
   graphicDeath?: boolean;
+  hairStyle?: number;       // 0-7 index into HAIR_STYLES
+  hairColor?: string;       // hex color
+  skinTone?: string;        // hex color
+  shirtColor?: string;      // hex color
+  pantsColor?: string;      // hex color
+  shoeColor?: string;       // hex color
 }
 
 // === Subagent Info ===

@@ -80,8 +80,13 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  %s\n", ui.BoldStyle.Render("Your config:"))
 		fmt.Printf("    Name:   %s\n", ui.CyanStyle.Render(cfg.Username))
 		fmt.Printf("    Server: %s\n", ui.DimStyle.Render(cfg.ServerURL))
-		fmt.Printf("    Color:  %s\n", cfg.Avatar.Color)
-		fmt.Printf("    Style:  %d\n", cfg.Avatar.SpriteIndex)
+		fmt.Printf("    Shirt:  %s\n", cfg.Avatar.Color)
+		if cfg.Avatar.HairStyle != nil {
+			fmt.Printf("    Hair:   style %d\n", *cfg.Avatar.HairStyle)
+		}
+		if cfg.Avatar.SkinTone != nil {
+			fmt.Printf("    Skin:   %s\n", *cfg.Avatar.SkinTone)
+		}
 		fmt.Println()
 
 		var confirm bool
