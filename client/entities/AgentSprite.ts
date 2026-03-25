@@ -127,6 +127,14 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     }
   }
 
+  getMoveSpeed(): number {
+    return this.moveSpeed;
+  }
+
+  setMoveSpeed(speed: number) {
+    this.moveSpeed = speed;
+  }
+
   moveTo(x: number, y: number) {
     this.targetX = x;
     this.targetY = y;

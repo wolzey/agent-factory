@@ -374,6 +374,7 @@ export class AgentManager {
 
   /**
    * Send a single agent to place flowers at a tombstone.
+   * Agent moves at 2x speed to ensure they arrive before the tombstone expires.
    */
   private sendFlowerVisitor(agentId: string, deadSessionId: string) {
     const tomb = this.tombstones.get(deadSessionId);
@@ -382,9 +383,13 @@ export class AgentManager {
 
     this.flowerVisitors.set(agentId, deadSessionId);
 
-    // Save original position to return to
+    // Save original position and speed to restore later
     const returnX = agent.x;
     const returnY = agent.y;
+    const originalSpeed = agent.getMoveSpeed();
+
+    // Double speed to reach tombstone quickly
+    agent.setMoveSpeed(originalSpeed * 2);
 
     // Walk to tombstone (offset slightly so they stand beside it)
     const offsetX = Phaser.Math.Between(-16, 16);
@@ -392,20 +397,34 @@ export class AgentManager {
     const destY = tomb.y + 14;
     agent.moveTo(destX, destY);
 
-    // Calculate walk time from distance (agent speed is 80px/s) + buffer
+    // Calculate walk time based on boosted speed + buffer
+    const boostedSpeed = originalSpeed * 2;
     const dx = destX - agent.x;
     const dy = destY - agent.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const walkTime = (dist / 80) * 1000 + 500;
+    const walkTime = (dist / boostedSpeed) * 1000 + 500;
 
     // Place flower after agent actually arrives
     this.scene.time.delayedCall(walkTime, () => {
-      if (!this.agents.has(agentId) || !this.tombstones.has(deadSessionId) || this.flowerVisitors.get(agentId) !== deadSessionId) {
+      const stillVisiting = this.flowerVisitors.get(agentId) === deadSessionId;
+      const tombGone = !this.tombstones.has(deadSessionId);
+      const agentGone = !this.agents.has(agentId);
+
+      // If tombstone disappeared or agent is gone, abort and go home
+      if (agentGone || !stillVisiting || tombGone) {
         this.flowerVisitors.delete(agentId);
+        if (!agentGone) {
+          const a = this.agents.get(agentId)!;
+          a.setMoveSpeed(originalSpeed);
+          a.moveTo(returnX, returnY);
+        }
         return;
       }
 
       const tombNow = this.tombstones.get(deadSessionId)!;
+
+      // Restore normal speed now that we've arrived
+      agent.setMoveSpeed(originalSpeed);
 
       // Place flower at tombstone base
       const flower = this.scene.add.image(
@@ -427,11 +446,12 @@ export class AgentManager {
         ease: 'Power2',
       });
 
-      // Sad pause, then walk back
+      // Sad pause, then walk back at normal speed
       this.scene.time.delayedCall(1500, () => {
         this.flowerVisitors.delete(agentId);
         if (this.agents.has(agentId)) {
           const a = this.agents.get(agentId)!;
+          a.setMoveSpeed(originalSpeed);
           a.moveTo(returnX, returnY);
         }
       });
@@ -447,7 +467,8 @@ export class AgentManager {
         this.flowerVisitors.delete(agentId);
         const agent = this.agents.get(agentId);
         if (agent) {
-          // Send them to their normal routing position (lounge for idle)
+          // Restore normal speed and send them back to lounge
+          agent.setMoveSpeed(80);
           const pos = this.layout.assignToLounge(agentId);
           agent.moveTo(pos.x, pos.y);
         }
