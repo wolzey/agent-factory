@@ -19,6 +19,7 @@ export class AgentManager {
   private tombstones = new Map<string, { container: Phaser.GameObjects.Container; x: number; y: number }>();
   private flowerVisitors = new Map<string, string>(); // agentId → deadSessionId they're visiting
   private zombieRising = new Set<string>(); // agents currently rising from grave (skip routing)
+  private lastFlowerCheck = 0; // timestamp of last periodic flower check
 
   constructor(scene: Phaser.Scene, envType: EnvironmentType = 'arcade') {
     this.scene = scene;
@@ -121,6 +122,12 @@ export class AgentManager {
     for (const machine of this.machines) {
       machine.setDepth(6 + machine.y * 0.001);
     }
+
+    // Periodically check if idle agents should visit tombstones (every 5s)
+    if (this.tombstones.size > 0 && time - this.lastFlowerCheck > 5000) {
+      this.lastFlowerCheck = time;
+      this.checkFlowerVisits();
+    }
   }
 
   private upsertAgent(session: AgentSession) {
@@ -214,8 +221,7 @@ export class AgentManager {
         const tombData = agent.spawnTombstone();
         this.tombstones.set(sessionId, tombData);
 
-        // Trigger flower-bringing from other idle agents
-        this.triggerFlowerVisits(sessionId);
+        // The periodic checkFlowerVisits() in update() will send idle agents over
 
         // Remove tombstone + free workstation slot after it expires
         this.scene.time.delayedCall(TOMBSTONE_DURATION_MS, () => {
@@ -339,95 +345,97 @@ export class AgentManager {
   }
 
   /**
-   * Send all idle/waiting agents to walk over and place flowers at a tombstone.
+   * Periodic check: pick a random idle/waiting agent and send them to visit a random tombstone.
+   * Called from update() every 5 seconds while tombstones exist.
    */
-  private triggerFlowerVisits(deadSessionId: string) {
-    const tomb = this.tombstones.get(deadSessionId);
-    if (!tomb) return;
+  private checkFlowerVisits() {
+    if (this.tombstones.size === 0) return;
 
-    // Find agents that are idle or waiting (not busy working) and not already visiting
-    const candidates: { id: string; agent: AgentSprite }[] = [];
+    // Pick a random tombstone
+    const tombIds = [...this.tombstones.keys()];
+    const deadSessionId = tombIds[Phaser.Math.Between(0, tombIds.length - 1)];
+
+    // Find idle/waiting agents not already visiting a tombstone and not working
+    const candidates: string[] = [];
     for (const [id, agent] of this.agents) {
       const activity = agent.sessionData.activity;
-      if ((activity === 'idle' || activity === 'waiting') && !this.flowerVisitors.has(id)) {
-        candidates.push({ id, agent });
+      const notBusy = activity === 'idle' || activity === 'waiting';
+      if (notBusy && !this.flowerVisitors.has(id)) {
+        candidates.push(id);
       }
     }
 
     if (candidates.length === 0) return;
 
-    for (let i = 0; i < candidates.length; i++) {
-      const { id } = candidates[i];
-      this.flowerVisitors.set(id, deadSessionId);
+    // Send one random agent
+    const agentId = candidates[Phaser.Math.Between(0, candidates.length - 1)];
+    this.sendFlowerVisitor(agentId, deadSessionId);
+  }
 
-      // Stagger visits so they don't all arrive at once
-      const delay = Phaser.Math.Between(1500, 4000) + i * 2000;
+  /**
+   * Send a single agent to place flowers at a tombstone.
+   */
+  private sendFlowerVisitor(agentId: string, deadSessionId: string) {
+    const tomb = this.tombstones.get(deadSessionId);
+    const agent = this.agents.get(agentId);
+    if (!tomb || !agent) return;
 
-      this.scene.time.delayedCall(delay, () => {
-        // Check the tombstone still exists and the agent is still alive and still a visitor
-        const currentTomb = this.tombstones.get(deadSessionId);
-        const currentAgent = this.agents.get(id);
-        if (!currentTomb || !currentAgent || this.flowerVisitors.get(id) !== deadSessionId) {
-          this.flowerVisitors.delete(id);
-          return;
-        }
+    this.flowerVisitors.set(agentId, deadSessionId);
 
-        // Save original position to return to
-        const returnX = currentAgent.x;
-        const returnY = currentAgent.y;
+    // Save original position to return to
+    const returnX = agent.x;
+    const returnY = agent.y;
 
-        // Walk to tombstone (offset slightly so they stand beside it)
-        const offsetX = Phaser.Math.Between(-16, 16);
-        const destX = currentTomb.x + offsetX;
-        const destY = currentTomb.y + 14;
-        currentAgent.moveTo(destX, destY);
+    // Walk to tombstone (offset slightly so they stand beside it)
+    const offsetX = Phaser.Math.Between(-16, 16);
+    const destX = tomb.x + offsetX;
+    const destY = tomb.y + 14;
+    agent.moveTo(destX, destY);
 
-        // Calculate walk time from distance (agent speed is 80px/s) + buffer
-        const dx = destX - currentAgent.x;
-        const dy = destY - currentAgent.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const walkTime = (dist / 80) * 1000 + 500;
+    // Calculate walk time from distance (agent speed is 80px/s) + buffer
+    const dx = destX - agent.x;
+    const dy = destY - agent.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const walkTime = (dist / 80) * 1000 + 500;
 
-        // Place flower after agent actually arrives
-        this.scene.time.delayedCall(walkTime, () => {
-          if (!this.agents.has(id) || !this.tombstones.has(deadSessionId) || this.flowerVisitors.get(id) !== deadSessionId) {
-            this.flowerVisitors.delete(id);
-            return;
-          }
+    // Place flower after agent actually arrives
+    this.scene.time.delayedCall(walkTime, () => {
+      if (!this.agents.has(agentId) || !this.tombstones.has(deadSessionId) || this.flowerVisitors.get(agentId) !== deadSessionId) {
+        this.flowerVisitors.delete(agentId);
+        return;
+      }
 
-          const tombNow = this.tombstones.get(deadSessionId)!;
+      const tombNow = this.tombstones.get(deadSessionId)!;
 
-          // Place flower at tombstone base
-          const flower = this.scene.add.image(
-            Phaser.Math.Between(-8, 8),
-            Phaser.Math.Between(10, 16),
-            'flower',
-          );
-          flower.setScale(1.5);
-          flower.setAlpha(0);
-          flower.setTint([0xff4466, 0xffaa00, 0xff66cc, 0x66aaff, 0xffff44][Phaser.Math.Between(0, 4)]);
-          tombNow.container.add(flower);
+      // Place flower at tombstone base
+      const flower = this.scene.add.image(
+        Phaser.Math.Between(-8, 8),
+        Phaser.Math.Between(10, 16),
+        'flower',
+      );
+      flower.setScale(1.5);
+      flower.setAlpha(0);
+      flower.setTint([0xff4466, 0xffaa00, 0xff66cc, 0x66aaff, 0xffff44][Phaser.Math.Between(0, 4)]);
+      tombNow.container.add(flower);
 
-          // Flower fade in
-          this.scene.tweens.add({
-            targets: flower,
-            alpha: 1,
-            y: flower.y - 2,
-            duration: 400,
-            ease: 'Power2',
-          });
-
-          // Sad pause, then walk back
-          this.scene.time.delayedCall(1500, () => {
-            this.flowerVisitors.delete(id);
-            if (this.agents.has(id)) {
-              const a = this.agents.get(id)!;
-              a.moveTo(returnX, returnY);
-            }
-          });
-        });
+      // Flower fade in
+      this.scene.tweens.add({
+        targets: flower,
+        alpha: 1,
+        y: flower.y - 2,
+        duration: 400,
+        ease: 'Power2',
       });
-    }
+
+      // Sad pause, then walk back
+      this.scene.time.delayedCall(1500, () => {
+        this.flowerVisitors.delete(agentId);
+        if (this.agents.has(agentId)) {
+          const a = this.agents.get(agentId)!;
+          a.moveTo(returnX, returnY);
+        }
+      });
+    });
   }
 
   /**
