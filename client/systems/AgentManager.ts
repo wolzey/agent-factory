@@ -19,11 +19,11 @@ export class AgentManager {
   }
 
   private createMachines() {
-    // Create arcade cabinets at machine slot positions
+    // Create arcade cabinets at machine slot positions (matching LayoutManager)
     for (let row = 0; row < 2; row++) {
       for (let col = 0; col < 6; col++) {
         const x = 80 + col * 110;
-        const y = 90 + row * 100;
+        const y = 70 + row * 90; // Cabinets sit above the agent standing position
         const machine = new Machine(this.scene, x, y, row * 6 + col);
         this.machines.push(machine);
       }
@@ -113,25 +113,34 @@ export class AgentManager {
 
     agent.updateSession(session);
 
-    // Move to appropriate area based on activity
-    const isWorking = !['idle', 'stopped'].includes(session.activity);
+    // Route agent to the right area based on activity:
+    //   working (reading/writing/running/searching/chatting/planning) -> arcade cabinet
+    //   thinking (between tool calls) -> stay at arcade cabinet (thought bubble shown by AgentSprite)
+    //   idle (waiting for user input) -> front counter
+    //   stopped -> walk to exit
+
+    const workingStates = ['reading', 'writing', 'running', 'searching', 'chatting', 'planning'];
+    const isWorking = workingStates.includes(session.activity);
+    const isThinking = session.activity === 'thinking';
 
     if (session.activity === 'stopped') {
-      // Walk to exit then fade
       const entrance = this.layout.entrance;
       this.layout.release(session.sessionId);
       this.deactivateMachineFor(session.sessionId);
       agent.moveTo(entrance.x, entrance.y);
-    } else if (isWorking) {
+    } else if (isWorking || isThinking) {
+      // Working or thinking -> arcade cabinet
       const pos = this.layout.assignToArcade(session.sessionId);
-      // Release lounge slot if had one
-      for (const slot of this.getLoungeSlots(session.sessionId)) {
-        slot.occupant = null;
-      }
       agent.moveTo(pos.x, pos.y + 30); // Stand in front of cabinet
       this.activateMachineFor(session.sessionId);
+    } else if (session.activity === 'idle') {
+      // Waiting for user input -> front counter
+      this.deactivateMachineFor(session.sessionId);
+      this.layout.release(session.sessionId);
+      const pos = this.layout.assignToCounter(session.sessionId);
+      agent.moveTo(pos.x, pos.y);
     } else {
-      // Idle - go to lounge
+      // Fallback -> lounge
       this.layout.release(session.sessionId);
       this.deactivateMachineFor(session.sessionId);
       const pos = this.layout.assignToLounge(session.sessionId);
@@ -195,9 +204,8 @@ export class AgentManager {
   private activateMachineFor(sessionId: string) {
     const slot = this.layout.getArcadeSlotFor(sessionId);
     if (slot) {
-      // Find machine at this slot position
       const machine = this.machines.find(
-        m => Math.abs(m.x - slot.pos.x) < 5 && Math.abs(m.y - (slot.pos.y - 30)) < 5,
+        m => Math.abs(m.x - slot.pos.x) < 10 && Math.abs(m.y - slot.pos.y + 30) < 10,
       );
       machine?.setActive(true);
     }
@@ -207,15 +215,10 @@ export class AgentManager {
     const slot = this.layout.getArcadeSlotFor(sessionId);
     if (slot) {
       const machine = this.machines.find(
-        m => Math.abs(m.x - slot.pos.x) < 5 && Math.abs(m.y - (slot.pos.y - 30)) < 5,
+        m => Math.abs(m.x - slot.pos.x) < 10 && Math.abs(m.y - slot.pos.y + 30) < 10,
       );
       machine?.setActive(false);
     }
-  }
-
-  private getLoungeSlots(_sessionId: string) {
-    // Return empty array - layout manager handles this internally
-    return [] as { occupant: string | null }[];
   }
 
   private emitSparks(x: number, y: number, color: number, count = 5) {

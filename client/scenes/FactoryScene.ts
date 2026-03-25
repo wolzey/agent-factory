@@ -28,19 +28,27 @@ export class FactoryScene extends Phaser.Scene {
       align: 'center',
     }).setOrigin(0.5).setShadow(0, 0, '#ff00ff', 8);
 
-    // Lounge label
-    this.add.text(400, 340, '~ LOUNGE ~', {
-      fontFamily: 'monospace',
-      fontSize: '10px',
-      color: '#aa88ff',
-      align: 'center',
-    }).setOrigin(0.5).setAlpha(0.6);
-
     // Arcade area label
     this.add.text(400, 50, '[ ARCADE FLOOR ]', {
       fontFamily: 'monospace',
       fontSize: '10px',
       color: '#00ffff',
+      align: 'center',
+    }).setOrigin(0.5).setAlpha(0.6);
+
+    // Front counter label
+    this.add.text(400, 278, '[ FRONT COUNTER ]', {
+      fontFamily: 'monospace',
+      fontSize: '10px',
+      color: '#ff9900',
+      align: 'center',
+    }).setOrigin(0.5).setAlpha(0.6);
+
+    // Lounge label
+    this.add.text(400, 370, '~ LOUNGE ~', {
+      fontFamily: 'monospace',
+      fontSize: '10px',
+      color: '#aa88ff',
       align: 'center',
     }).setOrigin(0.5).setAlpha(0.6);
   }
@@ -102,11 +110,19 @@ export class FactoryScene extends Phaser.Scene {
       ease: 'Sine.easeInOut',
     });
 
+    // Front counter area
+    this.add.rectangle(400, 270, 700, 2, 0xff9900, 0.3);
+    const counterBg = this.add.rectangle(400, 305, 720, 50, 0x1a1400, 0.4);
+    counterBg.setStrokeStyle(1, 0xff9900, 0.15);
+
+    // Counter surface (the actual counter bar)
+    this.add.rectangle(400, 290, 680, 4, 0xff9900, 0.5);
+
     // Lounge area divider
-    this.add.rectangle(400, 330, 700, 2, 0xaa88ff, 0.3);
+    this.add.rectangle(400, 360, 700, 2, 0xaa88ff, 0.3);
 
     // Lounge carpet
-    const carpet = this.add.rectangle(400, 390, 720, 80, 0x1a0a2e, 0.5);
+    const carpet = this.add.rectangle(400, 405, 720, 70, 0x1a0a2e, 0.5);
     carpet.setStrokeStyle(1, 0xaa88ff, 0.2);
 
     // Some decorative neon elements

@@ -25,6 +25,8 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   private nametag: Phaser.GameObjects.Text;
   private statusIcon: Phaser.GameObjects.Sprite | null = null;
   private neonGlow: Phaser.GameObjects.Rectangle;
+  private thoughtBubble: Phaser.GameObjects.Container | null = null;
+  private thoughtTween: Phaser.Tweens.Tween | null = null;
 
   public sessionData: AgentSession;
   private spriteKey: string;
@@ -135,6 +137,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   fadeOut(onComplete?: () => void) {
+    this.hideThoughtBubble();
     this.scene.tweens.add({
       targets: this,
       alpha: 0,
@@ -169,6 +172,16 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   private updateStatusIcon(activity: AgentActivity, tool: string | null) {
     const iconName = ACTIVITY_ICONS[activity];
 
+    // Handle thought bubble for thinking state
+    if (activity === 'thinking') {
+      this.statusIcon?.setVisible(false);
+      this.showThoughtBubble();
+      this.neonGlow.setAlpha(0.25);
+      return;
+    } else {
+      this.hideThoughtBubble();
+    }
+
     if (!iconName || activity === 'idle' || activity === 'stopped') {
       this.statusIcon?.setVisible(false);
       this.neonGlow.setAlpha(0.15);
@@ -186,6 +199,81 @@ export class AgentSprite extends Phaser.GameObjects.Container {
 
     // Brighter glow when active
     this.neonGlow.setAlpha(0.4);
+  }
+
+  private showThoughtBubble() {
+    if (this.thoughtBubble) return; // Already showing
+
+    this.thoughtBubble = this.scene.add.container(-4, -38);
+
+    // Small trailing dots
+    const dot1 = this.scene.add.circle(2, 12, 2, 0xffffff, 0.6);
+    const dot2 = this.scene.add.circle(-2, 6, 3, 0xffffff, 0.7);
+    this.thoughtBubble.add(dot1);
+    this.thoughtBubble.add(dot2);
+
+    // Main bubble
+    const bubble = this.scene.add.graphics();
+    bubble.fillStyle(0xffffff, 0.9);
+    bubble.fillRoundedRect(-12, -14, 24, 16, 6);
+    this.thoughtBubble.add(bubble);
+
+    // Dots inside bubble (animated ellipsis)
+    const d1 = this.scene.add.circle(-5, -6, 2, 0x444466);
+    const d2 = this.scene.add.circle(0, -6, 2, 0x444466);
+    const d3 = this.scene.add.circle(5, -6, 2, 0x444466);
+    this.thoughtBubble.add(d1);
+    this.thoughtBubble.add(d2);
+    this.thoughtBubble.add(d3);
+
+    this.add(this.thoughtBubble);
+
+    // Animate the dots bouncing
+    this.scene.tweens.add({
+      targets: d1,
+      y: d1.y - 3,
+      duration: 400,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+    this.scene.tweens.add({
+      targets: d2,
+      y: d2.y - 3,
+      duration: 400,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+      delay: 133,
+    });
+    this.scene.tweens.add({
+      targets: d3,
+      y: d3.y - 3,
+      duration: 400,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+      delay: 266,
+    });
+
+    // Gentle float of the whole bubble
+    this.thoughtTween = this.scene.tweens.add({
+      targets: this.thoughtBubble,
+      y: this.thoughtBubble.y - 3,
+      duration: 1200,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+  }
+
+  private hideThoughtBubble() {
+    if (!this.thoughtBubble) return;
+
+    this.thoughtTween?.destroy();
+    this.thoughtTween = null;
+    this.thoughtBubble.destroy();
+    this.thoughtBubble = null;
   }
 
   private showTooltip() {
