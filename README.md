@@ -139,12 +139,10 @@ Your config lives at `~/.config/agent-factory/config.json`:
 ## Uninstall
 
 ```bash
-# Restore Claude Code settings
-cp ~/.claude/settings.json.agent-factory-backup ~/.claude/settings.json
-
-# Remove config and hooks
-rm -rf ~/.config/agent-factory
+curl -fsSL https://raw.githubusercontent.com/wolzey/agent-factory/main/uninstall.sh | bash
 ```
+
+This removes all hook entries from `~/.claude/settings.json` (surgically via jq, preserving your other hooks) and deletes `~/.config/agent-factory/`.
 
 ## Architecture
 
