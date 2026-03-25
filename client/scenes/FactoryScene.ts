@@ -141,12 +141,12 @@ export class FactoryScene extends Phaser.Scene {
     }).setOrigin(0.5).setAlpha(0.5).setDepth(3);
 
     // Counter label (left)
-    this.add.text(200, 348, '[ FRONT COUNTER ]', {
+    this.add.text(200, 344, 'FRONT COUNTER', {
       fontFamily: 'monospace', fontSize: '9px', color: '#ff9900',
     }).setOrigin(0.5).setAlpha(0.5).setDepth(3);
 
     // Lounge label (right)
-    this.add.text(600, 348, '~ LOUNGE ~', {
+    this.add.text(630, 344, 'LOUNGE', {
       fontFamily: 'monospace', fontSize: '9px', color: '#aa88ff',
     }).setOrigin(0.5).setAlpha(0.5).setDepth(3);
 
@@ -154,8 +154,8 @@ export class FactoryScene extends Phaser.Scene {
     this.createNeonSign(80, 15, 'NOW CODING', '#00ff66', 0.7, 2200);
     this.createNeonSign(700, 15, 'HIGH SCORE', '#ffff00', 0.6, 1800);
     this.createNeonSign(280, 15, 'INSERT COIN', '#ff9900', 0.5, 2500);
-    this.createNeonSign(130, 348, 'OPEN 24/7', '#00ccff', 0.4, 3000);
-    this.createNeonSign(660, 348, 'CHILL ZONE', '#aa88ff', 0.4, 2800);
+    this.createNeonSign(60, 358, 'OPEN 24/7', '#00ccff', 0.4, 3000);
+    this.createNeonSign(760, 358, 'CHILL ZONE', '#aa88ff', 0.4, 2800);
   }
 
   private createNeonSign(x: number, y: number, text: string, color: string, baseAlpha: number, flickerMs: number) {

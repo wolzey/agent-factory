@@ -40,12 +40,15 @@ export class LayoutManager {
       });
     }
 
-    // Lounge positions (RIGHT side of bottom strip, y ~390)
-    for (let i = 0; i < 4; i++) {
-      this.loungeSlots.push({
-        pos: { x: 440 + i * 90, y: 390 },
-        occupant: null,
-      });
+    // Lounge positions - on the couches (matching prop positions in FactoryScene)
+    // Couch 1 at x=560, couch 2 at x=700 (both at y=430 in scene)
+    // 2 seats per couch, agents sit slightly above couch center
+    const couchPositions = [
+      { x: 540, y: 420 }, { x: 580, y: 420 },  // couch 1
+      { x: 680, y: 420 }, { x: 720, y: 420 },  // couch 2
+    ];
+    for (const pos of couchPositions) {
+      this.loungeSlots.push({ pos, occupant: null });
     }
   }
 
@@ -105,7 +108,7 @@ export class LayoutManager {
 
     const idx = this.loungeSlots.length;
     const slot: Slot = {
-      pos: { x: 440 + (idx % 4) * 90, y: 390 + Math.floor(idx / 4) * 30 },
+      pos: { x: 440 + (idx % 4) * 70, y: 400 + Math.floor(idx / 4) * 30 },
       occupant: sessionId,
     };
     this.loungeSlots.push(slot);
