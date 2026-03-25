@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { AgentSession, AgentActivity } from '@shared/types';
+import { TOMBSTONE_DURATION_MS } from '@shared/constants';
 import { BootScene } from '../scenes/BootScene';
 
 const ACTIVITY_ICONS: Record<string, string> = {
@@ -187,6 +188,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
 
         // After a pause, fade everything out
         this.scene.time.delayedCall(1500, () => {
+          this.spawnTombstone();
           this.scene.tweens.add({
             targets: this,
             alpha: 0,
@@ -503,6 +505,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
 
     // Phase 4: Fade everything out after the carnage
     this.scene.time.delayedCall(3500, () => {
+      this.spawnTombstone();
       this.scene.tweens.add({
         targets: this,
         alpha: 0,
@@ -942,6 +945,59 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     }
 
     this.scene.time.delayedCall(1500, () => this.finishEmote());
+  }
+
+  private spawnTombstone() {
+    const worldX = this.x;
+    const worldY = this.y;
+    const label = this.computeLabel(this.sessionData);
+
+    const container = this.scene.add.container(worldX, worldY + 4);
+    container.setDepth(7 + worldY * 0.001);
+    container.setAlpha(0);
+    container.setScale(0.5);
+
+    // Tombstone image
+    const stone = this.scene.add.image(0, 0, 'tombstone');
+    stone.setScale(2);
+    container.add(stone);
+
+    // Name text above tombstone
+    const name = this.scene.add.text(0, -26, label, {
+      fontFamily: 'monospace',
+      fontSize: '7px',
+      color: '#aaaacc',
+      backgroundColor: 'rgba(10, 10, 26, 0.7)',
+      padding: { x: 2, y: 1 },
+    });
+    name.setOrigin(0.5, 1);
+    container.add(name);
+
+    // Rise up from the ground
+    this.scene.tweens.add({
+      targets: container,
+      alpha: 1,
+      scaleX: 1,
+      scaleY: 1,
+      y: worldY - 4,
+      duration: 600,
+      ease: 'Back.easeOut',
+    });
+
+    // Fade out and sink after duration
+    this.scene.time.delayedCall(TOMBSTONE_DURATION_MS, () => {
+      if (!this.scene) return;
+      this.scene.tweens.add({
+        targets: container,
+        alpha: 0,
+        y: container.y + 10,
+        scaleX: 0.6,
+        scaleY: 0.6,
+        duration: 800,
+        ease: 'Power2',
+        onComplete: () => container.destroy(),
+      });
+    });
   }
 
   private onArrived() {
