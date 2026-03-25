@@ -135,18 +135,56 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.updateStatusIcon(session.activity, session.currentTool);
   }
 
-  fadeOut(onComplete?: () => void) {
+  die(onComplete?: () => void) {
     this.hideThoughtBubble();
+    this.statusIcon?.setVisible(false);
+    this.isMoving = false;
+
+    // Hide nametag
     this.scene.tweens.add({
-      targets: this,
+      targets: this.nametag,
       alpha: 0,
-      scaleX: 0.5,
-      scaleY: 0.5,
-      duration: 600,
-      ease: 'Power2',
+      duration: 300,
+    });
+
+    // Fall over (rotate 90 degrees)
+    this.scene.tweens.add({
+      targets: this.sprite,
+      angle: 90,
+      y: this.sprite.y + 8,
+      duration: 500,
+      ease: 'Bounce.easeOut',
       onComplete: () => {
-        onComplete?.();
-        this.destroy();
+        // Show skull and crossbones at status icon position
+        const skull = this.scene.add.image(12, -20, 'skull');
+        skull.setScale(1.5);
+        skull.setAlpha(0);
+        this.add(skull);
+
+        // Skull fade in
+        this.scene.tweens.add({
+          targets: skull,
+          alpha: 1,
+          duration: 300,
+          ease: 'Power2',
+        });
+
+        // Neon glow turns red
+        this.neonGlow.setFillStyle(0xff0000, 0.3);
+
+        // After a pause, fade everything out
+        this.scene.time.delayedCall(1500, () => {
+          this.scene.tweens.add({
+            targets: this,
+            alpha: 0,
+            duration: 600,
+            ease: 'Power2',
+            onComplete: () => {
+              onComplete?.();
+              this.destroy();
+            },
+          });
+        });
       },
     });
   }

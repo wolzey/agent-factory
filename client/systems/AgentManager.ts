@@ -161,7 +161,7 @@ export class AgentManager {
   private removeAgent(sessionId: string) {
     const agent = this.agents.get(sessionId);
     if (agent) {
-      agent.fadeOut();
+      agent.die();
       this.agents.delete(sessionId);
     }
     this.layout.release(sessionId);

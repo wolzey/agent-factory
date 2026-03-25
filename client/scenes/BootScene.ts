@@ -56,6 +56,7 @@ export class BootScene extends Phaser.Scene {
     this.generateCharacterSprites();
     this.generateMachineSprites();
     this.generateEnvironmentSprites();
+    this.generateSkullSprite();
     this.generateParticleSprites();
     this.generateIcons();
     this.generateScanlineTexture();
@@ -539,6 +540,51 @@ export class BootScene extends Phaser.Scene {
     cofctx.fillRect(5, 10, 1, 2);
     cofctx.fillRect(6, 9, 1, 2);
     coffee.refresh();
+  }
+
+  // ── Skull icon for death animation ─────────────────────────────────
+  private generateSkullSprite() {
+    const canvas = this.textures.createCanvas('skull', 12, 12)!;
+    const ctx = canvas.getContext();
+
+    // Skull
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(2, 1, 8, 6);  // cranium
+    ctx.fillRect(1, 3, 10, 3); // wider mid
+    ctx.fillRect(3, 7, 6, 2);  // jaw
+
+    // Eye sockets
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(3, 3, 2, 2);
+    ctx.fillRect(7, 3, 2, 2);
+
+    // Nose
+    ctx.fillRect(5, 5, 2, 1);
+
+    // Teeth
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(4, 7, 1, 2);
+    ctx.fillRect(6, 7, 1, 2);
+
+    // Crossbones
+    ctx.fillStyle = '#ffffff';
+    // Bone 1: top-left to bottom-right
+    ctx.fillRect(0, 9, 2, 1);
+    ctx.fillRect(1, 10, 2, 1);
+    ctx.fillRect(3, 10, 1, 1);
+    ctx.fillRect(7, 10, 1, 1);
+    ctx.fillRect(9, 10, 2, 1);
+    ctx.fillRect(10, 9, 2, 1);
+    // Bone 2: crossing
+    ctx.fillRect(0, 10, 2, 1);
+    ctx.fillRect(10, 10, 2, 1);
+    // Bone knobs
+    ctx.fillRect(0, 8, 1, 1);
+    ctx.fillRect(11, 8, 1, 1);
+    ctx.fillRect(0, 11, 1, 1);
+    ctx.fillRect(11, 11, 1, 1);
+
+    canvas.refresh();
   }
 
   // ── Particle sprites ──────────────────────────────────────────────
