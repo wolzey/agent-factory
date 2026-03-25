@@ -20,6 +20,11 @@ func px(hex string) Pixel {
 	return Pixel{r, g, b, 255}
 }
 
+func pxAlpha(hex string, a uint8) Pixel {
+	r, g, b := hexToRGB(hex)
+	return Pixel{r, g, b, a}
+}
+
 func hexToRGB(hex string) (uint8, uint8, uint8) {
 	hex = strings.TrimPrefix(hex, "#")
 	if len(hex) != 6 {
@@ -57,12 +62,17 @@ func lighten(p Pixel, amount uint8) Pixel {
 
 // AvatarParams holds all the customization values for rendering a preview.
 type AvatarParams struct {
-	HairStyle  int
-	HairColor  string
-	SkinTone   string
-	ShirtColor string
-	PantsColor string
-	ShoeColor  string
+	HairStyle     int
+	HairColor     string
+	SkinTone      string
+	ShirtColor    string
+	PantsColor    string
+	ShoeColor     string
+	FacialHair    int
+	MouthStyle    int
+	FaceAccessory int
+	HeadAccessory int
+	ShirtDesign   int
 }
 
 // Grid is a 16x16 pixel canvas.
@@ -104,8 +114,23 @@ func DrawCharacter(params AvatarParams) Grid {
 	g.fillRect(eyeColor, 6, 4, 1, 1)
 	g.fillRect(eyeColor, 9, 4, 1, 1)
 
+	// Mouth
+	drawMouthStyle(&g, params.MouthStyle)
+
+	// Facial hair
+	drawFacialHairStyle(&g, params.FacialHair, hair)
+
+	// Face accessory
+	drawFaceAccessoryStyle(&g, params.FaceAccessory)
+
+	// Head accessory (on top of hair)
+	drawHeadAccessoryStyle(&g, params.HeadAccessory)
+
 	// Shirt/body - x+4, y+7, 8w, 4h
 	g.fillRect(shirt, 4, 7, 8, 4)
+
+	// Shirt design
+	drawShirtDesignStyle(&g, params.ShirtDesign, darkShirt, lightShirt)
 
 	// Collar highlight - x+6, y+7, 4w, 1h
 	g.fillRect(lightShirt, 6, 7, 4, 1)
@@ -163,6 +188,164 @@ func drawHairStyle(g *Grid, style int, hair, body Pixel) {
 	}
 }
 
+// drawMouthStyle draws the mouth onto the grid.
+func drawMouthStyle(g *Grid, style int) {
+	switch style % 6 {
+	case 0: // Default (none)
+	case 1: // Smile
+		g.fillRect(px("#cc6666"), 7, 6, 2, 1)
+	case 2: // Frown
+		g.fillRect(px("#886666"), 7, 6, 2, 1)
+	case 3: // Open
+		g.fillRect(px("#331111"), 7, 5, 2, 1)
+		g.fillRect(px("#cc6666"), 7, 6, 2, 1)
+	case 4: // Teeth Grin
+		g.fillRect(px("#ffffff"), 7, 6, 2, 1)
+	case 5: // Tongue Out
+		g.fillRect(px("#ff6699"), 7, 6, 2, 1)
+	}
+}
+
+// drawFacialHairStyle draws facial hair onto the grid.
+func drawFacialHairStyle(g *Grid, style int, hair Pixel) {
+	faded := Pixel{hair.R, hair.G, hair.B, 128}
+	switch style % 6 {
+	case 0: // None
+	case 1: // Stubble
+		g.fillRect(faded, 6, 6, 1, 1)
+		g.fillRect(faded, 8, 6, 1, 1)
+		g.fillRect(faded, 9, 5, 1, 1)
+	case 2: // Mustache
+		g.fillRect(hair, 6, 5, 4, 1)
+	case 3: // Full Beard
+		g.fillRect(hair, 5, 5, 6, 2)
+		g.fillRect(hair, 6, 7, 4, 1)
+	case 4: // Goatee
+		g.fillRect(hair, 7, 5, 2, 2)
+	case 5: // Soul Patch
+		g.fillRect(hair, 7, 6, 2, 1)
+	}
+}
+
+// drawFaceAccessoryStyle draws face accessories onto the grid.
+func drawFaceAccessoryStyle(g *Grid, style int) {
+	switch style % 6 {
+	case 0: // None
+	case 1: // Round Glasses
+		frame := px("#666666")
+		g.fillRect(frame, 5, 3, 3, 1)
+		g.fillRect(frame, 5, 5, 3, 1)
+		g.fillRect(frame, 5, 4, 1, 1)
+		g.fillRect(frame, 7, 4, 1, 1)
+		g.fillRect(frame, 8, 3, 3, 1)
+		g.fillRect(frame, 8, 5, 3, 1)
+		g.fillRect(frame, 8, 4, 1, 1)
+		g.fillRect(frame, 10, 4, 1, 1)
+		// Bridge
+		g.fillRect(frame, 7, 4, 1, 1)
+	case 2: // Sunglasses
+		dark := px("#111111")
+		g.fillRect(dark, 5, 4, 3, 2)
+		g.fillRect(dark, 8, 4, 3, 2)
+		bridge := px("#333333")
+		g.fillRect(bridge, 7, 4, 2, 1)
+	case 3: // Monocle
+		gold := px("#ccaa44")
+		g.fillRect(gold, 8, 3, 3, 1)
+		g.fillRect(gold, 8, 5, 3, 1)
+		g.fillRect(gold, 8, 4, 1, 1)
+		g.fillRect(gold, 10, 4, 1, 1)
+		// Chain
+		g.fillRect(gold, 10, 6, 1, 2)
+	case 4: // Eye Patch
+		patch := px("#222222")
+		g.fillRect(patch, 5, 3, 3, 3)
+		// Strap
+		g.fillRect(patch, 4, 2, 1, 1)
+		g.fillRect(patch, 8, 2, 4, 1)
+	case 5: // Visor
+		visor := pxAlpha("#00ffff", 180)
+		g.fillRect(visor, 4, 4, 8, 2)
+	}
+}
+
+// drawHeadAccessoryStyle draws head accessories onto the grid.
+func drawHeadAccessoryStyle(g *Grid, style int) {
+	switch style % 7 {
+	case 0: // None
+	case 1: // Crown
+		gold := px("#ffd700")
+		g.fillRect(gold, 5, 1, 6, 2)
+		// Peaks
+		g.fillRect(gold, 5, 0, 1, 1)
+		g.fillRect(gold, 7, 0, 1, 1)
+		g.fillRect(gold, 10, 0, 1, 1)
+		// Gems
+		g.fillRect(px("#ff0000"), 6, 1, 1, 1)
+		g.fillRect(px("#0044ff"), 9, 1, 1, 1)
+	case 2: // Top Hat
+		black := px("#111111")
+		g.fillRect(black, 6, 0, 4, 2)
+		// Brim
+		g.fillRect(black, 4, 2, 8, 1)
+		// Band
+		g.fillRect(px("#cc0000"), 6, 1, 4, 1)
+	case 3: // Halo
+		gold := px("#ffdd44")
+		g.fillRect(gold, 6, 0, 4, 1)
+		g.fillRect(gold, 5, 1, 1, 1)
+		g.fillRect(gold, 10, 1, 1, 1)
+	case 4: // Devil Horns
+		red := px("#cc0000")
+		g.fillRect(red, 4, 1, 2, 2)
+		g.fillRect(red, 10, 1, 2, 2)
+		g.fillRect(red, 4, 0, 1, 1)
+		g.fillRect(red, 11, 0, 1, 1)
+	case 5: // Antenna
+		g.fillRect(px("#888888"), 8, 0, 1, 2)
+		g.fillRect(px("#00ff00"), 8, 0, 1, 1)
+	case 6: // Flower
+		pink := px("#ff69b4")
+		g.fillRect(pink, 10, 2, 3, 1)
+		g.fillRect(pink, 10, 4, 3, 1)
+		g.fillRect(pink, 10, 3, 1, 1)
+		g.fillRect(pink, 12, 3, 1, 1)
+		g.fillRect(px("#ffff00"), 11, 3, 1, 1)
+	}
+}
+
+// drawShirtDesignStyle draws shirt designs onto the grid.
+func drawShirtDesignStyle(g *Grid, style int, darkShirt, lightShirt Pixel) {
+	switch style % 7 {
+	case 0: // Solid (none)
+	case 1: // H-Stripe
+		g.fillRect(darkShirt, 4, 9, 8, 1)
+	case 2: // V-Stripe
+		g.fillRect(lightShirt, 7, 8, 2, 3)
+	case 3: // Heart
+		red := px("#ff0000")
+		g.fillRect(red, 6, 8, 1, 1)
+		g.fillRect(red, 9, 8, 1, 1)
+		g.fillRect(red, 6, 9, 4, 1)
+		g.fillRect(red, 7, 10, 2, 1)
+	case 4: // Star
+		yellow := px("#ffff00")
+		g.fillRect(yellow, 7, 8, 2, 1)
+		g.fillRect(yellow, 6, 9, 4, 1)
+		g.fillRect(yellow, 7, 10, 2, 1)
+	case 5: // Number 1
+		white := px("#ffffff")
+		g.fillRect(white, 7, 8, 2, 3)
+		g.fillRect(white, 6, 8, 1, 1)
+	case 6: // Skull
+		white := px("#ffffff")
+		g.fillRect(white, 7, 8, 2, 2)
+		g.fillRect(px("#000000"), 7, 8, 1, 1)
+		g.fillRect(px("#000000"), 8, 8, 1, 1)
+		g.fillRect(white, 7, 10, 2, 1)
+	}
+}
+
 // RenderPreview renders a Grid to a styled string using half-block characters.
 // Each terminal line represents 2 pixel rows. Scale doubles each pixel horizontally.
 func RenderPreview(g Grid, scale int) string {
@@ -209,4 +392,3 @@ func RenderPreview(g Grid, scale int) string {
 func toHex(p Pixel) string {
 	return fmt.Sprintf("#%02x%02x%02x", p.R, p.G, p.B)
 }
-

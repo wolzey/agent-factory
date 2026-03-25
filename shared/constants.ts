@@ -64,6 +64,26 @@ export const SHOE_COLORS = [
   { name: 'White', hex: '#ffffff' },
 ];
 
+export const FACIAL_HAIR_NAMES = [
+  'None', 'Stubble', 'Mustache', 'Full Beard', 'Goatee', 'Soul Patch',
+];
+
+export const MOUTH_STYLE_NAMES = [
+  'Default', 'Smile', 'Frown', 'Open', 'Teeth Grin', 'Tongue Out',
+];
+
+export const FACE_ACCESSORY_NAMES = [
+  'None', 'Round Glasses', 'Sunglasses', 'Monocle', 'Eye Patch', 'Visor',
+];
+
+export const HEAD_ACCESSORY_NAMES = [
+  'None', 'Crown', 'Top Hat', 'Halo', 'Devil Horns', 'Antenna', 'Flower',
+];
+
+export const SHIRT_DESIGN_NAMES = [
+  'Solid', 'H-Stripe', 'V-Stripe', 'Heart', 'Star', 'Number 1', 'Skull',
+];
+
 export const VALID_EMOTES: import('./types.js').EmoteType[] = ['dance', 'jump', 'guitar', 'gun', 'laugh', 'wave', 'sleep', 'explode', 'dizzy', 'flex', 'rage'];
 
 export const DEFAULT_SERVER_CONFIG: import('./types.js').ServerConfig = {
