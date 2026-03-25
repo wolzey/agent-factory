@@ -18,6 +18,7 @@ export class AgentManager {
   private theme: EnvironmentTheme;
   private tombstones = new Map<string, { container: Phaser.GameObjects.Container; x: number; y: number }>();
   private flowerVisitors = new Map<string, string>(); // agentId → deadSessionId they're visiting
+  private flowersDone = new Map<string, Set<string>>(); // deadSessionId → set of agentIds who already placed flowers
   private zombieRising = new Set<string>(); // agents currently rising from grave (skip routing)
   private lastFlowerCheck = 0; // timestamp of last periodic flower check
 
@@ -123,8 +124,8 @@ export class AgentManager {
       machine.setDepth(6 + machine.y * 0.001);
     }
 
-    // Periodically check if idle agents should visit tombstones (every 5s)
-    if (this.tombstones.size > 0 && time - this.lastFlowerCheck > 5000) {
+    // Periodically check if idle agents should visit tombstones (every 8s)
+    if (this.tombstones.size > 0 && time - this.lastFlowerCheck > 8000) {
       this.lastFlowerCheck = time;
       this.checkFlowerVisits();
     }
@@ -143,6 +144,7 @@ export class AgentManager {
         // Zombie resurrection from tombstone
         agent.riseFromGrave(tomb.x, tomb.y, tomb.container);
         this.tombstones.delete(session.sessionId);
+        this.flowersDone.delete(session.sessionId);
         this.layout.releaseTombstone(session.sessionId);
 
         // Send flower visitors home — tombstone is gone
@@ -226,6 +228,7 @@ export class AgentManager {
         // Remove tombstone + free workstation slot after it expires
         this.scene.time.delayedCall(TOMBSTONE_DURATION_MS, () => {
           this.tombstones.delete(sessionId);
+          this.flowersDone.delete(sessionId);
           this.layout.releaseTombstone(sessionId);
         });
       }, this.serverGraphicDeath);
@@ -346,7 +349,7 @@ export class AgentManager {
 
   /**
    * Periodic check: pick a random idle/waiting agent and send them to visit a random tombstone.
-   * Called from update() every 5 seconds while tombstones exist.
+   * Each agent places at most 1 flower per tombstone.
    */
   private checkFlowerVisits() {
     if (this.tombstones.size === 0) return;
@@ -355,12 +358,15 @@ export class AgentManager {
     const tombIds = [...this.tombstones.keys()];
     const deadSessionId = tombIds[Phaser.Math.Between(0, tombIds.length - 1)];
 
-    // Find idle/waiting agents not already visiting a tombstone and not working
+    // Who already placed a flower at this tombstone?
+    const done = this.flowersDone.get(deadSessionId) ?? new Set();
+
+    // Find idle/waiting agents not already visiting, not working, and haven't placed a flower here yet
     const candidates: string[] = [];
     for (const [id, agent] of this.agents) {
       const activity = agent.sessionData.activity;
       const notBusy = activity === 'idle' || activity === 'waiting';
-      if (notBusy && !this.flowerVisitors.has(id)) {
+      if (notBusy && !this.flowerVisitors.has(id) && !done.has(id)) {
         candidates.push(id);
       }
     }
@@ -425,6 +431,12 @@ export class AgentManager {
 
       // Restore normal speed now that we've arrived
       agent.setMoveSpeed(originalSpeed);
+
+      // Mark this agent as having placed a flower at this tombstone (max 1 per agent)
+      if (!this.flowersDone.has(deadSessionId)) {
+        this.flowersDone.set(deadSessionId, new Set());
+      }
+      this.flowersDone.get(deadSessionId)!.add(agentId);
 
       // Place flower at tombstone base
       const flower = this.scene.add.image(
