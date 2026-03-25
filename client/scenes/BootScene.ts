@@ -116,6 +116,7 @@ export class BootScene extends Phaser.Scene {
     this.generateCharacterSprites();
     this.generateSkullSprite();
     this.generateBloodSprites();
+    this.generateTombstoneSprite();
     this.generateParticleSprites();
     this.generateIcons();
     this.generateScanlineTexture();
@@ -397,6 +398,66 @@ export class BootScene extends Phaser.Scene {
     slctx.fillStyle = '#990000';
     slctx.fillRect(1, 2, 6, 1);
     slashCanvas.refresh();
+  }
+
+  // ── Tombstone sprite for death marker ────────────────────────────
+  private generateTombstoneSprite() {
+    const canvas = this.textures.createCanvas('tombstone', 16, 20)!;
+    const ctx = canvas.getContext();
+
+    // Stone body
+    ctx.fillStyle = '#555566';
+    ctx.fillRect(3, 4, 10, 14);
+    ctx.fillRect(2, 6, 12, 12);
+
+    // Rounded top
+    ctx.fillStyle = '#555566';
+    ctx.fillRect(4, 2, 8, 2);
+    ctx.fillRect(5, 1, 6, 1);
+    ctx.fillRect(6, 0, 4, 1);
+
+    // Stone highlight (left edge)
+    ctx.fillStyle = '#6a6a7a';
+    ctx.fillRect(3, 5, 1, 13);
+    ctx.fillRect(4, 3, 1, 2);
+    ctx.fillRect(5, 2, 1, 1);
+
+    // Stone shadow (right edge)
+    ctx.fillStyle = '#3d3d4d';
+    ctx.fillRect(13, 6, 1, 12);
+    ctx.fillRect(12, 4, 1, 2);
+    ctx.fillRect(11, 2, 1, 2);
+
+    // RIP text
+    ctx.fillStyle = '#aaaabb';
+    // R
+    ctx.fillRect(4, 6, 1, 5);
+    ctx.fillRect(5, 6, 2, 1);
+    ctx.fillRect(7, 7, 1, 1);
+    ctx.fillRect(5, 8, 2, 1);
+    ctx.fillRect(6, 9, 1, 1);
+    ctx.fillRect(7, 10, 1, 1);
+    // I
+    ctx.fillRect(9, 6, 1, 5);
+    // P
+    ctx.fillRect(11, 6, 1, 5);
+    ctx.fillRect(12, 6, 1, 1);
+    ctx.fillRect(13, 7, 1, 1);
+    ctx.fillRect(12, 8, 1, 1);
+
+    // Ground mound
+    ctx.fillStyle = '#3a2a1a';
+    ctx.fillRect(0, 17, 16, 3);
+    ctx.fillRect(1, 16, 14, 1);
+
+    // Grass tufts
+    ctx.fillStyle = '#2a5a2a';
+    ctx.fillRect(0, 16, 2, 1);
+    ctx.fillRect(14, 16, 2, 1);
+    ctx.fillRect(1, 15, 1, 1);
+    ctx.fillRect(14, 15, 1, 1);
+
+    canvas.refresh();
   }
 
   // ── Particle sprites ──────────────────────────────────────────────
