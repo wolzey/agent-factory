@@ -138,6 +138,10 @@ export class StateManager {
     session.currentToolInput = payload.tool_input || null;
     session.lastEventAt = Date.now();
 
+    if (toolName === 'EnterPlanMode') {
+      session.sessionName = 'Planning';
+    }
+
     this.emit('update', { agent: session });
     this.emit('effect', {
       sessionId: payload.session_id,
@@ -148,11 +152,19 @@ export class StateManager {
 
   private handlePostToolUse(payload: HookPayload): void {
     const session = this.ensureSession(payload);
+    const toolName = payload.tool_name;
 
     session.activity = 'thinking';
     session.currentTool = null;
     session.currentToolInput = null;
     session.lastEventAt = Date.now();
+
+    if (toolName === 'EnterWorktree') {
+      const name = payload.tool_input?.name;
+      if (typeof name === 'string') session.sessionName = name;
+    } else if (toolName === 'ExitPlanMode') {
+      session.sessionName = undefined;
+    }
 
     this.emit('update', { agent: session });
     this.emit('effect', {

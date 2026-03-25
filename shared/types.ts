@@ -31,6 +31,7 @@ export interface SubagentInfo {
 export interface AgentSession {
   sessionId: string;
   username: string;
+  sessionName?: string;
   avatar: AvatarConfig;
   cwd: string;
   activity: AgentActivity;
