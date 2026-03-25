@@ -11,6 +11,7 @@ export class AgentManager {
   private subagents = new Map<string, SubagentSprite>();
   private machines: Machine[] = [];
   private layout: LayoutManager;
+  private serverGraphicDeath = false;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -28,6 +29,10 @@ export class AgentManager {
         this.machines.push(machine);
       }
     }
+  }
+
+  setServerGraphicDeath(enabled: boolean) {
+    this.serverGraphicDeath = enabled;
   }
 
   handleFullState(agents: AgentSession[]) {
@@ -161,7 +166,7 @@ export class AgentManager {
   private removeAgent(sessionId: string) {
     const agent = this.agents.get(sessionId);
     if (agent) {
-      agent.die();
+      agent.die(undefined, this.serverGraphicDeath);
       this.agents.delete(sessionId);
     }
     this.layout.release(sessionId);

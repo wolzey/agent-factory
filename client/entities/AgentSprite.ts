@@ -146,7 +146,15 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.updateStatusIcon(session.activity, session.currentTool);
   }
 
-  die(onComplete?: () => void) {
+  die(onComplete?: () => void, serverGraphicDeath?: boolean) {
+    if (serverGraphicDeath || this.sessionData.avatar?.graphicDeath) {
+      this.dieGraphic(onComplete);
+    } else {
+      this.dieStandard(onComplete);
+    }
+  }
+
+  private dieStandard(onComplete?: () => void) {
     this.hideThoughtBubble();
     this.statusIcon?.setVisible(false);
     this.isMoving = false;
@@ -197,6 +205,320 @@ export class AgentSprite extends Phaser.GameObjects.Container {
           });
         });
       },
+    });
+  }
+
+  private dieGraphic(onComplete?: () => void) {
+    this.hideThoughtBubble();
+    this.statusIcon?.setVisible(false);
+    this.isMoving = false;
+
+    // Hide nametag immediately
+    this.nametag.setAlpha(0);
+
+    // Neon glow turns blood red
+    this.neonGlow.setFillStyle(0xff0000, 0.5);
+
+    // Phase 1: Throat slash - red line appears across neck
+    const slash = this.scene.add.image(0, -4, 'blood_slash');
+    slash.setScale(2);
+    slash.setAlpha(0);
+    this.add(slash);
+
+    this.scene.tweens.add({
+      targets: slash,
+      alpha: 1,
+      scaleX: 2.5,
+      duration: 150,
+      ease: 'Power3',
+    });
+
+    // Spray blood drops upward and outward from neck - initial burst
+    this.scene.time.delayedCall(100, () => {
+      for (let i = 0; i < 25; i++) {
+        const drop = this.scene.add.image(
+          Phaser.Math.Between(-6, 6),
+          Phaser.Math.Between(-8, -4),
+          'blood_drop',
+        );
+        drop.setScale(Phaser.Math.FloatBetween(1, 3));
+        drop.setTint(Phaser.Math.Between(0, 2) === 0 ? 0xff0000 : Phaser.Math.Between(0, 1) ? 0xcc0000 : 0xdd2200);
+        this.add(drop);
+
+        const angle = Phaser.Math.FloatBetween(-Math.PI * 0.9, -Math.PI * 0.1);
+        const dist = Phaser.Math.Between(25, 70);
+        const gravity = Phaser.Math.Between(30, 70);
+
+        this.scene.tweens.add({
+          targets: drop,
+          x: drop.x + Math.cos(angle) * dist,
+          y: drop.y + Math.sin(angle) * dist + gravity,
+          alpha: 0.7,
+          scaleX: drop.scaleX * 0.4,
+          scaleY: drop.scaleY * 0.4,
+          angle: Phaser.Math.Between(-360, 360),
+          duration: Phaser.Math.Between(400, 800),
+          ease: 'Power1',
+          onComplete: () => drop.destroy(),
+        });
+      }
+    });
+
+    // Continuous arterial spray - 3 rapid bursts
+    for (let burst = 0; burst < 3; burst++) {
+      this.scene.time.delayedCall(200 + burst * 150, () => {
+        for (let i = 0; i < 15; i++) {
+          const drop = this.scene.add.image(
+            Phaser.Math.Between(-4, 4),
+            Phaser.Math.Between(-8, -4),
+            'blood_drop',
+          );
+          drop.setScale(Phaser.Math.FloatBetween(1.5, 3.5));
+          drop.setTint(burst === 0 ? 0xff0000 : burst === 1 ? 0xdd0000 : 0xbb0000);
+          this.add(drop);
+
+          // Spray in a fan pattern, alternating left/right each burst
+          const side = burst % 2 === 0 ? -1 : 1;
+          const angle = Phaser.Math.FloatBetween(-Math.PI * 0.7, -Math.PI * 0.3) + side * 0.3;
+          const dist = Phaser.Math.Between(30, 80);
+
+          this.scene.tweens.add({
+            targets: drop,
+            x: drop.x + Math.cos(angle) * dist,
+            y: drop.y + Math.sin(angle) * dist + Phaser.Math.Between(35, 75),
+            alpha: 0.5,
+            scaleX: drop.scaleX * 0.3,
+            scaleY: drop.scaleY * 0.3,
+            angle: Phaser.Math.Between(-360, 360),
+            duration: Phaser.Math.Between(350, 700),
+            ease: 'Power1',
+            onComplete: () => drop.destroy(),
+          });
+        }
+      });
+    }
+
+    // Phase 2: Heavy dripping blood + stagger
+    this.scene.time.delayedCall(500, () => {
+      // Thick drips running down the body
+      for (let i = 0; i < 18; i++) {
+        const drop = this.scene.add.image(
+          Phaser.Math.Between(-8, 8),
+          Phaser.Math.Between(-10, 0),
+          'blood_drop',
+        );
+        drop.setScale(Phaser.Math.FloatBetween(1.5, 3.5));
+        drop.setTint(Phaser.Math.Between(0, 1) ? 0x990000 : 0xaa0000);
+        this.add(drop);
+
+        this.scene.tweens.add({
+          targets: drop,
+          x: drop.x + Phaser.Math.Between(-10, 10),
+          y: drop.y + Phaser.Math.Between(25, 55),
+          alpha: 0.4,
+          scaleY: drop.scaleY * 1.5,
+          duration: Phaser.Math.Between(500, 1000),
+          ease: 'Power2',
+          onComplete: () => drop.destroy(),
+        });
+      }
+
+      // Sideways spray hitting the "ground"
+      for (let i = 0; i < 10; i++) {
+        const drop = this.scene.add.image(
+          Phaser.Math.Between(-4, 4),
+          -6,
+          'blood_drop',
+        );
+        drop.setScale(Phaser.Math.FloatBetween(1, 2));
+        drop.setTint(0xcc0000);
+        this.add(drop);
+
+        const dir = Phaser.Math.Between(0, 1) ? 1 : -1;
+        this.scene.tweens.add({
+          targets: drop,
+          x: drop.x + dir * Phaser.Math.Between(20, 50),
+          y: drop.y + Phaser.Math.Between(15, 35),
+          alpha: 0.3,
+          angle: dir * Phaser.Math.Between(90, 270),
+          duration: Phaser.Math.Between(300, 600),
+          ease: 'Power1',
+          onComplete: () => drop.destroy(),
+        });
+      }
+
+      // Violent stagger/shake
+      this.scene.tweens.add({
+        targets: this.sprite,
+        x: this.sprite.x + 4,
+        duration: 50,
+        yoyo: true,
+        repeat: 6,
+        ease: 'Sine.easeInOut',
+      });
+    });
+
+    // Phase 3: Collapse - agent falls face-first with impact spray
+    this.scene.time.delayedCall(900, () => {
+      // One last arterial gush as they go down
+      for (let i = 0; i < 10; i++) {
+        const drop = this.scene.add.image(
+          Phaser.Math.Between(-3, 3),
+          -6,
+          'blood_drop',
+        );
+        drop.setScale(Phaser.Math.FloatBetween(2, 4));
+        drop.setTint(0xff0000);
+        this.add(drop);
+
+        this.scene.tweens.add({
+          targets: drop,
+          x: drop.x + Phaser.Math.Between(-40, 40),
+          y: drop.y + Phaser.Math.Between(20, 50),
+          alpha: 0.5,
+          angle: Phaser.Math.Between(-180, 180),
+          duration: Phaser.Math.Between(300, 600),
+          ease: 'Power1',
+          onComplete: () => drop.destroy(),
+        });
+      }
+
+      this.scene.tweens.add({
+        targets: this.sprite,
+        angle: 90,
+        y: this.sprite.y + 12,
+        x: this.sprite.x + 4,
+        duration: 400,
+        ease: 'Back.easeIn',
+        onComplete: () => {
+          // Impact splash - blood flies out on impact
+          for (let i = 0; i < 15; i++) {
+            const splash = this.scene.add.image(
+              Phaser.Math.Between(-4, 10),
+              Phaser.Math.Between(6, 14),
+              'blood_drop',
+            );
+            splash.setScale(Phaser.Math.FloatBetween(1, 2.5));
+            splash.setTint(Phaser.Math.Between(0, 1) ? 0xcc0000 : 0xff0000);
+            this.add(splash);
+
+            const dir = Phaser.Math.FloatBetween(0, Math.PI);
+            const dist = Phaser.Math.Between(15, 45);
+            this.scene.tweens.add({
+              targets: splash,
+              x: splash.x + Math.cos(dir) * dist,
+              y: splash.y + Math.sin(dir) * Phaser.Math.Between(5, 20),
+              alpha: 0.3,
+              scaleX: 0.5,
+              scaleY: 0.5,
+              duration: Phaser.Math.Between(300, 600),
+              ease: 'Power2',
+              onComplete: () => splash.destroy(),
+            });
+          }
+
+          // Blood pool spreads under the body - larger
+          const pool = this.scene.add.image(4, 10, 'blood_splat');
+          pool.setScale(0.5, 0.3);
+          pool.setAlpha(0);
+          pool.setTint(0xaa0000);
+          this.add(pool);
+
+          this.scene.tweens.add({
+            targets: pool,
+            alpha: 0.9,
+            scaleX: 3.5,
+            scaleY: 2,
+            duration: 1000,
+            ease: 'Power2',
+          });
+
+          // Second pool layer - darker, wider spread
+          const pool2 = this.scene.add.image(2, 12, 'blood_splat');
+          pool2.setScale(0.3, 0.2);
+          pool2.setAlpha(0);
+          pool2.setTint(0x660000);
+          this.add(pool2);
+
+          this.scene.tweens.add({
+            targets: pool2,
+            alpha: 0.8,
+            scaleX: 4,
+            scaleY: 2.2,
+            duration: 1400,
+            delay: 150,
+            ease: 'Power1',
+          });
+
+          // Third pool - bright red on top, spreading further
+          const pool3 = this.scene.add.image(-2, 8, 'blood_splat');
+          pool3.setScale(0.2, 0.2);
+          pool3.setAlpha(0);
+          pool3.setTint(0xdd0000);
+          this.add(pool3);
+
+          this.scene.tweens.add({
+            targets: pool3,
+            alpha: 0.6,
+            scaleX: 2.5,
+            scaleY: 1.5,
+            duration: 1600,
+            delay: 400,
+            ease: 'Power1',
+          });
+
+          // Continuous drips from the body - more of them, longer lasting
+          for (let i = 0; i < 10; i++) {
+            this.scene.time.delayedCall(i * 150, () => {
+              if (!this.scene) return;
+              const drip = this.scene.add.image(
+                Phaser.Math.Between(-4, 10),
+                Phaser.Math.Between(2, 10),
+                'blood_drop',
+              );
+              drip.setScale(Phaser.Math.FloatBetween(1, 2));
+              drip.setTint(0xaa0000);
+              this.add(drip);
+
+              this.scene.tweens.add({
+                targets: drip,
+                y: drip.y + Phaser.Math.Between(5, 12),
+                alpha: 0.3,
+                duration: Phaser.Math.Between(400, 700),
+                ease: 'Power2',
+                onComplete: () => drip.destroy(),
+              });
+            });
+          }
+
+          // Neon glow pulses red ominously
+          this.scene.tweens.add({
+            targets: this.neonGlow,
+            alpha: 0.8,
+            duration: 300,
+            yoyo: true,
+            repeat: 2,
+            ease: 'Sine.easeInOut',
+            onComplete: () => {
+              this.neonGlow.setFillStyle(0x660000, 0.4);
+            },
+          });
+        },
+      });
+    });
+
+    // Phase 4: Fade everything out after the carnage
+    this.scene.time.delayedCall(3500, () => {
+      this.scene.tweens.add({
+        targets: this,
+        alpha: 0,
+        duration: 800,
+        ease: 'Power2',
+        onComplete: () => {
+          onComplete?.();
+          this.destroy();
+        },
+      });
     });
   }
 

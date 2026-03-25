@@ -17,6 +17,7 @@ export interface AvatarConfig {
   color: string;
   hat: string | null;
   trail: string | null;
+  graphicDeath?: boolean;
   hairStyle?: number;       // 0-7 index into HAIR_STYLES
   hairColor?: string;       // hex color
   skinTone?: string;        // hex color
@@ -95,4 +96,5 @@ export interface UserConfig {
 // === Server Config ===
 export interface ServerConfig {
   title: string;
+  graphicDeath?: boolean;
 }
