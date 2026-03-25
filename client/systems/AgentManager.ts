@@ -171,9 +171,11 @@ export class AgentManager {
 
   private syncSubagents(session: AgentSession) {
     const existing = new Set<string>();
+    const totalSiblings = session.subagents.length;
 
     // Add new subagents
-    for (const info of session.subagents) {
+    for (let i = 0; i < session.subagents.length; i++) {
+      const info = session.subagents[i];
       const key = `${session.sessionId}:${info.agentId}`;
       existing.add(key);
 
@@ -183,6 +185,8 @@ export class AgentManager {
           info,
           session.sessionId,
           session.avatar?.spriteIndex ?? 0,
+          i,
+          totalSiblings,
         );
         const agent = this.agents.get(session.sessionId);
         if (agent) {

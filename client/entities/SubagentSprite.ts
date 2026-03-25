@@ -1,12 +1,24 @@
 import Phaser from 'phaser';
 import type { SubagentInfo } from '@shared/types';
 
+// Distinct colors for each subagent so they're visually distinguishable
+const SUBAGENT_COLORS = [
+  0xaa88ff, // purple
+  0x88ffaa, // mint
+  0xff88aa, // pink
+  0x88aaff, // light blue
+  0xffaa88, // peach
+  0xaaff88, // lime
+  0xff88ff, // magenta
+  0x88ffff, // cyan
+];
+
 export class SubagentSprite extends Phaser.GameObjects.Container {
   private sprite: Phaser.GameObjects.Sprite;
   private nametag: Phaser.GameObjects.Text;
-  private orbitAngle = Math.random() * Math.PI * 2;
-  private orbitRadius = 28;
-  private orbitSpeed = 0.8;
+  private orbitAngle: number;
+  private orbitRadius: number;
+  private orbitSpeed: number;
 
   public info: SubagentInfo;
   public parentSessionId: string;
@@ -14,26 +26,46 @@ export class SubagentSprite extends Phaser.GameObjects.Container {
   private parentX = 0;
   private parentY = 0;
 
-  constructor(scene: Phaser.Scene, info: SubagentInfo, parentSessionId: string, spriteIndex: number) {
+  constructor(
+    scene: Phaser.Scene,
+    info: SubagentInfo,
+    parentSessionId: string,
+    spriteIndex: number,
+    siblingIndex: number,
+    siblingCount: number,
+  ) {
     super(scene, 0, 0);
 
     this.info = info;
     this.parentSessionId = parentSessionId;
 
-    // Smaller sprite with lighter tint
+    // Evenly space subagents around the orbit
+    this.orbitAngle = (siblingIndex / Math.max(siblingCount, 1)) * Math.PI * 2;
+    // Widen orbit as more subagents spawn so they don't overlap
+    this.orbitRadius = 30 + siblingCount * 4;
+    // Slightly different speeds so they don't lock in sync
+    this.orbitSpeed = 0.6 + siblingIndex * 0.15;
+
+    // Distinct color per subagent
+    const tint = SUBAGENT_COLORS[siblingIndex % SUBAGENT_COLORS.length];
+
     const spriteKey = `agent_${spriteIndex % 8}`;
     this.sprite = scene.add.sprite(0, 0, spriteKey, 1);
-    this.sprite.setScale(1.2); // Smaller than parent
+    this.sprite.setScale(1.2);
     this.sprite.setOrigin(0.5, 0.5);
-    this.sprite.setTint(0xaa88ff); // Purple tint for subagents
+    this.sprite.setTint(tint);
     this.sprite.setAlpha(0.85);
     this.add(this.sprite);
 
-    // Nametag with agent type
-    this.nametag = scene.add.text(0, -14, info.agentType || 'sub', {
+    // Nametag with agent type + index
+    const tintHex = '#' + tint.toString(16).padStart(6, '0');
+    const label = siblingCount > 1
+      ? `${info.agentType || 'sub'} #${siblingIndex + 1}`
+      : (info.agentType || 'sub');
+    this.nametag = scene.add.text(0, -14, label, {
       fontFamily: 'monospace',
       fontSize: '6px',
-      color: '#aa88ff',
+      color: tintHex,
       backgroundColor: 'rgba(10, 10, 26, 0.8)',
       padding: { x: 2, y: 1 },
       align: 'center',

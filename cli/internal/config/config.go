@@ -1,0 +1,59 @@
+package config
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+)
+
+type AvatarConfig struct {
+	SpriteIndex int     `json:"spriteIndex"`
+	Color       string  `json:"color"`
+	Hat         *string `json:"hat"`
+	Trail       *string `json:"trail"`
+}
+
+type UserConfig struct {
+	Username  string       `json:"username"`
+	ServerURL string       `json:"serverUrl"`
+	Avatar    AvatarConfig `json:"avatar"`
+}
+
+func ConfigDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".config", "agent-factory")
+}
+
+func ConfigPath() string {
+	return filepath.Join(ConfigDir(), "config.json")
+}
+
+func Exists() bool {
+	_, err := os.Stat(ConfigPath())
+	return err == nil
+}
+
+func Write(cfg UserConfig) error {
+	dir := ConfigDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+
+	return os.WriteFile(ConfigPath(), data, 0o644)
+}
+
+func Read() (UserConfig, error) {
+	var cfg UserConfig
+	data, err := os.ReadFile(ConfigPath())
+	if err != nil {
+		return cfg, err
+	}
+	err = json.Unmarshal(data, &cfg)
+	return cfg, err
+}
