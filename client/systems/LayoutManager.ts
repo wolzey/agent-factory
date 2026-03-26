@@ -149,6 +149,17 @@ export class LayoutManager {
     }
   }
 
+  /** Claim a tombstone slot for the risen zombie (converts __tomb__ back to sessionId). */
+  claimTombstoneSlot(sessionId: string): Position | null {
+    const tombId = `__tomb__${sessionId}`;
+    const slot = this.arcadeSlots.find(s => s.occupant === tombId);
+    if (slot) {
+      slot.occupant = sessionId;
+      return { ...slot.pos };
+    }
+    return null;
+  }
+
   /** Check if an agent had a workstation slot (or tombstone holds one). */
   getTombstoneSlot(sessionId: string): Slot | undefined {
     const tombId = `__tomb__${sessionId}`;

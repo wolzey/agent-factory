@@ -198,7 +198,8 @@ export class AgentManager {
         agent.riseFromGrave(tomb.x, tomb.y, tomb.container);
         this.tombstones.delete(session.sessionId);
         this.flowersDone.delete(session.sessionId);
-        this.layout.releaseTombstone(session.sessionId);
+        // Claim the tombstone's arcade slot so the zombie keeps its original position
+        this.layout.claimTombstoneSlot(session.sessionId);
 
         // Send flower visitors home — tombstone is gone
         this.cancelFlowerVisitors(session.sessionId);
@@ -242,24 +243,55 @@ export class AgentManager {
     } else if (isWorking || isThinking) {
       // Working or thinking -> arcade cabinet
       const pos = this.layout.assignToArcade(session.sessionId);
-      agent.moveTo(pos.x, pos.y + 24); // Stand in front of cabinet
+      const target = { x: pos.x, y: pos.y + 24 };
+      // Non-zombie agents must not work at a tombstone-occupied slot
+      if (!agent.isZombie && this.isNearTombstone(target.x, target.y)) {
+        // Release and reassign to a different slot
+        this.layout.release(session.sessionId);
+        const altPos = this.layout.assignToArcade(session.sessionId);
+        agent.moveTo(altPos.x, altPos.y + 24);
+      } else {
+        agent.moveTo(target.x, target.y);
+      }
       this.activateMachineFor(session.sessionId);
     } else if (session.activity === 'waiting') {
       // Waiting for user prompt -> front counter
       this.deactivateMachineFor(session.sessionId);
       this.layout.release(session.sessionId);
       const pos = this.layout.assignToCounter(session.sessionId);
-      agent.moveTo(pos.x, pos.y);
+      // If position overlaps a tombstone, offset away
+      if (!agent.isZombie && this.isNearTombstone(pos.x, pos.y)) {
+        agent.moveTo(pos.x + 30, pos.y);
+      } else {
+        agent.moveTo(pos.x, pos.y);
+      }
     } else {
       // idle / fallback -> lounge
       this.layout.release(session.sessionId);
       this.deactivateMachineFor(session.sessionId);
       const pos = this.layout.assignToLounge(session.sessionId);
-      agent.moveTo(pos.x, pos.y);
+      // If position overlaps a tombstone, offset away
+      if (!agent.isZombie && this.isNearTombstone(pos.x, pos.y)) {
+        agent.moveTo(pos.x + 30, pos.y);
+      } else {
+        agent.moveTo(pos.x, pos.y);
+      }
     }
 
     // Sync subagents
     this.syncSubagents(session);
+  }
+
+  /** Check if a position is within proximity of any active tombstone. */
+  private isNearTombstone(x: number, y: number, threshold = 40): boolean {
+    for (const tomb of this.tombstones.values()) {
+      const dx = x - tomb.x;
+      const dy = y - tomb.y;
+      if (Math.abs(dx) < threshold && Math.abs(dy) < threshold) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private removeAgent(sessionId: string) {
@@ -303,6 +335,8 @@ export class AgentManager {
   private syncSubagents(session: AgentSession) {
     const existing = new Set<string>();
     const totalSiblings = session.subagents.length;
+    const parentAgent = this.agents.get(session.sessionId);
+    const parentIsZombie = parentAgent?.isZombie ?? false;
 
     // Add new subagents
     for (let i = 0; i < session.subagents.length; i++) {
@@ -318,6 +352,7 @@ export class AgentManager {
           session.avatar?.spriteIndex ?? 0,
           i,
           totalSiblings,
+          parentIsZombie,
         );
         const agent = this.agents.get(session.sessionId);
         if (agent) {
@@ -414,12 +449,12 @@ export class AgentManager {
     // Who already placed a flower at this tombstone?
     const done = this.flowersDone.get(deadSessionId) ?? new Set();
 
-    // Find idle/waiting agents not already visiting, not working, and haven't placed a flower here yet
+    // Find idle/waiting agents not already visiting, not working, not zombies, and haven't placed a flower here yet
     const candidates: string[] = [];
     for (const [id, agent] of this.agents) {
       const activity = agent.sessionData.activity;
       const notBusy = activity === 'idle' || activity === 'waiting';
-      if (notBusy && !this.flowerVisitors.has(id) && !done.has(id)) {
+      if (notBusy && !agent.isZombie && !this.flowerVisitors.has(id) && !done.has(id)) {
         candidates.push(id);
       }
     }
