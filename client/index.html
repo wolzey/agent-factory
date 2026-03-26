@@ -72,6 +72,52 @@
     #hud .hud-stat {
       color: #00ffff;
     }
+
+    /* Chat Overlay */
+    #chat-overlay {
+      position: fixed;
+      bottom: 12px;
+      right: 12px;
+      width: 260px;
+      background: rgba(10, 10, 26, 0.80);
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 6px 8px;
+      font-family: monospace;
+      font-size: 11px;
+      z-index: 999;
+      transition: opacity 0.8s ease-out;
+    }
+    #chat-overlay.chat-visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #chat-overlay.chat-hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #chat-overlay .chat-messages {
+      max-height: 72px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #333 transparent;
+    }
+    #chat-overlay .chat-messages::-webkit-scrollbar {
+      width: 4px;
+    }
+    #chat-overlay .chat-messages::-webkit-scrollbar-thumb {
+      background: #444;
+      border-radius: 2px;
+    }
+    #chat-overlay .chat-msg {
+      line-height: 1.5;
+      color: #ccc;
+      word-break: break-word;
+    }
+    #chat-overlay .chat-name {
+      color: #00ffff;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>

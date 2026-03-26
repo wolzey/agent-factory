@@ -70,12 +70,20 @@ export interface HookPayload {
   [key: string]: unknown;
 }
 
+// === Chat Message ===
+export interface ChatMessage {
+  username: string;
+  message: string;
+  timestamp: number;
+}
+
 // === WebSocket Messages: Server -> Browser ===
 export type WSMessageToClient =
   | { type: 'full_state'; agents: AgentSession[] }
   | { type: 'agent_update'; agent: AgentSession }
   | { type: 'agent_remove'; sessionId: string }
-  | { type: 'effect'; sessionId: string; effect: EffectType; data?: Record<string, unknown> };
+  | { type: 'effect'; sessionId: string; effect: EffectType; data?: Record<string, unknown> }
+  | { type: 'chat_message'; chat: ChatMessage };
 
 // === WebSocket Messages: Browser -> Server ===
 export type WSMessageToServer =

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { SocketClient } from '../network/socket';
 import { AgentManager } from '../systems/AgentManager';
+import { ChatOverlay } from '../ui/ChatOverlay';
 import type { WSMessageToClient, EnvironmentType } from '@shared/types';
 import { getTheme } from '../environments';
 import type { EnvironmentTheme } from '../environments';
@@ -8,6 +9,7 @@ import type { EnvironmentTheme } from '../environments';
 export class FactoryScene extends Phaser.Scene {
   private socket!: SocketClient;
   private agentManager!: AgentManager;
+  private chatOverlay!: ChatOverlay;
   private titleShadow!: Phaser.GameObjects.Text;
   private titleText!: Phaser.GameObjects.Text;
   private theme!: EnvironmentTheme;
@@ -37,6 +39,7 @@ export class FactoryScene extends Phaser.Scene {
     this.applyThemeColors();
 
     this.agentManager = new AgentManager(this, envType);
+    this.chatOverlay = new ChatOverlay();
 
     this.socket = new SocketClient();
     this.socket.onMessage((msg: WSMessageToClient) => this.handleMessage(msg));
@@ -55,6 +58,7 @@ export class FactoryScene extends Phaser.Scene {
       case 'agent_update': this.agentManager.handleAgentUpdate(msg.agent); break;
       case 'agent_remove': this.agentManager.handleAgentRemove(msg.sessionId); break;
       case 'effect': this.agentManager.handleEffect(msg.sessionId, msg.effect, msg.data); break;
+      case 'chat_message': this.chatOverlay.addMessage(msg.chat); break;
     }
   }
 

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import type { HookPayload, ServerConfig, EmoteType } from '../../shared/types.js';
-import { VALID_EMOTES } from '../../shared/constants.js';
+import type { HookPayload, ServerConfig, EmoteType, ChatMessage } from '../../shared/types.js';
+import { VALID_EMOTES, CHAT_MESSAGE_MAX_LENGTH } from '../../shared/constants.js';
 import type { StateManager } from '../state.js';
 import type { BroadcastManager } from '../ws/broadcast.js';
 
@@ -44,6 +44,27 @@ export function registerHookRoutes(
 
     state.emitEmote(session.sessionId, emote);
     return reply.status(200).send({ ok: true, sessionId: session.sessionId });
+  });
+
+  app.post<{ Body: { username: string; message: string } }>('/api/chat', async (request, reply) => {
+    const { username, message } = request.body || {};
+
+    if (!username || !message) {
+      return reply.status(400).send({ error: 'Missing username or message' });
+    }
+
+    if (message.length > CHAT_MESSAGE_MAX_LENGTH) {
+      return reply.status(400).send({ error: `Message too long (max ${CHAT_MESSAGE_MAX_LENGTH} chars)` });
+    }
+
+    const chat: ChatMessage = {
+      username,
+      message,
+      timestamp: Date.now(),
+    };
+
+    broadcast.broadcastChatMessage(chat);
+    return reply.status(200).send({ ok: true });
   });
 
   app.get('/api/config', async (_request, reply) => {

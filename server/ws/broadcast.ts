@@ -1,5 +1,5 @@
 import type { WebSocket } from '@fastify/websocket';
-import type { WSMessageToClient, AgentSession, EffectType } from '../../shared/types.js';
+import type { WSMessageToClient, AgentSession, EffectType, ChatMessage } from '../../shared/types.js';
 
 export class BroadcastManager {
   private clients = new Set<WebSocket>();
@@ -28,6 +28,10 @@ export class BroadcastManager {
 
   broadcastEffect(sessionId: string, effect: EffectType, data?: Record<string, unknown>) {
     this.broadcast({ type: 'effect', sessionId, effect, data });
+  }
+
+  broadcastChatMessage(chat: ChatMessage) {
+    this.broadcast({ type: 'chat_message', chat });
   }
 
   private broadcast(msg: WSMessageToClient) {

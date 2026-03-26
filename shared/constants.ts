@@ -4,6 +4,8 @@ export const STALE_CHECK_INTERVAL_MS = 30 * 1000; // 30 seconds
 export const STOPPED_REMOVAL_DELAY_MS = 3000; // 3 seconds after session end
 export const TOMBSTONE_DURATION_MS = 30_000; // 30 seconds tombstone lingers
 export const MAX_BROADCAST_RATE_MS = 100; // Max 10 updates/sec per session
+export const CHAT_MESSAGE_MAX_LENGTH = 200;
+export const CHAT_FADE_TIMEOUT_MS = 15_000; // 15 seconds before chat fades
 
 export const DEFAULT_AVATAR = {
   spriteIndex: 0,
