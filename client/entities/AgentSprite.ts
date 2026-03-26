@@ -545,6 +545,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
       case 'dizzy':   this.emoteDizzy(); break;
       case 'flex':    this.emoteFlex(); break;
       case 'rage':    this.emoteRage(); break;
+      case 'fart':    this.emoteFart(); break;
       default:        this.isEmoting = false; break;
     }
   }
@@ -1650,6 +1651,79 @@ export class AgentSprite extends Phaser.GameObjects.Container {
         });
       }
     });
+
+    this.scene.time.delayedCall(2000, () => this.finishEmote());
+  }
+
+  private emoteFart() {
+    this.showEmoteLabel('...');
+
+    // Small flinch
+    this.scene.tweens.add({
+      targets: this.sprite,
+      y: this.sprite.y - 2,
+      duration: 100,
+      yoyo: true,
+      ease: 'Power1',
+    });
+
+    // Slight lean forward
+    this.scene.tweens.add({
+      targets: this.sprite,
+      angle: -3,
+      duration: 150,
+      yoyo: true,
+      ease: 'Sine.easeInOut',
+    });
+
+    // Gas cloud - expanding circles that drift outward and fade
+    const gasColors = [0x88aa44, 0x669933, 0x887744, 0x779933, 0x998855];
+    for (let i = 0; i < 8; i++) {
+      this.scene.time.delayedCall(100 + i * 120, () => {
+        if (!this.scene) return;
+        const color = gasColors[i % gasColors.length];
+        const cloud = this.scene.add.circle(
+          this.x + Phaser.Math.Between(-4, 4),
+          this.y + Phaser.Math.Between(-2, 4),
+          Phaser.Math.Between(2, 4), color, 0.5,
+        ).setDepth(this.depth + 1);
+
+        this.scene.tweens.add({
+          targets: cloud,
+          x: cloud.x + Phaser.Math.Between(-25, 25),
+          y: cloud.y + Phaser.Math.Between(-20, 10),
+          scaleX: Phaser.Math.FloatBetween(2.5, 4),
+          scaleY: Phaser.Math.FloatBetween(2.5, 4),
+          alpha: 0,
+          duration: Phaser.Math.Between(1000, 1500),
+          ease: 'Power1',
+          onComplete: () => cloud.destroy(),
+        });
+      });
+    }
+
+    // Wavy stink lines
+    for (let i = 0; i < 3; i++) {
+      this.scene.time.delayedCall(300 + i * 200, () => {
+        if (!this.scene) return;
+        const line = this.scene.add.text(
+          this.x + Phaser.Math.Between(-8, 8),
+          this.y - 2,
+          '~',
+          { fontFamily: 'monospace', fontSize: '10px', color: '#88aa44' },
+        ).setOrigin(0.5).setDepth(this.depth + 1);
+
+        this.scene.tweens.add({
+          targets: line,
+          y: line.y - Phaser.Math.Between(20, 35),
+          x: line.x + Phaser.Math.Between(-10, 10),
+          alpha: 0,
+          duration: Phaser.Math.Between(800, 1200),
+          ease: 'Power1',
+          onComplete: () => line.destroy(),
+        });
+      });
+    }
 
     this.scene.time.delayedCall(2000, () => this.finishEmote());
   }

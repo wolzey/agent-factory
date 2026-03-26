@@ -14,7 +14,7 @@ import (
 	"github.com/wolzey/agent-factory/cli/internal/ui"
 )
 
-var validEmotes = []string{"dance", "jump", "guitar", "gun", "laugh", "wave", "sleep", "explode", "dizzy", "flex", "rage"}
+var validEmotes = []string{"dance", "jump", "guitar", "gun", "laugh", "wave", "sleep", "explode", "dizzy", "flex", "rage", "fart"}
 
 var emoteCmd = &cobra.Command{
 	Use:   "emote <name>",

@@ -100,6 +100,16 @@ export class AgentManager {
       case 'emote':
         if (data?.emote) {
           agent.playEmote(data.emote as string);
+          if (data.emote === 'fart') {
+            for (const [otherId, other] of this.agents) {
+              if (otherId === sessionId) continue;
+              const dx = agent.x - other.x;
+              const dy = agent.y - other.y;
+              if (Math.sqrt(dx * dx + dy * dy) < 150) {
+                this.scene.time.delayedCall(500, () => other.playEmote('dizzy'));
+              }
+            }
+          }
         }
         break;
     }

@@ -86,7 +86,7 @@ export const SHIRT_DESIGN_NAMES = [
   'Solid', 'H-Stripe', 'V-Stripe', 'Heart', 'Star', 'Number 1', 'Skull',
 ];
 
-export const VALID_EMOTES: import('./types.js').EmoteType[] = ['dance', 'jump', 'guitar', 'gun', 'laugh', 'wave', 'sleep', 'explode', 'dizzy', 'flex', 'rage'];
+export const VALID_EMOTES: import('./types.js').EmoteType[] = ['dance', 'jump', 'guitar', 'gun', 'laugh', 'wave', 'sleep', 'explode', 'dizzy', 'flex', 'rage', 'fart'];
 
 export const DEFAULT_SERVER_CONFIG: import('./types.js').ServerConfig = {
   title: 'AGENT FACTORY',
