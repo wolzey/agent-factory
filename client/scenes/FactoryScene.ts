@@ -53,18 +53,18 @@ export class FactoryScene extends Phaser.Scene {
     // Auth
     this.authManager = new AuthManager();
 
-    this.loginOverlay = new LoginOverlay(
-      this.authManager,
-      this.socket,
-      () => this.commandInput.show(),
-      () => this.commandInput.hide(),
-    );
-
     this.commandInput = new CommandInput(
       this.authManager,
       this.socket,
       (chat) => this.chatOverlay.addMessage(chat),
       () => this.loginOverlay.showLoggedOut(),
+    );
+
+    this.loginOverlay = new LoginOverlay(
+      this.authManager,
+      this.socket,
+      () => this.commandInput.show(),
+      () => this.commandInput.hide(),
     );
 
     // Re-authenticate on reconnect
