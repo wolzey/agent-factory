@@ -2,6 +2,9 @@ import Phaser from 'phaser';
 import { SocketClient } from '../network/socket';
 import { AgentManager } from '../systems/AgentManager';
 import { ChatOverlay } from '../ui/ChatOverlay';
+import { AuthManager } from '../auth/AuthManager';
+import { LoginOverlay } from '../ui/LoginOverlay';
+import { CommandInput } from '../ui/CommandInput';
 import type { WSMessageToClient, EnvironmentType } from '@shared/types';
 import { getTheme } from '../environments';
 import type { EnvironmentTheme } from '../environments';
@@ -10,6 +13,9 @@ export class FactoryScene extends Phaser.Scene {
   private socket!: SocketClient;
   private agentManager!: AgentManager;
   private chatOverlay!: ChatOverlay;
+  private authManager!: AuthManager;
+  private loginOverlay!: LoginOverlay;
+  private commandInput!: CommandInput;
   private titleShadow!: Phaser.GameObjects.Text;
   private titleText!: Phaser.GameObjects.Text;
   private theme!: EnvironmentTheme;
@@ -43,6 +49,31 @@ export class FactoryScene extends Phaser.Scene {
 
     this.socket = new SocketClient();
     this.socket.onMessage((msg: WSMessageToClient) => this.handleMessage(msg));
+
+    // Auth
+    this.authManager = new AuthManager();
+
+    this.loginOverlay = new LoginOverlay(
+      this.authManager,
+      this.socket,
+      () => this.commandInput.show(),
+      () => this.commandInput.hide(),
+    );
+
+    this.commandInput = new CommandInput(
+      this.authManager,
+      this.socket,
+      (chat) => this.chatOverlay.addMessage(chat),
+      () => this.loginOverlay.showLoggedOut(),
+    );
+
+    // Re-authenticate on reconnect
+    this.socket.onConnect(() => {
+      if (this.authManager.isLoggedIn && this.authManager.token) {
+        this.socket.send({ type: 'auth', token: this.authManager.token });
+      }
+    });
+
     this.socket.connect();
 
     this.fetchConfig();
@@ -59,6 +90,14 @@ export class FactoryScene extends Phaser.Scene {
       case 'agent_remove': this.agentManager.handleAgentRemove(msg.sessionId); break;
       case 'effect': this.agentManager.handleEffect(msg.sessionId, msg.effect, msg.data); break;
       case 'chat_message': this.chatOverlay.addMessage(msg.chat); break;
+      case 'auth_result':
+        if (msg.success && msg.username) {
+          this.authManager.login(this.authManager.token!, msg.username);
+          this.loginOverlay.showLoggedIn(msg.username);
+        } else {
+          this.loginOverlay.showError(msg.error || 'Invalid token');
+        }
+        break;
     }
   }
 

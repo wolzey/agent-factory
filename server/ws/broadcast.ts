@@ -1,11 +1,15 @@
 import type { WebSocket } from '@fastify/websocket';
 import type { WSMessageToClient, AgentSession, EffectType, ChatMessage } from '../../shared/types.js';
 
+interface SocketMeta {
+  username?: string;
+}
+
 export class BroadcastManager {
-  private clients = new Set<WebSocket>();
+  private clients = new Map<WebSocket, SocketMeta>();
 
   add(ws: WebSocket) {
-    this.clients.add(ws);
+    this.clients.set(ws, {});
     ws.on('close', () => this.clients.delete(ws));
     ws.on('error', () => this.clients.delete(ws));
   }
@@ -14,8 +18,23 @@ export class BroadcastManager {
     return this.clients.size;
   }
 
+  authenticateSocket(ws: WebSocket, username: string): void {
+    const meta = this.clients.get(ws);
+    if (meta) meta.username = username;
+  }
+
+  getSocketUsername(ws: WebSocket): string | undefined {
+    return this.clients.get(ws)?.username;
+  }
+
+  sendTo(ws: WebSocket, msg: WSMessageToClient) {
+    if (ws.readyState === 1) {
+      ws.send(JSON.stringify(msg));
+    }
+  }
+
   sendFullState(ws: WebSocket, agents: AgentSession[]) {
-    this.send(ws, { type: 'full_state', agents });
+    this.sendTo(ws, { type: 'full_state', agents });
   }
 
   broadcastAgentUpdate(agent: AgentSession) {
@@ -36,16 +55,10 @@ export class BroadcastManager {
 
   private broadcast(msg: WSMessageToClient) {
     const raw = JSON.stringify(msg);
-    for (const client of this.clients) {
+    for (const [client] of this.clients) {
       if (client.readyState === 1) {
         client.send(raw);
       }
-    }
-  }
-
-  private send(ws: WebSocket, msg: WSMessageToClient) {
-    if (ws.readyState === 1) {
-      ws.send(JSON.stringify(msg));
     }
   }
 }
