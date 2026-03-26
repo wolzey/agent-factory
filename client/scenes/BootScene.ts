@@ -322,6 +322,7 @@ export class BootScene extends Phaser.Scene {
     this.generateSkullSprite();
     this.generateBloodSprites();
     this.generateTombstoneSprite();
+    this.generateFlowerSprite();
     this.generateParticleSprites();
     this.generateIcons();
     this.generateScanlineTexture();
@@ -692,6 +693,34 @@ export class BootScene extends Phaser.Scene {
     ctx.fillRect(14, 16, 2, 1);
     ctx.fillRect(1, 15, 1, 1);
     ctx.fillRect(14, 15, 1, 1);
+
+    canvas.refresh();
+  }
+
+  // ── Flower sprite ───────────────────────────────────────────────
+  private generateFlowerSprite() {
+    const canvas = this.textures.createCanvas('flower', 10, 12)!;
+    const ctx = canvas.getContext();
+
+    // Stem
+    ctx.fillStyle = '#2a7a2a';
+    ctx.fillRect(4, 5, 2, 7);
+
+    // Leaf
+    ctx.fillStyle = '#3a9a3a';
+    ctx.fillRect(6, 7, 2, 1);
+    ctx.fillRect(7, 6, 1, 1);
+
+    // Petals (red/pink)
+    ctx.fillStyle = '#ff4466';
+    ctx.fillRect(3, 1, 4, 3);
+    ctx.fillRect(2, 2, 6, 2);
+    ctx.fillRect(4, 0, 2, 1);
+    ctx.fillRect(4, 4, 2, 1);
+
+    // Center (yellow)
+    ctx.fillStyle = '#ffdd44';
+    ctx.fillRect(4, 2, 2, 1);
 
     canvas.refresh();
   }

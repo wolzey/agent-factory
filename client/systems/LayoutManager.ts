@@ -130,4 +130,28 @@ export class LayoutManager {
   getArcadeSlotFor(sessionId: string): Slot | undefined {
     return this.arcadeSlots.find(s => s.occupant === sessionId);
   }
+
+  /** Reserve a slot with a tombstone marker so no other agent can use it. */
+  reserveForTombstone(sessionId: string) {
+    const tombId = `__tomb__${sessionId}`;
+    // Find the slot the agent was using before death
+    const slot = this.arcadeSlots.find(s => s.occupant === sessionId);
+    if (slot) {
+      slot.occupant = tombId;
+    }
+  }
+
+  /** Release a tombstone reservation, freeing the slot. */
+  releaseTombstone(sessionId: string) {
+    const tombId = `__tomb__${sessionId}`;
+    for (const slot of this.arcadeSlots) {
+      if (slot.occupant === tombId) slot.occupant = null;
+    }
+  }
+
+  /** Check if an agent had a workstation slot (or tombstone holds one). */
+  getTombstoneSlot(sessionId: string): Slot | undefined {
+    const tombId = `__tomb__${sessionId}`;
+    return this.arcadeSlots.find(s => s.occupant === tombId);
+  }
 }
