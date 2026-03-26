@@ -66,7 +66,7 @@ export class StateManager {
         s.currentTool = null;
         s.currentToolInput = null;
 
-        const userPrompt = payload.user_prompt;
+        const userPrompt = (payload.user_prompt ?? payload.prompt) as string | undefined;
         if (userPrompt) {
           const renameMatch = userPrompt.match(/^\/rename\s+(.+)/);
           if (renameMatch) {

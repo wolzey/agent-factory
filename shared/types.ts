@@ -71,6 +71,7 @@ export interface HookPayload {
   source?: string;
   reason?: string;
   user_prompt?: string;
+  prompt?: string;
   transcript_path?: string;
   [key: string]: unknown;
 }
