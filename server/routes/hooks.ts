@@ -3,12 +3,14 @@ import type { HookPayload, ServerConfig, EmoteType, ChatMessage } from '../../sh
 import { VALID_EMOTES, CHAT_MESSAGE_MAX_LENGTH } from '../../shared/constants.js';
 import type { StateManager } from '../state.js';
 import type { BroadcastManager } from '../ws/broadcast.js';
+import type { TokenAuth } from '../auth.js';
 
 export function registerHookRoutes(
   app: FastifyInstance,
   state: StateManager,
   broadcast: BroadcastManager,
   serverConfig: ServerConfig,
+  auth: TokenAuth,
 ) {
   app.post<{ Body: HookPayload }>('/api/hooks', async (request, reply) => {
     const payload = request.body;
@@ -87,6 +89,22 @@ export function registerHookRoutes(
     session.lastEventAt = Date.now();
     state.emitUpdate(session);
     return reply.status(200).send({ ok: true, sessionId: session.sessionId });
+  });
+
+  app.get<{ Querystring: { username?: string } }>('/api/auth/token', async (request, reply) => {
+    const username = request.query.username;
+    if (!username) {
+      return reply.status(400).send({ error: 'Missing username query param' });
+    }
+
+    // Restrict to localhost
+    const ip = request.ip;
+    if (ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1') {
+      return reply.status(403).send({ error: 'Token generation is localhost-only' });
+    }
+
+    const token = auth.generateToken(username);
+    return reply.send({ token });
   });
 
   app.get('/api/config', async (_request, reply) => {

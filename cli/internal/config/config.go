@@ -28,6 +28,7 @@ type UserConfig struct {
 	Username  string       `json:"username"`
 	ServerURL string       `json:"serverUrl"`
 	Avatar    AvatarConfig `json:"avatar"`
+	Token     string       `json:"token,omitempty"`
 }
 
 func ConfigDir() string {

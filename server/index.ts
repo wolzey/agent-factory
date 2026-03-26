@@ -11,8 +11,9 @@ import { BroadcastManager } from './ws/broadcast.js';
 import { registerHookRoutes } from './routes/hooks.js';
 import { startStaleReaper } from './cleanup.js';
 import { SessionRegistryWatcher } from './session-registry.js';
-import { DEFAULT_PORT, DEFAULT_SERVER_CONFIG } from '../shared/constants.js';
-import type { ServerConfig } from '../shared/types.js';
+import { TokenAuth, loadOrCreateSecret } from './auth.js';
+import { DEFAULT_PORT, DEFAULT_SERVER_CONFIG, VALID_EMOTES, CHAT_MESSAGE_MAX_LENGTH } from '../shared/constants.js';
+import type { ServerConfig, EmoteType } from '../shared/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -62,6 +63,10 @@ async function main() {
   // Server config
   const serverConfig = loadServerConfig();
 
+  // Auth
+  const tokenSecret = loadOrCreateSecret();
+  const auth = new TokenAuth(tokenSecret);
+
   // State & broadcast
   const state = new StateManager();
   const broadcast = new BroadcastManager();
@@ -84,7 +89,7 @@ async function main() {
   });
 
   // HTTP routes
-  registerHookRoutes(app, state, broadcast, serverConfig);
+  registerHookRoutes(app, state, broadcast, serverConfig, auth);
 
   // WebSocket endpoint
   app.get('/ws', { websocket: true }, (socket) => {
@@ -95,8 +100,41 @@ async function main() {
     socket.on('message', (raw: string | Buffer) => {
       try {
         const msg = JSON.parse(String(raw));
-        if (msg.type === 'request_state') {
-          broadcast.sendFullState(socket, state.getAll());
+        switch (msg.type) {
+          case 'request_state':
+            broadcast.sendFullState(socket, state.getAll());
+            break;
+
+          case 'auth': {
+            const username = auth.validateToken(msg.token);
+            if (username) {
+              broadcast.authenticateSocket(socket, username);
+              broadcast.sendTo(socket, { type: 'auth_result', success: true, username });
+            } else {
+              broadcast.sendTo(socket, { type: 'auth_result', success: false, error: 'Invalid token' });
+            }
+            break;
+          }
+
+          case 'emote': {
+            const wsUser = broadcast.getSocketUsername(socket);
+            if (!wsUser) break;
+            const session = state.findSessionByUsername(wsUser);
+            if (session && VALID_EMOTES.includes(msg.emote as EmoteType)) {
+              state.emitEmote(session.sessionId, msg.emote);
+            }
+            break;
+          }
+
+          case 'chat': {
+            const chatUser = broadcast.getSocketUsername(socket);
+            if (!chatUser) break;
+            const message = String(msg.message || '').slice(0, CHAT_MESSAGE_MAX_LENGTH);
+            if (message) {
+              broadcast.broadcastChatMessage({ username: chatUser, message, timestamp: Date.now() });
+            }
+            break;
+          }
         }
       } catch {
         // Ignore malformed messages

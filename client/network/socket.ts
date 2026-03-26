@@ -6,6 +6,7 @@ export class SocketClient {
   private ws: WebSocket | null = null;
   private url: string;
   private handlers: MessageHandler[] = [];
+  private connectHandlers: (() => void)[] = [];
   private reconnectDelay = 1000;
   private maxReconnectDelay = 30000;
   private intentionalClose = false;
@@ -30,6 +31,10 @@ export class SocketClient {
     this.handlers.push(handler);
   }
 
+  onConnect(handler: () => void) {
+    this.connectHandlers.push(handler);
+  }
+
   send(data: unknown) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(data));
@@ -48,6 +53,7 @@ export class SocketClient {
         console.log('[socket] Connected to Agent Factory server');
         this.reconnectDelay = 1000;
         this.updateHud(true);
+        for (const handler of this.connectHandlers) handler();
       };
 
       this.ws.onmessage = (event) => {

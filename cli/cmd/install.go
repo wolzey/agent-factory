@@ -154,6 +154,18 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		ui.Success(fmt.Sprintf("Registered %d hooks", registered))
 	}
 
+	// Fetch auth token from server
+	token, tokenErr := fetchToken(cfg.ServerURL, cfg.Username)
+	if tokenErr == nil {
+		cfg.Token = token
+		if writeErr := config.Write(cfg); writeErr == nil {
+			ui.Success("Auth token generated")
+		}
+	} else {
+		ui.Warn("Could not fetch auth token (server may not be running)")
+		ui.Info("Run 'agent-factory token' later to generate your token")
+	}
+
 	// Success message
 	fmt.Println()
 	fmt.Printf("  %s\n", ui.SuccessStyle.Render(ui.BoldStyle.Render("Installation complete!")))

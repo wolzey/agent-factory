@@ -89,12 +89,16 @@ export type WSMessageToClient =
   | { type: 'agent_update'; agent: AgentSession }
   | { type: 'agent_remove'; sessionId: string }
   | { type: 'effect'; sessionId: string; effect: EffectType; data?: Record<string, unknown> }
-  | { type: 'chat_message'; chat: ChatMessage };
+  | { type: 'chat_message'; chat: ChatMessage }
+  | { type: 'auth_result'; success: boolean; username?: string; error?: string };
 
 // === WebSocket Messages: Browser -> Server ===
 export type WSMessageToServer =
   | { type: 'identify'; username: string; avatar: AvatarConfig }
-  | { type: 'request_state' };
+  | { type: 'request_state' }
+  | { type: 'auth'; token: string }
+  | { type: 'emote'; emote: string }
+  | { type: 'chat'; message: string };
 
 // === Emote Types ===
 export type EmoteType = 'dance' | 'jump' | 'guitar' | 'gun' | 'laugh' | 'wave' | 'sleep' | 'explode' | 'dizzy' | 'flex' | 'rage' | 'fart';
