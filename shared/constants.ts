@@ -100,6 +100,7 @@ export function toolToActivity(toolName: string): import('./types.js').AgentActi
   const searchTools = ['WebSearch', 'WebFetch'];
   const agentTools = ['Agent'];
   const planTools = ['EnterPlanMode'];
+  const waitingTools = ['AskUserQuestion'];
 
   if (readTools.includes(toolName)) return 'reading';
   if (writeTools.includes(toolName)) return 'writing';
@@ -107,6 +108,7 @@ export function toolToActivity(toolName: string): import('./types.js').AgentActi
   if (searchTools.includes(toolName)) return 'searching';
   if (agentTools.includes(toolName)) return 'chatting';
   if (planTools.includes(toolName)) return 'planning';
+  if (waitingTools.includes(toolName)) return 'waiting';
   if (toolName.startsWith('mcp__')) return 'running';
   return 'thinking';
 }
