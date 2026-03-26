@@ -124,6 +124,11 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		} else if registered > 0 {
 			ui.Success(fmt.Sprintf("Registered %d new hook event(s)", registered))
 		}
+
+		// Update skill files
+		if err := hooks.WriteSkills(); err != nil {
+			ui.Warn("Could not update skills: " + err.Error())
+		}
 	}
 
 	fmt.Println()

@@ -10,6 +10,7 @@ import { StateManager } from './state.js';
 import { BroadcastManager } from './ws/broadcast.js';
 import { registerHookRoutes } from './routes/hooks.js';
 import { startStaleReaper } from './cleanup.js';
+import { SessionRegistryWatcher } from './session-registry.js';
 import { DEFAULT_PORT, DEFAULT_SERVER_CONFIG } from '../shared/constants.js';
 import type { ServerConfig } from '../shared/types.js';
 
@@ -102,6 +103,13 @@ async function main() {
       }
     });
   });
+
+  // Watch Claude session registry for name changes
+  const registry = new SessionRegistryWatcher((sessionId, name) => {
+    state.updateSessionName(sessionId, name);
+  });
+  registry.start();
+  state.setSessionNameLookup((id) => registry.getSessionName(id));
 
   // Start stale session reaper
   startStaleReaper(state);

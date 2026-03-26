@@ -48,6 +48,21 @@
       color: var(--accent-color);
       margin-top: 2px;
     }
+    #tooltip .tooltip-task {
+      color: #66ff99;
+      margin-top: 4px;
+      font-size: 11px;
+    }
+    #tooltip .tooltip-prompt {
+      color: #888;
+      margin-top: 2px;
+      font-style: italic;
+      font-size: 10px;
+      max-width: 280px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
     /* HUD */
     #hud {
@@ -126,6 +141,8 @@
     <div class="tooltip-name"></div>
     <div class="tooltip-detail"></div>
     <div class="tooltip-tool"></div>
+    <div class="tooltip-task"></div>
+    <div class="tooltip-prompt"></div>
   </div>
   <div id="hud">
     <div class="hud-title">AGENT FACTORY</div>

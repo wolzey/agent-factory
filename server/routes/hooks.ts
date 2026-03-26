@@ -67,6 +67,28 @@ export function registerHookRoutes(
     return reply.status(200).send({ ok: true });
   });
 
+  app.post<{ Body: { username?: string; session_id?: string; summary: string } }>('/api/context', async (request, reply) => {
+    const { username, session_id, summary } = request.body || {};
+
+    if (!summary) {
+      return reply.status(400).send({ error: 'Missing summary' });
+    }
+
+    let session = session_id ? state.get(session_id) : undefined;
+    if (!session && username) {
+      session = state.findSessionByUsername(username);
+    }
+
+    if (!session) {
+      return reply.status(404).send({ error: 'No active session found' });
+    }
+
+    session.taskDescription = summary.slice(0, 200);
+    session.lastEventAt = Date.now();
+    state.emitUpdate(session);
+    return reply.status(200).send({ ok: true, sessionId: session.sessionId });
+  });
+
   app.get('/api/config', async (_request, reply) => {
     return reply.send(serverConfig);
   });

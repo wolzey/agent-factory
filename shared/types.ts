@@ -53,6 +53,8 @@ export interface AgentSession {
   subagents: SubagentInfo[];
   startedAt: number;
   lastEventAt: number;
+  lastPrompt?: string;
+  taskDescription?: string;
 }
 
 // === Hook Payload (from Claude Code hooks via HTTP POST) ===
@@ -68,6 +70,8 @@ export interface HookPayload {
   agent_type?: string;
   source?: string;
   reason?: string;
+  user_prompt?: string;
+  transcript_path?: string;
   [key: string]: unknown;
 }
 

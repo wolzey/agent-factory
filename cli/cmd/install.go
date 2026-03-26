@@ -127,6 +127,13 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	}
 	ui.Success("Hook script installed")
 
+	// Write skill files (e.g. /update-status)
+	if err := hooks.WriteSkills(); err != nil {
+		ui.Warn("Could not install skills: " + err.Error())
+	} else {
+		ui.Success("Skill /update-status installed to ~/.claude/commands/")
+	}
+
 	// Backup settings
 	if err := hooks.BackupSettings(); err != nil {
 		ui.Warn("Could not backup settings: " + err.Error())

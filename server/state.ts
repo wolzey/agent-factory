@@ -14,6 +14,11 @@ export type StateChangeCallback = (
 export class StateManager {
   private sessions = new Map<string, AgentSession>();
   private onChange: StateChangeCallback | null = null;
+  private sessionNameLookup: ((id: string) => string | undefined) | null = null;
+
+  setSessionNameLookup(fn: (id: string) => string | undefined) {
+    this.sessionNameLookup = fn;
+  }
 
   onStateChange(cb: StateChangeCallback) {
     this.onChange = cb;
@@ -60,6 +65,20 @@ export class StateManager {
         s.activity = 'thinking';
         s.currentTool = null;
         s.currentToolInput = null;
+
+        const userPrompt = payload.user_prompt;
+        if (userPrompt) {
+          const renameMatch = userPrompt.match(/^\/rename\s+(.+)/);
+          if (renameMatch) {
+            s.sessionName = renameMatch[1].trim();
+          } else if (!userPrompt.startsWith('/')) {
+            s.lastPrompt = userPrompt.slice(0, 200);
+            if (!s.taskDescription && userPrompt.length > 10) {
+              s.taskDescription = userPrompt.slice(0, 200);
+            }
+          }
+        }
+
         this.touchAndEmit(payload, 'prompt_received');
         break;
       }
@@ -163,6 +182,19 @@ export class StateManager {
     return best;
   }
 
+  updateSessionName(sessionId: string, name: string): void {
+    const session = this.sessions.get(sessionId);
+    if (session && session.sessionName !== name) {
+      session.sessionName = name;
+      session.lastEventAt = Date.now();
+      this.emit('update', { agent: session });
+    }
+  }
+
+  emitUpdate(session: AgentSession): void {
+    this.emit('update', { agent: session });
+  }
+
   emitEmote(sessionId: string, emote: string): void {
     this.emit('effect', {
       sessionId,
@@ -211,6 +243,10 @@ export class StateManager {
         startedAt: now,
         lastEventAt: now,
       };
+      // Seed session name from Claude's session registry
+      const registryName = this.sessionNameLookup?.(payload.session_id);
+      if (registryName) session.sessionName = registryName;
+
       this.sessions.set(payload.session_id, session);
       this.emit('update', { agent: session });
       this.emit('effect', {

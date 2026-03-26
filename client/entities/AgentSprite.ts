@@ -2290,6 +2290,11 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   private computeLabel(session: AgentSession): string {
+    if (session.sessionName) {
+      return session.sessionName.length > 16
+        ? session.sessionName.slice(0, 14) + '..'
+        : session.sessionName;
+    }
     return session.username;
   }
 
@@ -2317,6 +2322,27 @@ export class AgentSprite extends Phaser.GameObjects.Container {
       toolEl.style.display = 'block';
     } else {
       toolEl.style.display = 'none';
+    }
+
+    const taskEl = tooltip.querySelector('.tooltip-task') as HTMLElement;
+    const promptEl = tooltip.querySelector('.tooltip-prompt') as HTMLElement;
+
+    if (taskEl) {
+      if (this.sessionData.taskDescription) {
+        taskEl.textContent = `Task: ${this.sessionData.taskDescription}`;
+        taskEl.style.display = 'block';
+      } else {
+        taskEl.style.display = 'none';
+      }
+    }
+
+    if (promptEl) {
+      if (this.sessionData.lastPrompt && this.sessionData.lastPrompt !== this.sessionData.taskDescription) {
+        promptEl.textContent = `> ${this.sessionData.lastPrompt}`;
+        promptEl.style.display = 'block';
+      } else {
+        promptEl.style.display = 'none';
+      }
     }
 
     tooltip.style.display = 'block';
