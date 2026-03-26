@@ -73,9 +73,6 @@ export class StateManager {
             s.sessionName = renameMatch[1].trim();
           } else if (!userPrompt.startsWith('/')) {
             s.lastPrompt = userPrompt.slice(0, 200);
-            if (!s.taskDescription && userPrompt.length > 10) {
-              s.taskDescription = userPrompt.slice(0, 200);
-            }
           }
         }
 
@@ -186,6 +183,10 @@ export class StateManager {
     const session = this.sessions.get(sessionId);
     if (session && session.sessionName !== name) {
       session.sessionName = name;
+      // Use registry name as task description if none was explicitly set
+      if (!session.taskDescription) {
+        session.taskDescription = name.replace(/-/g, ' ');
+      }
       session.lastEventAt = Date.now();
       this.emit('update', { agent: session });
     }
@@ -245,7 +246,12 @@ export class StateManager {
       };
       // Seed session name from Claude's session registry
       const registryName = this.sessionNameLookup?.(payload.session_id);
-      if (registryName) session.sessionName = registryName;
+      if (registryName) {
+        session.sessionName = registryName;
+        if (!session.taskDescription) {
+          session.taskDescription = registryName.replace(/-/g, ' ');
+        }
+      }
 
       this.sessions.set(payload.session_id, session);
       this.emit('update', { agent: session });

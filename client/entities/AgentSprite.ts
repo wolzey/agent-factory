@@ -2337,12 +2337,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     }
 
     if (promptEl) {
-      if (this.sessionData.lastPrompt && this.sessionData.lastPrompt !== this.sessionData.taskDescription) {
-        promptEl.textContent = `> ${this.sessionData.lastPrompt}`;
-        promptEl.style.display = 'block';
-      } else {
-        promptEl.style.display = 'none';
-      }
+      promptEl.style.display = 'none';
     }
 
     tooltip.style.display = 'block';
