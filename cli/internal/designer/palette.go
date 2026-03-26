@@ -76,6 +76,53 @@ var ShoeColors = []ColorOption{
 	{"White", "#ffffff"},
 }
 
+var FacialHairStyles = []StyleOption{
+	{"None", 0},
+	{"Stubble", 1},
+	{"Mustache", 2},
+	{"Full Beard", 3},
+	{"Goatee", 4},
+	{"Soul Patch", 5},
+}
+
+var MouthStyles = []StyleOption{
+	{"Default", 0},
+	{"Smile", 1},
+	{"Frown", 2},
+	{"Open", 3},
+	{"Teeth Grin", 4},
+	{"Tongue Out", 5},
+}
+
+var FaceAccessories = []StyleOption{
+	{"None", 0},
+	{"Round Glasses", 1},
+	{"Sunglasses", 2},
+	{"Monocle", 3},
+	{"Eye Patch", 4},
+	{"Visor", 5},
+}
+
+var HeadAccessories = []StyleOption{
+	{"None", 0},
+	{"Crown", 1},
+	{"Top Hat", 2},
+	{"Halo", 3},
+	{"Devil Horns", 4},
+	{"Antenna", 5},
+	{"Flower", 6},
+}
+
+var ShirtDesigns = []StyleOption{
+	{"Solid", 0},
+	{"H-Stripe", 1},
+	{"V-Stripe", 2},
+	{"Heart", 3},
+	{"Star", 4},
+	{"Number 1", 5},
+	{"Skull", 6},
+}
+
 // AllFields returns the ordered list of customization fields.
 func AllFields() []Field {
 	return []Field{
@@ -94,9 +141,29 @@ func AllFields() []Field {
 			Colors:  colorHexes(SkinTones),
 		},
 		{
+			Label:   "Facial Hair",
+			Options: styleNames(FacialHairStyles),
+		},
+		{
+			Label:   "Mouth",
+			Options: styleNames(MouthStyles),
+		},
+		{
+			Label:   "Face Acc.",
+			Options: styleNames(FaceAccessories),
+		},
+		{
+			Label:   "Head Acc.",
+			Options: styleNames(HeadAccessories),
+		},
+		{
 			Label:   "Shirt Color",
 			Options: colorNames(ShirtColors),
 			Colors:  colorHexes(ShirtColors),
+		},
+		{
+			Label:   "Shirt Design",
+			Options: styleNames(ShirtDesigns),
 		},
 		{
 			Label:   "Pants Color",

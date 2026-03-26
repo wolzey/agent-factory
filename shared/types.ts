@@ -24,6 +24,11 @@ export interface AvatarConfig {
   shirtColor?: string;      // hex color
   pantsColor?: string;      // hex color
   shoeColor?: string;       // hex color
+  facialHair?: number;      // 0-5 index (0=none)
+  mouthStyle?: number;      // 0-5 index (0=default)
+  faceAccessory?: number;   // 0-5 index (0=none)
+  headAccessory?: number;   // 0-6 index (0=none)
+  shirtDesign?: number;     // 0-6 index (0=solid)
 }
 
 // === Subagent Info ===
@@ -78,7 +83,7 @@ export type WSMessageToServer =
   | { type: 'request_state' };
 
 // === Emote Types ===
-export type EmoteType = 'dance' | 'jump' | 'guitar' | 'gun' | 'laugh';
+export type EmoteType = 'dance' | 'jump' | 'guitar' | 'gun' | 'laugh' | 'wave' | 'sleep' | 'explode' | 'dizzy' | 'flex' | 'rage';
 
 // === Effect Types ===
 export type EffectType =
