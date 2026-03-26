@@ -11,8 +11,9 @@ A 2D pixel art visualization of Claude Code agent sessions. Watch your team's ag
 - Working agents stand at arcade cabinets with neon glow effects
 - Idle agents hang out in the lounge area
 - Subagents orbit their parent with a purple tint
-- Hover over any avatar to see session details (username, project, current tool)
+- Hover over any avatar to see session details (username, project, current tool, task description)
 - Team members connect to a shared server to see everyone's agents at once
+- Log in from the browser to send emotes and chat via a terminal-style command prompt
 
 ## Quick Install (Team Members)
 
@@ -116,6 +117,46 @@ Claude Code Hooks  ──curl POST──>  Fastify Server  ──WebSocket──
 | Agent | Chatting (chat icon) |
 | EnterPlanMode | Planning (brain icon) |
 
+## Browser Commands
+
+You can send emotes and chat directly from the browser. First, get your auth token:
+
+```bash
+agent-factory token
+```
+
+This prints a token like `d29semV5.a1b2c3d4...`. Copy it, then:
+
+1. Open the Agent Factory page in your browser
+2. Click **Login** (top-left corner)
+3. Paste your token and click **Login**
+
+Once logged in, a terminal-style command bar appears at the bottom. Available commands:
+
+| Command | Description |
+|---------|-------------|
+| `/emote <name>` | Trigger an emote (dance, jump, guitar, gun, laugh, wave, sleep, explode, dizzy, flex, rage, fart) |
+| `/chat <message>` | Send a chat message visible to all viewers |
+| `/help` | Show available commands |
+| `/logout` | Log out of the browser session |
+| bare text | Sent as a chat message (no `/` prefix needed) |
+
+Your login persists across page refreshes via localStorage and automatically re-authenticates on reconnect.
+
+> **Note:** The `agent-factory token` command must be run on the machine running the server (tokens are generated via a localhost-only endpoint). Share tokens with team members who need browser access.
+
+## CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `agent-factory install` | Interactive setup wizard (hooks, config, avatar) |
+| `agent-factory uninstall` | Remove hooks and config |
+| `agent-factory update` | Update CLI to latest release |
+| `agent-factory token` | Display your auth token for browser login |
+| `agent-factory emote <name>` | Trigger an emote on your agent |
+| `agent-factory chat <message>` | Send a chat message |
+| `agent-factory avatar` | Customize your avatar |
+
 ## Configuration
 
 Your config lives at `~/.config/agent-factory/config.json`:
@@ -124,6 +165,7 @@ Your config lives at `~/.config/agent-factory/config.json`:
 {
   "username": "ethan",
   "serverUrl": "http://localhost:4242",
+  "token": "ZXRoYW4.a1b2c3d4e5f6...",
   "avatar": {
     "spriteIndex": 0,
     "color": "#4a90d9",
@@ -137,6 +179,7 @@ Your config lives at `~/.config/agent-factory/config.json`:
 |-------|-------------|
 | `username` | Display name shown on your avatar's nametag |
 | `serverUrl` | Agent Factory server URL (localhost or shared) |
+| `token` | Auth token for browser login (auto-generated) |
 | `avatar.spriteIndex` | Character style (0-7) |
 | `avatar.color` | Hex color for your avatar tint |
 | `avatar.hat` | Hat accessory (future feature) |
@@ -157,17 +200,20 @@ agent-factory/
 ├── server/           # Fastify HTTP + WebSocket server
 │   ├── index.ts      # Entrypoint (port 4242)
 │   ├── state.ts      # In-memory session state machine
-│   ├── routes/       # POST /api/hooks, GET /api/health
-│   ├── ws/           # WebSocket broadcast manager
+│   ├── auth.ts       # HMAC-SHA256 token auth
+│   ├── routes/       # POST /api/hooks, GET /api/health, GET /api/auth/token
+│   ├── ws/           # WebSocket broadcast manager (per-socket auth)
 │   └── cleanup.ts    # Stale session reaper (5 min timeout)
 ├── client/           # Phaser 3 browser app
 │   ├── scenes/       # BootScene, FactoryScene, UIScene
 │   ├── entities/     # AgentSprite, SubagentSprite, Machine
 │   ├── systems/      # AgentManager, LayoutManager
+│   ├── auth/         # AuthManager (localStorage token persistence)
+│   ├── ui/           # ChatOverlay, LoginOverlay, CommandInput
 │   └── network/      # WebSocket client with auto-reconnect
 ├── shared/           # Types and constants shared between server/client
-├── cli/              # Go CLI binary (install/uninstall wizard)
-│   ├── cmd/          # Cobra commands (install, uninstall)
+├── cli/              # Go CLI binary
+│   ├── cmd/          # Cobra commands (install, uninstall, token, emote, chat, avatar, update)
 │   ├── internal/     # Config, hooks, wizard, UI helpers
 │   └── main.go       # Entry point
 ├── hooks/            # Claude Code hook scripts (legacy)
@@ -176,25 +222,24 @@ agent-factory/
 
 ## API
 
-### `POST /api/hooks`
+### REST Endpoints
 
-Receives hook events from Claude Code. Body is the hook JSON enriched with `username` and `avatar`.
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/hooks` | Receives hook events from Claude Code |
+| `POST /api/emote` | Trigger an emote (`{ username, emote }`) |
+| `POST /api/chat` | Send a chat message (`{ username, message }`) |
+| `POST /api/context` | Update agent task description (`{ username, summary }`) |
+| `GET /api/auth/token?username=X` | Generate auth token (localhost-only) |
+| `GET /api/health` | Server status (`{ status, agents, clients, uptime }`) |
+| `GET /api/state` | All active agent sessions |
+| `GET /api/config` | Server config (title, environment, graphicDeath) |
 
-### `GET /api/health`
+### WebSocket (`ws://host:4242/ws`)
 
-Returns server status:
+**Server -> Client:** `full_state`, `agent_update`, `agent_remove`, `effect`, `chat_message`, `auth_result`
 
-```json
-{ "status": "ok", "agents": 3, "clients": 2, "uptime": 3600 }
-```
-
-### `GET /api/state`
-
-Returns all active agent sessions.
-
-### `ws://host:4242/ws`
-
-WebSocket endpoint for browser clients. Sends `full_state`, `agent_update`, `agent_remove`, and `effect` messages.
+**Client -> Server:** `request_state`, `auth` (token login), `emote`, `chat`
 
 ## License
 
