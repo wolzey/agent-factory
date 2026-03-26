@@ -17,6 +17,23 @@ var hookEvents = []string{
 	"SubagentStart",
 	"SubagentStop",
 	"Stop",
+	"PermissionRequest",
+	"UserPromptSubmit",
+	"PostToolUseFailure",
+	"StopFailure",
+	"Notification",
+	"TaskCompleted",
+	"InstructionsLoaded",
+	"ConfigChange",
+	"CwdChanged",
+	"FileChanged",
+	"WorktreeCreate",
+	"WorktreeRemove",
+	"PreCompact",
+	"PostCompact",
+	"TeammateIdle",
+	"Elicitation",
+	"ElicitationResult",
 }
 
 func SettingsPath() string {

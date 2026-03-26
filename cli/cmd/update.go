@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/wolzey/agent-factory/cli/internal/hooks"
 	"github.com/wolzey/agent-factory/cli/internal/ui"
 )
 
@@ -113,6 +114,18 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 
 	fmt.Println()
 	ui.Success(fmt.Sprintf("Updated to %s!", release.TagName))
+
+	// Re-register hooks to pick up any new event types added in this version
+	if hooks.IsInstalled() {
+		registered, _, err := hooks.RegisterHooks(hooks.HookScriptPath())
+		if err != nil {
+			ui.Warn("Could not update hooks: " + err.Error())
+			ui.Info("Run 'agent-factory install' to fix hooks manually.")
+		} else if registered > 0 {
+			ui.Success(fmt.Sprintf("Registered %d new hook event(s)", registered))
+		}
+	}
+
 	fmt.Println()
 	return nil
 }

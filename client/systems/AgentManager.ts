@@ -97,6 +97,41 @@ export class AgentManager {
       case 'error':
         this.emitSparks(agent.x, agent.y, 0xff0000, 8);
         break;
+      case 'prompt_received':
+        this.emitSparks(agent.x, agent.y, 0x00ffff, 10);
+        break;
+      case 'task_completed':
+        this.emitSparks(agent.x, agent.y, 0x00ff66, 15);
+        agent.showFloatingLabel('DONE!', '#00ff66');
+        break;
+      case 'notification':
+        this.emitSparks(agent.x, agent.y, 0xffdd00, 6);
+        if (data?.message) agent.showFloatingLabel(String(data.message).slice(0, 20), '#ffdd00');
+        break;
+      case 'info_flash': {
+        const colorMap: Record<string, number> = {
+          instructions: 0x8888ff, config: 0xffaa44,
+          cwd: 0x44ffaa, file_changed: 0xaaaaaa,
+        };
+        const countMap: Record<string, number> = {
+          instructions: 4, config: 3, cwd: 4, file_changed: 3,
+        };
+        const t = String(data?.type || 'default');
+        this.emitSparks(agent.x, agent.y, colorMap[t] || 0xaaaaaa, countMap[t] || 3);
+        break;
+      }
+      case 'compact':
+        this.emitSparks(agent.x, agent.y, data?.phase === 'post' ? 0xaa44ff : 0xcc66ff, data?.phase === 'post' ? 6 : 8);
+        break;
+      case 'worktree_create':
+        this.emitSparks(agent.x, agent.y, 0x00ccff, 10);
+        break;
+      case 'worktree_remove':
+        this.emitSparks(agent.x, agent.y, 0xff8844, 6);
+        break;
+      case 'elicitation':
+        this.emitSparks(agent.x, agent.y, 0xffaa00, 6);
+        break;
       case 'emote':
         if (data?.emote) {
           agent.playEmote(data.emote as string);
@@ -196,7 +231,7 @@ export class AgentManager {
     //   idle (session started, no activity yet) -> lounge
     //   stopped -> die in place (slot kept for tombstone, removeAgent handles release)
 
-    const workingStates = ['reading', 'writing', 'running', 'searching', 'chatting', 'planning'];
+    const workingStates = ['reading', 'writing', 'running', 'searching', 'chatting', 'planning', 'compacting'];
     const isWorking = workingStates.includes(session.activity);
     const isThinking = session.activity === 'thinking';
 

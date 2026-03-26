@@ -749,7 +749,7 @@ export class BootScene extends Phaser.Scene {
   // ── Tool icons ────────────────────────────────────────────────────
   private generateIcons() {
     const s = 8;
-    const icons = ['terminal', 'pencil', 'magnifier', 'globe', 'chat', 'brain'];
+    const icons = ['terminal', 'pencil', 'magnifier', 'globe', 'chat', 'brain', 'compress'];
     const canvas = this.textures.createCanvas('icons', s * icons.length, s)!;
     const ctx = canvas.getContext();
 
@@ -796,6 +796,14 @@ export class BootScene extends Phaser.Scene {
     ctx.fillStyle = '#cc4400';
     ctx.fillRect(s * 5 + 3, 1, 1, 4);
     ctx.fillRect(s * 5 + 1, 3, 5, 1);
+
+    // Compress (converging arrows)
+    ctx.fillStyle = '#cc66ff';
+    ctx.fillRect(s * 6 + 1, 2, 2, 1);
+    ctx.fillRect(s * 6 + 5, 2, 2, 1);
+    ctx.fillRect(s * 6 + 2, 1, 1, 3);
+    ctx.fillRect(s * 6 + 5, 1, 1, 3);
+    ctx.fillRect(s * 6 + 3, 0, 2, 7);
 
     canvas.refresh();
 

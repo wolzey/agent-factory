@@ -55,6 +55,92 @@ export class StateManager {
       case 'Stop':
         this.handleStop(payload);
         break;
+      case 'UserPromptSubmit': {
+        const s = this.ensureSession(payload);
+        s.activity = 'thinking';
+        s.currentTool = null;
+        s.currentToolInput = null;
+        this.touchAndEmit(payload, 'prompt_received');
+        break;
+      }
+      case 'PostToolUseFailure': {
+        const s = this.ensureSession(payload);
+        s.activity = 'thinking';
+        s.currentTool = null;
+        s.currentToolInput = null;
+        this.touchAndEmit(payload, 'error', { tool: payload.tool_name, reason: payload.reason });
+        break;
+      }
+      case 'StopFailure': {
+        const s = this.ensureSession(payload);
+        s.activity = 'idle';
+        s.currentTool = null;
+        s.currentToolInput = null;
+        this.touchAndEmit(payload, 'error', { reason: payload.reason || 'API error' });
+        break;
+      }
+      case 'Notification':
+        this.touchAndEmit(payload, 'notification', { message: (payload as Record<string, unknown>).message });
+        break;
+      case 'TaskCompleted':
+        this.touchAndEmit(payload, 'task_completed');
+        break;
+      case 'InstructionsLoaded':
+        this.touchAndEmit(payload, 'info_flash', { type: 'instructions' });
+        break;
+      case 'ConfigChange':
+        this.touchAndEmit(payload, 'info_flash', { type: 'config' });
+        break;
+      case 'CwdChanged': {
+        const s = this.ensureSession(payload);
+        s.cwd = payload.cwd;
+        this.touchAndEmit(payload, 'info_flash', { type: 'cwd', cwd: payload.cwd });
+        break;
+      }
+      case 'FileChanged':
+        this.touchAndEmit(payload, 'info_flash', { type: 'file_changed' });
+        break;
+      case 'WorktreeCreate': {
+        const s = this.ensureSession(payload);
+        s.sessionName = (payload.tool_input?.name as string) || (payload as Record<string, unknown>).name as string || 'worktree';
+        this.touchAndEmit(payload, 'worktree_create');
+        break;
+      }
+      case 'WorktreeRemove': {
+        const s = this.ensureSession(payload);
+        s.sessionName = undefined;
+        this.touchAndEmit(payload, 'worktree_remove');
+        break;
+      }
+      case 'PreCompact': {
+        const s = this.ensureSession(payload);
+        s.activity = 'compacting';
+        this.touchAndEmit(payload, 'compact', { phase: 'pre' });
+        break;
+      }
+      case 'PostCompact': {
+        const s = this.ensureSession(payload);
+        s.activity = 'thinking';
+        this.touchAndEmit(payload, 'compact', { phase: 'post' });
+        break;
+      }
+      case 'TeammateIdle':
+        this.touchAndEmit(payload, 'notification', { message: 'teammate idle', type: 'teammate_idle' });
+        break;
+      case 'Elicitation': {
+        const s = this.ensureSession(payload);
+        s.activity = 'waiting';
+        s.currentTool = null;
+        s.currentToolInput = null;
+        this.touchAndEmit(payload, 'elicitation', { type: 'mcp_input' });
+        break;
+      }
+      case 'ElicitationResult': {
+        const s = this.ensureSession(payload);
+        s.activity = 'thinking';
+        this.touchAndEmit(payload, 'prompt_received');
+        break;
+      }
       default:
         // Unknown event - update lastEventAt if session exists
         if (this.sessions.has(session_id)) {
@@ -247,6 +333,7 @@ export class StateManager {
     session.currentToolInput = null;
     session.lastEventAt = Date.now();
     this.emit('update', { agent: session });
+    this.emit('effect', { sessionId: payload.session_id, effect: 'elicitation', effectData: { type: 'permission' } });
   }
 
   private handleStop(payload: HookPayload): void {
@@ -284,6 +371,14 @@ export class StateManager {
     if (payload.avatar) session.avatar = payload.avatar;
     if (payload.cwd) session.cwd = payload.cwd;
     return session;
+  }
+
+  /** Update lastEventAt, broadcast state + effect in one call. */
+  private touchAndEmit(payload: HookPayload, effect: EffectType, data?: Record<string, unknown>): void {
+    const session = this.ensureSession(payload);
+    session.lastEventAt = Date.now();
+    this.emit('update', { agent: session });
+    this.emit('effect', { sessionId: payload.session_id, effect, effectData: data });
   }
 
   private emit(

@@ -10,6 +10,8 @@ const ACTIVITY_ICONS: Record<string, string> = {
   searching: 'globe',
   chatting: 'chat',
   thinking: 'brain',
+  planning: 'brain',
+  compacting: 'compress',
 };
 
 const ICON_FRAME_MAP: Record<string, number> = {
@@ -19,6 +21,7 @@ const ICON_FRAME_MAP: Record<string, number> = {
   globe: 4,
   chat: 5,
   brain: 6,
+  compress: 7,
 };
 
 export class AgentSprite extends Phaser.GameObjects.Container {
@@ -643,6 +646,24 @@ export class AgentSprite extends Phaser.GameObjects.Container {
       fontFamily: 'monospace',
       fontSize: '14px',
       color: '#ffffff',
+    }).setOrigin(0.5);
+    this.add(label);
+
+    this.scene.tweens.add({
+      targets: label,
+      y: label.y - 18,
+      alpha: 0,
+      duration,
+      ease: 'Power2',
+      onComplete: () => label.destroy(),
+    });
+  }
+
+  showFloatingLabel(text: string, color: string, duration = 1500) {
+    const label = this.scene.add.text(0, -38, text, {
+      fontFamily: 'monospace',
+      fontSize: '10px',
+      color,
     }).setOrigin(0.5);
     this.add(label);
 

@@ -9,6 +9,7 @@ export type AgentActivity =
   | 'searching'
   | 'chatting'
   | 'planning'
+  | 'compacting'
   | 'stopped';
 
 // === Avatar Configuration ===
@@ -102,7 +103,15 @@ export type EffectType =
   | 'subagent_despawn'
   | 'session_start'
   | 'session_end'
-  | 'emote';
+  | 'emote'
+  | 'prompt_received'
+  | 'task_completed'
+  | 'notification'
+  | 'info_flash'
+  | 'compact'
+  | 'worktree_create'
+  | 'worktree_remove'
+  | 'elicitation';
 
 // === User Config File Format ===
 export interface UserConfig {
