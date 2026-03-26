@@ -184,6 +184,7 @@ export class StateManager {
       if (typeof name === 'string') session.sessionName = name;
     } else if (toolName === 'ExitPlanMode') {
       session.sessionName = undefined;
+      session.activity = 'waiting';
     }
 
     this.emit('update', { agent: session });
@@ -238,7 +239,10 @@ export class StateManager {
 
   private handleStop(payload: HookPayload): void {
     const session = this.ensureSession(payload);
-    session.activity = 'idle';
+    // Preserve 'waiting' — agent is at the help desk waiting for user input
+    if (session.activity !== 'waiting') {
+      session.activity = 'idle';
+    }
     session.currentTool = null;
     session.currentToolInput = null;
     session.lastEventAt = Date.now();

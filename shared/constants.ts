@@ -100,7 +100,7 @@ export function toolToActivity(toolName: string): import('./types.js').AgentActi
   const searchTools = ['WebSearch', 'WebFetch'];
   const agentTools = ['Agent'];
   const planTools = ['EnterPlanMode'];
-  const waitingTools = ['AskUserQuestion'];
+  const waitingTools = ['AskUserQuestion', 'ExitPlanMode'];
 
   if (readTools.includes(toolName)) return 'reading';
   if (writeTools.includes(toolName)) return 'writing';
