@@ -558,6 +558,85 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.sprite.setScale(2);
   }
 
+  playGunDeath() {
+    if (this.isEmoting) return;
+    this.isEmoting = true;
+
+    const origGlowColor = this.neonGlow.fillColor;
+    const origGlowAlpha = this.neonGlow.fillAlpha;
+    const origSpriteY = this.sprite.y;
+
+    // Phase 1: Fall over
+    this.scene.tweens.add({
+      targets: this.nametag,
+      alpha: 0,
+      duration: 300,
+    });
+    this.statusIcon?.setVisible(false);
+
+    this.scene.tweens.add({
+      targets: this.sprite,
+      angle: 90,
+      y: origSpriteY + 8,
+      duration: 500,
+      ease: 'Bounce.easeOut',
+    });
+
+    // Phase 2: Skull appears
+    this.scene.time.delayedCall(500, () => {
+      if (!this.scene) return;
+
+      const skull = this.scene.add.image(12, -20, 'skull');
+      skull.setScale(1.5).setAlpha(0);
+      this.add(skull);
+
+      this.scene.tweens.add({
+        targets: skull,
+        alpha: 1,
+        duration: 300,
+        ease: 'Power2',
+      });
+
+      this.neonGlow.setFillStyle(0xff0000, 0.3);
+
+      // Phase 3: Recovery
+      this.scene.time.delayedCall(1300, () => {
+        if (!this.scene) return;
+
+        // Skull fades out
+        this.scene.tweens.add({
+          targets: skull,
+          alpha: 0,
+          duration: 300,
+          onComplete: () => skull.destroy(),
+        });
+
+        // Sprite gets back up
+        this.scene.tweens.add({
+          targets: this.sprite,
+          angle: 0,
+          y: origSpriteY,
+          duration: 400,
+          ease: 'Back.easeOut',
+        });
+
+        // Nametag returns
+        this.scene.tweens.add({
+          targets: this.nametag,
+          alpha: 1,
+          duration: 300,
+        });
+
+        // Restore glow
+        this.neonGlow.setFillStyle(origGlowColor, origGlowAlpha);
+        this.statusIcon?.setVisible(true);
+
+        // Finish
+        this.scene.time.delayedCall(500, () => this.finishEmote());
+      });
+    });
+  }
+
   private showEmoteLabel(text: string, duration = 1200) {
     const label = this.scene.add.text(0, -38, text, {
       fontFamily: 'monospace',

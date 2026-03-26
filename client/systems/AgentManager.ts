@@ -100,6 +100,14 @@ export class AgentManager {
       case 'emote':
         if (data?.emote) {
           agent.playEmote(data.emote as string);
+          if (data.emote === 'gun') {
+            for (const [otherId, other] of this.agents) {
+              if (otherId === sessionId) continue;
+              if (other.x > agent.x && other.x - agent.x < 200) {
+                this.scene.time.delayedCall(300, () => other.playGunDeath());
+              }
+            }
+          }
           if (data.emote === 'fart') {
             for (const [otherId, other] of this.agents) {
               if (otherId === sessionId) continue;
