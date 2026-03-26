@@ -20,6 +20,7 @@ export class AgentManager {
   private flowerVisitors = new Map<string, string>(); // agentId → deadSessionId they're visiting
   private flowersDone = new Map<string, Set<string>>(); // deadSessionId → set of agentIds who already placed flowers
   private zombieRising = new Set<string>(); // agents currently rising from grave (skip routing)
+  private zombieLoitering = new Map<string, string>(); // zombieSessionId → deadSessionId they're loitering at
   private lastFlowerCheck = 0; // timestamp of last periodic flower check
 
   constructor(scene: Phaser.Scene, envType: EnvironmentType = 'arcade') {
@@ -183,6 +184,11 @@ export class AgentManager {
     const isWorking = workingStates.includes(session.activity);
     const isThinking = session.activity === 'thinking';
 
+    // Clear zombie loitering whenever the agent gets a real routing update
+    if (session.activity !== 'idle') {
+      this.zombieLoitering.delete(session.sessionId);
+    }
+
     if (session.activity === 'stopped') {
       // Don't release the arcade slot here — removeAgent will reserve it for the tombstone
       this.deactivateMachineFor(session.sessionId);
@@ -213,20 +219,50 @@ export class AgentManager {
         agent.moveTo(pos.x, pos.y);
       }
     } else {
-      // idle / fallback -> lounge
+      // idle / fallback -> lounge (zombies prefer to loiter at another agent's tombstone)
       this.layout.release(session.sessionId);
       this.deactivateMachineFor(session.sessionId);
-      const pos = this.layout.assignToLounge(session.sessionId);
-      // If position overlaps a tombstone, offset away
-      if (!agent.isZombie && this.isNearTombstone(pos.x, pos.y)) {
-        agent.moveTo(pos.x + 30, pos.y);
+
+      this.zombieLoitering.delete(session.sessionId);
+      const otherTomb = agent.isZombie ? this.pickOtherTombstone(session.sessionId) : null;
+      if (otherTomb) {
+        // Zombie idles beside another agent's grave
+        this.zombieLoitering.set(session.sessionId, otherTomb.deadSessionId);
+        const offsetX = Phaser.Math.Between(-18, 18);
+        agent.moveTo(otherTomb.x + offsetX, otherTomb.y + 14);
+        // Play a creepy chill emote once the zombie arrives
+        const zombieEmotes = ['sleep', 'dizzy', 'rage'];
+        const emote = zombieEmotes[Phaser.Math.Between(0, zombieEmotes.length - 1)];
+        const dx = (otherTomb.x + offsetX) - agent.x;
+        const dy = (otherTomb.y + 14) - agent.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const walkMs = (dist / agent.getMoveSpeed()) * 1000 + 300;
+        this.scene.time.delayedCall(walkMs, () => {
+          if (this.agents.has(session.sessionId)) {
+            agent.playEmote(emote);
+          }
+        });
       } else {
-        agent.moveTo(pos.x, pos.y);
+        const pos = this.layout.assignToLounge(session.sessionId);
+        // If position overlaps a tombstone, offset away
+        if (!agent.isZombie && this.isNearTombstone(pos.x, pos.y)) {
+          agent.moveTo(pos.x + 30, pos.y);
+        } else {
+          agent.moveTo(pos.x, pos.y);
+        }
       }
     }
 
     // Sync subagents
     this.syncSubagents(session);
+  }
+
+  /** Pick a random tombstone belonging to a *different* agent (for zombie loitering). */
+  private pickOtherTombstone(sessionId: string): { deadSessionId: string; x: number; y: number } | null {
+    const others = [...this.tombstones.entries()].filter(([id]) => id !== sessionId);
+    if (others.length === 0) return null;
+    const [deadSessionId, tomb] = others[Phaser.Math.Between(0, others.length - 1)];
+    return { deadSessionId, x: tomb.x, y: tomb.y };
   }
 
   /** Check if a position is within proximity of any active tombstone. */
@@ -262,6 +298,8 @@ export class AgentManager {
           this.tombstones.delete(sessionId);
           this.flowersDone.delete(sessionId);
           this.layout.releaseTombstone(sessionId);
+          // Send loitering zombies back to the lounge
+          this.sendLoiteringZombiesHome(sessionId);
         });
       }, this.serverGraphicDeath);
       this.agents.delete(sessionId);
@@ -517,6 +555,22 @@ export class AgentManager {
           // Restore normal speed and send them back to lounge
           agent.setMoveSpeed(80);
           const pos = this.layout.assignToLounge(agentId);
+          agent.moveTo(pos.x, pos.y);
+        }
+      }
+    }
+  }
+
+  /**
+   * Send any zombies loitering at a now-expired tombstone back to the lounge.
+   */
+  private sendLoiteringZombiesHome(deadSessionId: string) {
+    for (const [zombieId, tombId] of this.zombieLoitering) {
+      if (tombId === deadSessionId) {
+        this.zombieLoitering.delete(zombieId);
+        const agent = this.agents.get(zombieId);
+        if (agent) {
+          const pos = this.layout.assignToLounge(zombieId);
           agent.moveTo(pos.x, pos.y);
         }
       }
