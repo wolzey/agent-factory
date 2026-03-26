@@ -26,6 +26,8 @@ export class SubagentSprite extends Phaser.GameObjects.Container {
   private parentX = 0;
   private parentY = 0;
 
+  public isZombie = false;
+
   constructor(
     scene: Phaser.Scene,
     info: SubagentInfo,
@@ -33,11 +35,13 @@ export class SubagentSprite extends Phaser.GameObjects.Container {
     spriteIndex: number,
     siblingIndex: number,
     siblingCount: number,
+    isZombie = false,
   ) {
     super(scene, 0, 0);
 
     this.info = info;
     this.parentSessionId = parentSessionId;
+    this.isZombie = isZombie;
 
     // Evenly space subagents around the orbit
     this.orbitAngle = (siblingIndex / Math.max(siblingCount, 1)) * Math.PI * 2;
@@ -46,27 +50,28 @@ export class SubagentSprite extends Phaser.GameObjects.Container {
     // Slightly different speeds so they don't lock in sync
     this.orbitSpeed = 0.6 + siblingIndex * 0.15;
 
-    // Distinct color per subagent
-    const tint = SUBAGENT_COLORS[siblingIndex % SUBAGENT_COLORS.length];
+    // Zombie subagents get the sickly green tint, normal ones get distinct colors
+    const tint = isZombie ? 0x448833 : SUBAGENT_COLORS[siblingIndex % SUBAGENT_COLORS.length];
 
     const spriteKey = `agent_${spriteIndex % 8}`;
     this.sprite = scene.add.sprite(0, 0, spriteKey, 1);
     this.sprite.setScale(1.2);
     this.sprite.setOrigin(0.5, 0.5);
     this.sprite.setTint(tint);
-    this.sprite.setAlpha(0.85);
+    this.sprite.setAlpha(isZombie ? 0.75 : 0.85);
     this.add(this.sprite);
 
-    // Nametag with agent type + index
-    const tintHex = '#' + tint.toString(16).padStart(6, '0');
-    const label = siblingCount > 1
+    // Nametag with agent type + index — zombie subagents get skull markers
+    const tintHex = isZombie ? '#33ff00' : '#' + tint.toString(16).padStart(6, '0');
+    const baseName = siblingCount > 1
       ? `${info.agentType || 'sub'} #${siblingIndex + 1}`
       : (info.agentType || 'sub');
+    const label = isZombie ? `\u2620 ${baseName} \u2620` : baseName;
     this.nametag = scene.add.text(0, -14, label, {
       fontFamily: 'monospace',
       fontSize: '6px',
       color: tintHex,
-      backgroundColor: 'rgba(10, 10, 26, 0.8)',
+      backgroundColor: isZombie ? 'rgba(20, 40, 10, 0.9)' : 'rgba(10, 10, 26, 0.8)',
       padding: { x: 2, y: 1 },
       align: 'center',
     });
