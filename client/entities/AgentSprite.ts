@@ -10,7 +10,6 @@ const ACTIVITY_ICONS: Record<string, string> = {
   searching: 'globe',
   chatting: 'chat',
   thinking: 'brain',
-  planning: 'brain',
 };
 
 const ICON_FRAME_MAP: Record<string, number> = {
@@ -28,6 +27,8 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   private statusIcon: Phaser.GameObjects.Sprite | null = null;
   private neonGlow: Phaser.GameObjects.Rectangle;
   private thoughtBubble: Phaser.GameObjects.Container | null = null;
+  private questionBubble: Phaser.GameObjects.Container | null = null;
+  private planningClipboard: Phaser.GameObjects.Container | null = null;
 
   public sessionData: AgentSession;
   public isZombie = false;
@@ -2039,6 +2040,29 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   private updateStatusIcon(activity: AgentActivity, tool: string | null) {
     const iconName = ACTIVITY_ICONS[activity];
 
+    // Handle question bubble for waiting state (permission requests)
+    if (activity === 'waiting') {
+      this.statusIcon?.setVisible(false);
+      this.hideThoughtBubble();
+      this.hidePlanningClipboard();
+      this.showQuestionBubble();
+      this.neonGlow.setAlpha(0.3);
+      return;
+    } else {
+      this.hideQuestionBubble();
+    }
+
+    // Handle clipboard for planning state
+    if (activity === 'planning') {
+      this.statusIcon?.setVisible(false);
+      this.hideThoughtBubble();
+      this.showPlanningClipboard();
+      this.neonGlow.setAlpha(0.35);
+      return;
+    } else {
+      this.hidePlanningClipboard();
+    }
+
     // Handle thought bubble for thinking state
     if (activity === 'thinking') {
       this.statusIcon?.setVisible(false);
@@ -2104,6 +2128,144 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     if (!this.thoughtBubble) return;
     this.thoughtBubble.destroy();
     this.thoughtBubble = null;
+  }
+
+  private showQuestionBubble() {
+    if (this.questionBubble) return;
+
+    this.questionBubble = this.scene.add.container(12, -20);
+
+    // Speech bubble background
+    const bubble = this.scene.add.graphics();
+    bubble.fillStyle(0xffffff, 0.9);
+    bubble.fillRoundedRect(-8, -6, 16, 12, 4);
+    this.questionBubble.add(bubble);
+
+    // Big question mark
+    const qMark = this.scene.add.text(0, 0, '?', {
+      fontSize: '10px',
+      fontFamily: 'monospace',
+      fontStyle: 'bold',
+      color: '#444466',
+    }).setOrigin(0.5, 0.5);
+    this.questionBubble.add(qMark);
+
+    // Small tail dot
+    const tail = this.scene.add.circle(-6, 8, 1.5, 0xffffff, 0.7);
+    this.questionBubble.add(tail);
+
+    this.add(this.questionBubble);
+
+    // Gentle pulse on the question mark
+    this.scene.tweens.add({
+      targets: qMark,
+      scaleX: 1.2,
+      scaleY: 1.2,
+      duration: 600,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+  }
+
+  private hideQuestionBubble() {
+    if (!this.questionBubble) return;
+    this.questionBubble.destroy();
+    this.questionBubble = null;
+  }
+
+  private showPlanningClipboard() {
+    if (this.planningClipboard) return;
+
+    this.planningClipboard = this.scene.add.container(12, -22);
+
+    const gfx = this.scene.add.graphics();
+
+    // Clipboard body
+    gfx.fillStyle(0xffffff, 0.92);
+    gfx.fillRoundedRect(-7, -3, 14, 16, 2);
+
+    // Clip tab at top
+    gfx.fillStyle(0xaaaacc, 1);
+    gfx.fillRect(-3, -6, 6, 4);
+    gfx.fillStyle(0x8888aa, 1);
+    gfx.fillRect(-2, -5, 4, 2);
+
+    this.planningClipboard.add(gfx);
+
+    // Three checklist rows: small dot + line
+    const rows = [0, 4, 8];
+    const checkDots: Phaser.GameObjects.Circle[] = [];
+    const lines: Phaser.GameObjects.Rectangle[] = [];
+
+    for (const rowY of rows) {
+      const dot = this.scene.add.circle(-3, rowY, 1.2, 0xcccccc);
+      const line = this.scene.add.rectangle(2, rowY, 6, 1.2, 0xdddddd);
+      this.planningClipboard.add(dot);
+      this.planningClipboard.add(line);
+      checkDots.push(dot);
+      lines.push(line);
+    }
+
+    // Tail dot
+    const tail = this.scene.add.circle(-6, 16, 1.5, 0xffffff, 0.7);
+    this.planningClipboard.add(tail);
+
+    this.add(this.planningClipboard);
+
+    // Animate rows filling in sequentially, then reset
+    const animateRow = (index: number) => {
+      if (!this.planningClipboard) return;
+      const dot = checkDots[index];
+      const line = lines[index];
+
+      // Check dot turns green
+      this.scene.tweens.add({
+        targets: dot,
+        fillColor: { from: 0xcccccc, to: 0x44bb66 },
+        duration: 1,
+        onComplete: () => {
+          dot.setFillStyle(0x44bb66);
+        },
+      });
+
+      // Line fills in darker
+      this.scene.tweens.add({
+        targets: line,
+        fillColor: { from: 0xdddddd, to: 0x8888aa },
+        duration: 1,
+        onComplete: () => {
+          line.setFillStyle(0x8888aa);
+        },
+      });
+    };
+
+    // Stagger row animations, loop every 3 seconds
+    const cycleClipboard = () => {
+      if (!this.planningClipboard) return;
+
+      // Reset all rows
+      for (let i = 0; i < 3; i++) {
+        checkDots[i].setFillStyle(0xcccccc);
+        lines[i].setFillStyle(0xdddddd);
+      }
+
+      // Fill in one by one
+      this.scene.time.delayedCall(400, () => animateRow(0));
+      this.scene.time.delayedCall(900, () => animateRow(1));
+      this.scene.time.delayedCall(1400, () => animateRow(2));
+
+      // Repeat the cycle
+      this.scene.time.delayedCall(2800, () => cycleClipboard());
+    };
+
+    cycleClipboard();
+  }
+
+  private hidePlanningClipboard() {
+    if (!this.planningClipboard) return;
+    this.planningClipboard.destroy();
+    this.planningClipboard = null;
   }
 
   private computeLabel(session: AgentSession): string {

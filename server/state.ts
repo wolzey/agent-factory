@@ -49,6 +49,9 @@ export class StateManager {
       case 'SubagentStop':
         this.handleSubagentStop(payload);
         break;
+      case 'PermissionRequest':
+        this.handlePermissionRequest(payload);
+        break;
       case 'Stop':
         this.handleStop(payload);
         break;
@@ -235,6 +238,15 @@ export class StateManager {
       effect: 'subagent_despawn',
       effectData: { agentId },
     });
+  }
+
+  private handlePermissionRequest(payload: HookPayload): void {
+    const session = this.ensureSession(payload);
+    session.activity = 'waiting';
+    session.currentTool = null;
+    session.currentToolInput = null;
+    session.lastEventAt = Date.now();
+    this.emit('update', { agent: session });
   }
 
   private handleStop(payload: HookPayload): void {
