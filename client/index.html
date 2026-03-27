@@ -301,6 +301,45 @@
     #command-input input::placeholder {
       color: #555;
     }
+
+    /* Command suggestions */
+    #command-suggestions {
+      display: none;
+      position: fixed;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 400px;
+      max-height: 180px;
+      overflow-y: auto;
+      background: rgba(10, 10, 26, 0.95);
+      border: 1px solid var(--accent-color);
+      border-bottom: none;
+      border-radius: 4px 4px 0 0;
+      font-family: monospace;
+      font-size: 12px;
+      z-index: 1000;
+      box-shadow: 0 -4px 12px color-mix(in srgb, var(--accent-color) 15%, transparent);
+      scrollbar-width: thin;
+      scrollbar-color: #333 transparent;
+    }
+    #command-suggestions::-webkit-scrollbar { width: 4px; }
+    #command-suggestions::-webkit-scrollbar-thumb { background: #444; border-radius: 2px; }
+    #command-suggestions .suggestion {
+      padding: 5px 10px;
+      color: #aaa;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+    }
+    #command-suggestions .suggestion:hover,
+    #command-suggestions .suggestion.active {
+      background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+      color: #fff;
+    }
+    #command-suggestions .suggestion .cmd { color: #00ffff; }
+    #command-suggestions .suggestion.active .cmd { color: #fff; }
+    #command-suggestions .suggestion .desc { color: #666; font-size: 11px; }
   </style>
 </head>
 <body>
