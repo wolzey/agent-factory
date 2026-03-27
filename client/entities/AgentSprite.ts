@@ -2,7 +2,6 @@ import Phaser from 'phaser';
 import type { AgentSession, AgentActivity } from '@shared/types';
 import { TOMBSTONE_DURATION_MS } from '@shared/constants';
 import { BootScene } from '../scenes/BootScene';
-import { SoundManager } from '../audio/SoundManager';
 
 const ACTIVITY_ICONS: Record<string, string> = {
   running: 'terminal',
@@ -147,13 +146,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   updateSession(session: AgentSession) {
-    const prevActivity = this.sessionData.activity;
     this.sessionData = session;
-
-    // Play state transition sound on activity change
-    if (prevActivity !== session.activity) {
-      SoundManager.getInstance().playStateSound(session.activity, session.sessionId);
-    }
 
     // Update nametag
     this.nametag.setText(this.computeLabel(session));
@@ -163,9 +156,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   die(onComplete?: () => void, serverGraphicDeath?: boolean) {
-    const graphic = !!(serverGraphicDeath || this.sessionData.avatar?.graphicDeath);
-    SoundManager.getInstance().playDeathSound(graphic);
-    if (graphic) {
+    if (serverGraphicDeath || this.sessionData.avatar?.graphicDeath) {
       this.dieGraphic(onComplete);
     } else {
       this.dieStandard(onComplete);
@@ -1897,7 +1888,6 @@ export class AgentSprite extends Phaser.GameObjects.Container {
 
   riseFromGrave(graveX: number, graveY: number, tombstone: Phaser.GameObjects.Container) {
     this.isZombie = true;
-    SoundManager.getInstance().playZombieRise();
 
     // Position at grave
     this.setPosition(graveX, graveY);
@@ -2197,9 +2187,6 @@ export class AgentSprite extends Phaser.GameObjects.Container {
       repeat: -1,
       ease: 'Sine.easeInOut',
     });
-
-    // Speak "Help!" at the help desk
-    SoundManager.getInstance().speakHelp(this.sessionData.sessionId);
   }
 
   private hideQuestionBubble() {

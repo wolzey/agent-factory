@@ -87,34 +87,6 @@
     #hud .hud-stat {
       color: #00ffff;
     }
-    .hud-audio {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-top: 4px;
-    }
-    .audio-icon {
-      cursor: pointer;
-      font-size: 14px;
-      user-select: none;
-    }
-    .volume-slider {
-      width: 60px;
-      height: 4px;
-      -webkit-appearance: none;
-      appearance: none;
-      background: #333;
-      border-radius: 2px;
-      outline: none;
-    }
-    .volume-slider::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: var(--accent-color);
-      cursor: pointer;
-    }
 
     /* Chat Overlay */
     #chat-overlay {
@@ -344,11 +316,6 @@
     <div class="hud-title">AGENT FACTORY</div>
     <div>Agents: <span class="hud-stat" id="hud-agents">0</span></div>
     <div>Connected: <span class="hud-stat" id="hud-connected">--</span></div>
-    <div class="hud-audio">
-      <span class="audio-icon" id="audio-toggle" title="Toggle sound">&#x1F50A;</span>
-      <input type="range" id="volume-slider" min="0" max="100" value="30"
-             class="volume-slider" title="Volume">
-    </div>
   </div>
   <script type="module" src="./main.ts"></script>
 </body>

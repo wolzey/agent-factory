@@ -8,7 +8,6 @@ import { CommandInput } from '../ui/CommandInput';
 import type { WSMessageToClient, EnvironmentType } from '@shared/types';
 import { getTheme } from '../environments';
 import type { EnvironmentTheme } from '../environments';
-import { SoundManager } from '../audio/SoundManager';
 
 export class FactoryScene extends Phaser.Scene {
   private socket!: SocketClient;
@@ -78,7 +77,6 @@ export class FactoryScene extends Phaser.Scene {
     this.socket.connect();
 
     this.fetchConfig();
-    this.initAudio();
   }
 
   update(time: number, delta: number) {
@@ -333,37 +331,5 @@ export class FactoryScene extends Phaser.Scene {
     this.add.rectangle(9, 240, 6, 480, 0x000000, 0.1).setDepth(999);
     this.add.rectangle(797, 240, 6, 480, 0x000000, 0.25).setDepth(999);
     this.add.rectangle(791, 240, 6, 480, 0x000000, 0.1).setDepth(999);
-  }
-
-  // ── Audio ───────────────────────────────────────────────────────────
-  private initAudio() {
-    const sm = SoundManager.getInstance();
-
-    const unlockAudio = () => {
-      sm.init();
-      document.removeEventListener('click', unlockAudio);
-      document.removeEventListener('keydown', unlockAudio);
-    };
-    document.addEventListener('click', unlockAudio);
-    document.addEventListener('keydown', unlockAudio);
-
-    // Volume controls
-    const toggle = document.getElementById('audio-toggle');
-    const slider = document.getElementById('volume-slider') as HTMLInputElement | null;
-
-    if (toggle) {
-      toggle.textContent = sm.isMuted() ? '\u{1F507}' : '\u{1F50A}';
-      toggle.addEventListener('click', () => {
-        sm.setMuted(!sm.isMuted());
-        toggle.textContent = sm.isMuted() ? '\u{1F507}' : '\u{1F50A}';
-      });
-    }
-
-    if (slider) {
-      slider.value = String(Math.round(sm.getVolume() * 100));
-      slider.addEventListener('input', () => {
-        sm.setVolume(parseInt(slider.value) / 100);
-      });
-    }
   }
 }

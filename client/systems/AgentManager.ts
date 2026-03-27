@@ -7,7 +7,6 @@ import { Machine } from '../entities/Machine';
 import { LayoutManager } from './LayoutManager';
 import { getTheme } from '../environments';
 import type { EnvironmentTheme } from '../environments';
-import { SoundManager } from '../audio/SoundManager';
 
 export class AgentManager {
   private scene: Phaser.Scene;
@@ -76,11 +75,6 @@ export class AgentManager {
     const agent = this.agents.get(sessionId);
     if (!agent) return;
 
-    // Play effect sound (emote sounds handled separately below)
-    if (effect !== 'emote') {
-      SoundManager.getInstance().playEffectSound(effect);
-    }
-
     switch (effect) {
       case 'tool_start':
         this.emitSparks(agent.x, agent.y, 0xff00ff);
@@ -140,21 +134,16 @@ export class AgentManager {
         break;
       case 'emote':
         if (data?.emote) {
-          const emote = data.emote as string;
-          agent.playEmote(emote);
-          SoundManager.getInstance().playEmoteSound(emote as import('@shared/types').EmoteType);
-          if (emote === 'gun') {
+          agent.playEmote(data.emote as string);
+          if (data.emote === 'gun') {
             for (const [otherId, other] of this.agents) {
               if (otherId === sessionId) continue;
               if (other.x > agent.x && other.x - agent.x < 200) {
-                this.scene.time.delayedCall(300, () => {
-                  other.playGunDeath();
-                  SoundManager.getInstance().playGunDeathVictim();
-                });
+                this.scene.time.delayedCall(300, () => other.playGunDeath());
               }
             }
           }
-          if (emote === 'fart') {
+          if (data.emote === 'fart') {
             for (const [otherId, other] of this.agents) {
               if (otherId === sessionId) continue;
               const dx = agent.x - other.x;
