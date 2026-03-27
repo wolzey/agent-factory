@@ -89,6 +89,9 @@ export class FactoryScene extends Phaser.Scene {
       case 'agent_update': this.agentManager.handleAgentUpdate(msg.agent); break;
       case 'agent_remove': this.agentManager.handleAgentRemove(msg.sessionId); break;
       case 'effect': this.agentManager.handleEffect(msg.sessionId, msg.effect, msg.data); break;
+      case 'global_effect':
+        if (msg.effect === 'vortex') this.agentManager.triggerVortex();
+        break;
       case 'chat_message': this.chatOverlay.addMessage(msg.chat); break;
       case 'auth_result':
         if (msg.success && msg.username) {

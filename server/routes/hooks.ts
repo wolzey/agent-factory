@@ -123,4 +123,9 @@ export function registerHookRoutes(
   app.get('/api/state', async (_request, reply) => {
     return reply.send({ agents: state.getAll() });
   });
+
+  app.post('/api/vortex', async (_request, reply) => {
+    broadcast.broadcastGlobalEffect('vortex');
+    return reply.send({ ok: true });
+  });
 }

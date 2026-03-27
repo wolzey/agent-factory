@@ -90,7 +90,11 @@ export type WSMessageToClient =
   | { type: 'agent_remove'; sessionId: string }
   | { type: 'effect'; sessionId: string; effect: EffectType; data?: Record<string, unknown> }
   | { type: 'chat_message'; chat: ChatMessage }
-  | { type: 'auth_result'; success: boolean; username?: string; error?: string };
+  | { type: 'auth_result'; success: boolean; username?: string; error?: string }
+  | { type: 'global_effect'; effect: GlobalEffectType; data?: Record<string, unknown> };
+
+// === Global Effect Types ===
+export type GlobalEffectType = 'vortex';
 
 // === WebSocket Messages: Browser -> Server ===
 export type WSMessageToServer =
