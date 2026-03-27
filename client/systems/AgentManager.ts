@@ -21,6 +21,12 @@ export class AgentManager {
   private flowersDone = new Map<string, Set<string>>(); // deadSessionId → set of agentIds who already placed flowers
   private zombieRising = new Set<string>(); // agents currently rising from grave (skip routing)
   private lastFlowerCheck = 0; // timestamp of last periodic flower check
+  private vortexActive = false;
+  private vortexCenter = { x: 400, y: 240 };
+  private vortexStartTime = 0;
+  private vortexDuration = 15000;
+  private vortexVisuals: Phaser.GameObjects.GameObject[] = [];
+  private preVortexPositions = new Map<string, { x: number; y: number }>();
 
   constructor(scene: Phaser.Scene, envType: EnvironmentType = 'arcade') {
     this.scene = scene;
@@ -159,8 +165,20 @@ export class AgentManager {
   }
 
   update(time: number, delta: number) {
+    // Vortex swirl physics
+    if (this.vortexActive) {
+      const elapsed = time - this.vortexStartTime;
+      if (elapsed > this.vortexDuration) {
+        this.endVortex();
+      } else {
+        this.updateVortexSwirl(time, elapsed);
+      }
+    }
+
     for (const agent of this.agents.values()) {
-      agent.update(time, delta);
+      if (!this.vortexActive) {
+        agent.update(time, delta);
+      }
       // Y-based depth: entities further down screen render on top
       agent.setDepth(7 + agent.y * 0.001);
     }
@@ -390,6 +408,473 @@ export class AgentManager {
       );
       machine?.setActive(false);
     }
+  }
+
+  // ── Vortex ──────────────────────────────────────────────────────
+
+  triggerVortex() {
+    if (this.vortexActive) return;
+    this.vortexActive = true;
+    this.vortexStartTime = this.scene.time.now;
+    this.vortexCenter = { x: 400, y: 240 };
+
+    for (const [id, agent] of this.agents) {
+      this.preVortexPositions.set(id, { x: agent.x, y: agent.y });
+    }
+
+    this.createVortexVisuals();
+  }
+
+  private createVortexVisuals() {
+    const cx = this.vortexCenter.x;
+    const cy = this.vortexCenter.y;
+
+    // Dark overlay
+    const overlay = this.scene.add.rectangle(400, 240, 800, 480, 0x000000, 0.0).setDepth(900);
+    this.scene.tweens.add({ targets: overlay, alpha: 0.5, duration: 3000, ease: 'Power2' });
+    this.vortexVisuals.push(overlay);
+
+    // 8 spinning ring layers
+    const ringColors = [0x8844ff, 0x4488ff, 0xff44aa, 0x00ffff, 0xff00ff, 0xffaa00, 0xff0044, 0x44ff88];
+    for (let i = 0; i < 8; i++) {
+      const radius = 20 + i * 25;
+      const ring = this.scene.add.circle(cx, cy, radius, ringColors[i], 0.0)
+        .setStrokeStyle(4 - i * 0.3, ringColors[i], 0.85)
+        .setDepth(901);
+      this.vortexVisuals.push(ring);
+
+      this.scene.tweens.add({
+        targets: ring,
+        scaleX: { from: 0, to: 1.2 },
+        scaleY: { from: 0, to: 1.2 },
+        duration: 600 + i * 100,
+        ease: 'Back.easeOut',
+        delay: i * 80,
+      });
+
+      this.scene.tweens.add({
+        targets: ring,
+        angle: i % 2 === 0 ? 360 : -360,
+        duration: 4000 - i * 400,
+        repeat: -1,
+        ease: 'Linear',
+      });
+
+      this.scene.time.delayedCall(5000, () => {
+        if (!this.vortexActive || !this.scene) return;
+        this.scene.tweens.add({
+          targets: ring,
+          scaleX: 0.6 + i * 0.05,
+          scaleY: 0.6 + i * 0.05,
+          duration: 5000,
+          ease: 'Power2',
+        });
+      });
+
+      this.scene.tweens.add({
+        targets: ring,
+        alpha: { from: 0.2, to: 0.6 },
+        duration: 600 + i * 100,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    }
+
+    // Central core
+    const core = this.scene.add.circle(cx, cy, 20, 0xffffff, 0.0).setDepth(902);
+    this.vortexVisuals.push(core);
+    this.scene.tweens.add({
+      targets: core,
+      alpha: { from: 0, to: 1 },
+      scaleX: { from: 0, to: 2 },
+      scaleY: { from: 0, to: 2 },
+      duration: 800,
+      ease: 'Back.easeOut',
+    });
+    this.scene.tweens.add({
+      targets: core,
+      scaleX: { from: 1.5, to: 2.5 },
+      scaleY: { from: 1.5, to: 2.5 },
+      alpha: { from: 0.7, to: 1.0 },
+      duration: 400,
+      yoyo: true,
+      repeat: -1,
+      delay: 800,
+      ease: 'Sine.easeInOut',
+    });
+
+    // Multi-layered core glow
+    for (const [color, size, alpha] of [
+      [0x8844ff, 60, 0.2], [0xff00ff, 45, 0.15], [0x4488ff, 80, 0.1],
+    ] as [number, number, number][]) {
+      const glow = this.scene.add.circle(cx, cy, size, color, 0.0).setDepth(901);
+      this.vortexVisuals.push(glow);
+      this.scene.tweens.add({
+        targets: glow,
+        alpha: { from: 0, to: alpha },
+        scaleX: { from: 0, to: 2.5 },
+        scaleY: { from: 0, to: 2.5 },
+        duration: 1000,
+        ease: 'Power2',
+      });
+      this.scene.tweens.add({
+        targets: glow,
+        scaleX: { from: 2, to: 3.5 },
+        scaleY: { from: 2, to: 3.5 },
+        alpha: { from: alpha * 0.7, to: alpha * 1.3 },
+        duration: 800,
+        yoyo: true,
+        repeat: -1,
+        delay: 1000,
+      });
+    }
+
+    // 6-arm spiral particle stream
+    const spiralColors = [0x00ffff, 0xff00ff, 0x8844ff, 0x4488ff, 0xffff00, 0xff4488, 0xffffff, 0xffaa00];
+    const spiralEvent = this.scene.time.addEvent({
+      delay: 40,
+      repeat: -1,
+      callback: () => {
+        if (!this.vortexActive || !this.scene) { spiralEvent.destroy(); return; }
+        const elapsed = this.scene.time.now - this.vortexStartTime;
+        const intensity = Math.min(elapsed / 4000, 1);
+        const armCount = 3 + Math.floor(intensity * 3);
+
+        for (let arm = 0; arm < armCount; arm++) {
+          const baseAngle = (this.scene.time.now / (400 - intensity * 200)) + (arm * Math.PI * 2 / armCount);
+          const r = Phaser.Math.Between(40, 250 + Math.floor(intensity * 100));
+          const px = cx + Math.cos(baseAngle + r * 0.02) * r;
+          const py = cy + Math.sin(baseAngle + r * 0.02) * r;
+          const size = Phaser.Math.Between(1, 3 + Math.floor(intensity * 4));
+          const p = this.scene.add.circle(px, py, size,
+            spiralColors[Phaser.Math.Between(0, spiralColors.length - 1)], 0.9,
+          ).setDepth(902);
+
+          this.scene.tweens.add({
+            targets: p,
+            x: cx + Phaser.Math.Between(-5, 5),
+            y: cy + Phaser.Math.Between(-5, 5),
+            alpha: 0,
+            scaleX: 0.1,
+            scaleY: 0.1,
+            duration: Phaser.Math.Between(400, 800),
+            ease: 'Power3',
+            onComplete: () => p.destroy(),
+          });
+        }
+      },
+    });
+
+    // Branching lightning
+    const boltEvent = this.scene.time.addEvent({
+      delay: 200,
+      repeat: -1,
+      callback: () => {
+        if (!this.vortexActive || !this.scene) { boltEvent.destroy(); return; }
+        const elapsed = this.scene.time.now - this.vortexStartTime;
+        const fury = Math.min(elapsed / 8000, 1);
+        const boltCount = 1 + Math.floor(fury * 3);
+
+        for (let b = 0; b < boltCount; b++) {
+          const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+          const dist = Phaser.Math.Between(50, 220 + Math.floor(fury * 80));
+          const bx = cx + Math.cos(angle) * dist;
+          const by = cy + Math.sin(angle) * dist;
+
+          const boltLen = Math.sqrt((bx - cx) ** 2 + (by - cy) ** 2);
+          const bolt = this.scene.add.rectangle(
+            (cx + bx) / 2, (cy + by) / 2,
+            boltLen, 2 + fury * 3, 0xffffff, 0.95,
+          ).setDepth(903).setAngle(Phaser.Math.RadToDeg(Math.atan2(by - cy, bx - cx)));
+
+          this.scene.tweens.add({
+            targets: bolt, alpha: 0, scaleY: 0.1,
+            duration: 120, onComplete: () => bolt.destroy(),
+          });
+
+          if (fury > 0.3) {
+            const branchAngle = angle + Phaser.Math.FloatBetween(-0.5, 0.5);
+            const branchDist = dist * 0.5;
+            const bbx = bx + Math.cos(branchAngle) * branchDist;
+            const bby = by + Math.sin(branchAngle) * branchDist;
+            const branch = this.scene.add.rectangle(
+              (bx + bbx) / 2, (by + bby) / 2,
+              branchDist, 1 + fury * 2, 0xaaddff, 0.8,
+            ).setDepth(903).setAngle(Phaser.Math.RadToDeg(Math.atan2(bby - by, bbx - bx)));
+            this.scene.tweens.add({
+              targets: branch, alpha: 0, duration: 100,
+              onComplete: () => branch.destroy(),
+            });
+          }
+
+          const impact = this.scene.add.circle(bx, by, 6 + fury * 8, 0xffffff, 0.8).setDepth(903);
+          this.scene.tweens.add({
+            targets: impact, alpha: 0, scaleX: 4, scaleY: 4,
+            duration: 200, onComplete: () => impact.destroy(),
+          });
+        }
+      },
+    });
+
+    // Debris from screen edges
+    const debrisEvent = this.scene.time.addEvent({
+      delay: 150,
+      repeat: -1,
+      callback: () => {
+        if (!this.vortexActive || !this.scene) { debrisEvent.destroy(); return; }
+        const elapsed = this.scene.time.now - this.vortexStartTime;
+        if (elapsed < 2000) return;
+
+        const edge = Phaser.Math.Between(0, 3);
+        let dx: number, dy: number;
+        switch (edge) {
+          case 0: dx = Phaser.Math.Between(0, 800); dy = 0; break;
+          case 1: dx = 800; dy = Phaser.Math.Between(0, 480); break;
+          case 2: dx = Phaser.Math.Between(0, 800); dy = 480; break;
+          default: dx = 0; dy = Phaser.Math.Between(0, 480); break;
+        }
+        const chunk = this.scene.add.rectangle(dx, dy,
+          Phaser.Math.Between(4, 12), Phaser.Math.Between(3, 8),
+          spiralColors[Phaser.Math.Between(0, spiralColors.length - 1)], 0.7,
+        ).setDepth(901).setAngle(Phaser.Math.Between(0, 360));
+
+        this.scene.tweens.add({
+          targets: chunk,
+          x: cx + Phaser.Math.Between(-15, 15),
+          y: cy + Phaser.Math.Between(-15, 15),
+          angle: chunk.angle + Phaser.Math.Between(-360, 360),
+          alpha: 0,
+          scaleX: 0.1,
+          scaleY: 0.1,
+          duration: Phaser.Math.Between(800, 1500),
+          ease: 'Power3',
+          onComplete: () => chunk.destroy(),
+        });
+      },
+    });
+
+    // Escalating screen shake
+    const shakeEvent = this.scene.time.addEvent({
+      delay: 3000,
+      repeat: -1,
+      callback: () => {
+        if (!this.vortexActive || !this.scene) { shakeEvent.destroy(); return; }
+        const elapsed = this.scene.time.now - this.vortexStartTime;
+        const intensity = 0.003 + (elapsed / this.vortexDuration) * 0.012;
+        this.scene.cameras.main.shake(800, intensity);
+      },
+    });
+
+    this.scene.cameras.main.shake(2000, 0.008);
+
+    // Phase flashes at milestones
+    for (const [delay, flashColor] of [
+      [4000, 0xff00ff], [7000, 0x00ffff], [10000, 0xff4400], [13000, 0xffffff],
+    ] as [number, number][]) {
+      this.scene.time.delayedCall(delay, () => {
+        if (!this.vortexActive || !this.scene) return;
+        const phaseFlash = this.scene.add.rectangle(400, 240, 800, 480, flashColor, 0.4).setDepth(904);
+        this.scene.tweens.add({
+          targets: phaseFlash, alpha: 0, duration: 600,
+          onComplete: () => phaseFlash.destroy(),
+        });
+        this.scene.cameras.main.shake(600, 0.015);
+      });
+    }
+
+    // "VORTEX" text with glow
+    const vortexText = this.scene.add.text(cx, cy - 130, 'V O R T E X', {
+      fontFamily: 'monospace', fontSize: '36px', color: '#ffffff', fontStyle: 'bold',
+    }).setOrigin(0.5).setAlpha(0).setDepth(904);
+    this.vortexVisuals.push(vortexText);
+
+    const textGlow = this.scene.add.text(cx, cy - 130, 'V O R T E X', {
+      fontFamily: 'monospace', fontSize: '36px', color: '#8844ff', fontStyle: 'bold',
+    }).setOrigin(0.5).setAlpha(0).setDepth(903);
+    this.vortexVisuals.push(textGlow);
+
+    this.scene.tweens.add({
+      targets: [vortexText, textGlow], alpha: 1, y: cy - 150,
+      duration: 600, ease: 'Back.easeOut',
+    });
+    this.scene.tweens.add({
+      targets: textGlow,
+      alpha: { from: 0.4, to: 0.8 },
+      scaleX: { from: 1.0, to: 1.08 },
+      scaleY: { from: 1.0, to: 1.08 },
+      duration: 400, yoyo: true, repeat: -1, delay: 600,
+    });
+    this.scene.tweens.add({
+      targets: vortexText,
+      scaleX: { from: 0.97, to: 1.03 },
+      scaleY: { from: 0.97, to: 1.03 },
+      duration: 300, yoyo: true, repeat: -1, delay: 600,
+    });
+
+    // Countdown in final 5 seconds
+    this.scene.time.delayedCall(this.vortexDuration - 5000, () => {
+      if (!this.vortexActive || !this.scene) return;
+      for (let s = 5; s >= 1; s--) {
+        this.scene.time.delayedCall((5 - s) * 1000, () => {
+          if (!this.vortexActive || !this.scene) return;
+          const num = this.scene.add.text(cx, cy + 60, String(s), {
+            fontFamily: 'monospace', fontSize: '48px', color: '#ff4444', fontStyle: 'bold',
+          }).setOrigin(0.5).setAlpha(1).setDepth(905);
+          this.scene.tweens.add({
+            targets: num, alpha: 0, scaleX: 3, scaleY: 3,
+            duration: 800, ease: 'Power2', onComplete: () => num.destroy(),
+          });
+          this.scene.cameras.main.shake(200, 0.008 + (5 - s) * 0.004);
+        });
+      }
+    });
+  }
+
+  private updateVortexSwirl(time: number, elapsed: number) {
+    const cx = this.vortexCenter.x;
+    const cy = this.vortexCenter.y;
+
+    // Progressive acceleration (15s)
+    let speedMult: number;
+    if (elapsed < 1500) {
+      speedMult = (elapsed / 1500) * 0.5;
+    } else if (elapsed < 4000) {
+      speedMult = 0.5 + ((elapsed - 1500) / 2500) * 1.0;
+    } else if (elapsed < 9000) {
+      speedMult = 1.5 + ((elapsed - 4000) / 5000) * 1.5;
+    } else if (elapsed < 13000) {
+      speedMult = 3.0 + ((elapsed - 9000) / 4000) * 2.5;
+    } else {
+      speedMult = 5.5 - ((elapsed - 13000) / 2000) * 5.0;
+    }
+
+    const radiusShrink = Math.max(0.3, 1.0 - (speedMult / 5.0) * 0.7);
+
+    const agentArray = [...this.agents.entries()];
+    const count = agentArray.length;
+    if (count === 0) return;
+
+    for (let i = 0; i < count; i++) {
+      const [, agent] = agentArray[i];
+      const angleOffset = (i / count) * Math.PI * 2;
+      const baseAngle = (time / (800 / Math.max(speedMult, 0.1))) + angleOffset;
+
+      const layer = i % 4;
+      const radiusBase = 50 + layer * 35;
+      const radiusOsc = 30 * Math.sin(time / 1500 + i * 1.7);
+      const chaos = speedMult > 2.5 ? Math.sin(time / 300 + i * 3) * 15 : 0;
+      const radius = (radiusBase + radiusOsc + chaos) * radiusShrink;
+
+      const vertBob = Math.sin(time / 800 + i * 2) * 8 * speedMult;
+
+      const tx = cx + Math.cos(baseAngle) * radius;
+      const ty = cy + Math.sin(baseAngle) * radius * 0.55 + vertBob;
+
+      const lerp = Math.min(0.05 + speedMult * 0.03, 0.25);
+      agent.setPosition(
+        agent.x + (tx - agent.x) * lerp,
+        agent.y + (ty - agent.y) * lerp,
+      );
+    }
+  }
+
+  private endVortex() {
+    this.vortexActive = false;
+    const cx = this.vortexCenter.x;
+    const cy = this.vortexCenter.y;
+
+    // White-out flash
+    const whiteout = this.scene.add.rectangle(400, 240, 800, 480, 0xffffff, 0.9).setDepth(910);
+    this.scene.tweens.add({
+      targets: whiteout, alpha: 0, duration: 1200, ease: 'Power2',
+      onComplete: () => whiteout.destroy(),
+    });
+
+    // Implosion then explosion
+    const implode = this.scene.add.circle(cx, cy, 300, 0x8844ff, 0.5).setDepth(906);
+    this.scene.tweens.add({
+      targets: implode,
+      scaleX: 0.02, scaleY: 0.02, alpha: 1,
+      duration: 300, ease: 'Power3',
+      onComplete: () => {
+        implode.destroy();
+        const ring = this.scene.add.circle(cx, cy, 10, 0xffffff, 0.0)
+          .setStrokeStyle(6, 0xffffff, 0.9).setDepth(907);
+        this.scene.tweens.add({
+          targets: ring, scaleX: 30, scaleY: 20, alpha: 0,
+          duration: 800, ease: 'Power2', onComplete: () => ring.destroy(),
+        });
+      },
+    });
+
+    // Multi-ring particle explosion
+    const burstColors = [0x00ffff, 0xff00ff, 0x8844ff, 0xffff00, 0xffffff, 0xff4488, 0x44ff88, 0xffaa00];
+    for (let ring = 0; ring < 3; ring++) {
+      this.scene.time.delayedCall(ring * 100, () => {
+        if (!this.scene) return;
+        const particleCount = 20 + ring * 10;
+        for (let i = 0; i < particleCount; i++) {
+          const angle = (i / particleCount) * Math.PI * 2;
+          const dist = Phaser.Math.Between(120 + ring * 60, 300 + ring * 80);
+          const size = Phaser.Math.Between(2, 6 + ring * 2);
+          const p = this.scene.add.circle(cx, cy, size,
+            burstColors[Phaser.Math.Between(0, burstColors.length - 1)], 1.0,
+          ).setDepth(906);
+          this.scene.tweens.add({
+            targets: p,
+            x: cx + Math.cos(angle) * dist + Phaser.Math.Between(-30, 30),
+            y: cy + Math.sin(angle) * dist * 0.7 + Phaser.Math.Between(-20, 20),
+            alpha: 0, scaleX: 0.1, scaleY: 0.1,
+            duration: Phaser.Math.Between(500, 1200), ease: 'Power2',
+            onComplete: () => p.destroy(),
+          });
+        }
+      });
+    }
+
+    // Shockwave ripples
+    for (let i = 0; i < 4; i++) {
+      this.scene.time.delayedCall(i * 150, () => {
+        if (!this.scene) return;
+        const wave = this.scene.add.circle(cx, cy, 20, 0xffffff, 0.0)
+          .setStrokeStyle(3 - i * 0.5, [0xffffff, 0x00ffff, 0xff00ff, 0xffff00][i], 0.7)
+          .setDepth(906);
+        this.scene.tweens.add({
+          targets: wave, scaleX: 15 + i * 3, scaleY: 10 + i * 2, alpha: 0,
+          duration: 600, ease: 'Power2', onComplete: () => wave.destroy(),
+        });
+      });
+    }
+
+    this.scene.cameras.main.shake(1000, 0.025);
+
+    // Clean up visuals
+    for (const obj of this.vortexVisuals) {
+      this.scene.tweens.add({
+        targets: obj, alpha: 0, duration: 400,
+        onComplete: () => obj.destroy(),
+      });
+    }
+    this.vortexVisuals = [];
+
+    // Fling agents outward, then walk home
+    for (const [id, agent] of this.agents) {
+      const saved = this.preVortexPositions.get(id);
+      if (!saved) continue;
+
+      const angle = Math.atan2(agent.y - cy, agent.x - cx);
+      const flingDist = Phaser.Math.Between(80, 150);
+      agent.setPosition(
+        Phaser.Math.Clamp(agent.x + Math.cos(angle) * flingDist, 20, 780),
+        Phaser.Math.Clamp(agent.y + Math.sin(angle) * flingDist, 50, 460),
+      );
+
+      this.scene.time.delayedCall(Phaser.Math.Between(800, 1500), () => {
+        agent.moveTo(saved.x, saved.y);
+      });
+    }
+    this.preVortexPositions.clear();
   }
 
   private emitSparks(x: number, y: number, color: number, count = 5) {

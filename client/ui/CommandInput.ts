@@ -6,6 +6,7 @@ import { VALID_EMOTES } from '@shared/constants';
 const HELP_TEXT = [
   'Commands:',
   '  /emote <name> — trigger an emote (dance, jump, guitar, gun, laugh, wave, sleep, explode, dizzy, flex, rage, fart)',
+  '  /vortex — trigger a massive vortex that swirls all agents',
   '  /chat <msg> — send a chat message',
   '  /help — show this help',
   '  /logout — log out',
@@ -90,6 +91,9 @@ export class CommandInput {
       } else {
         this.showLocalMessage(`Unknown emote. Valid: ${VALID_EMOTES.join(', ')}`);
       }
+    } else if (value === '/vortex') {
+      fetch('/api/vortex', { method: 'POST' }).catch(() => {});
+      this.showLocalMessage('Vortex activated!');
     } else if (value.startsWith('/chat ')) {
       const message = value.slice(6).trim();
       if (message) {
