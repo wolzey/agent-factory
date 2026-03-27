@@ -156,9 +156,10 @@ export class AgentManager {
           this.zombieRising.delete(session.sessionId);
         });
       } else {
-        // New agent - spawn at entrance
+        // New agent - spawn at entrance with a random animation
         const entrance = this.layout.entrance;
         agent.setPosition(entrance.x, entrance.y);
+        agent.playSpawnAnimation();
       }
       this.agents.set(session.sessionId, agent);
     }

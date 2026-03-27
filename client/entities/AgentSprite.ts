@@ -527,6 +527,647 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     });
   }
 
+  // ── Spawn Animations ─────────────────────────────────────────────
+
+  playSpawnAnimation() {
+    const animations = [
+      () => this.spawnDropIn(),
+      () => this.spawnPixelAssemble(),
+      () => this.spawnPortal(),
+      () => this.spawnFlipIn(),
+      () => this.spawnGlitchIn(),
+    ];
+    const pick = animations[Phaser.Math.Between(0, animations.length - 1)];
+    pick();
+  }
+
+  /** Drop from above with bounce landing + shockwave + dust */
+  private spawnDropIn() {
+    const origY = this.sprite.y;
+    this.sprite.setY(origY - 200);
+    this.sprite.setAlpha(0);
+
+    // Bright falling trail
+    const trailColors = [0xffffff, 0x00ffff, 0xffff00];
+    const trailEvent = this.scene.time.addEvent({
+      delay: 40,
+      repeat: 12,
+      callback: () => {
+        if (!this.scene) return;
+        const t = this.scene.add.circle(
+          this.x + Phaser.Math.Between(-3, 3),
+          this.y + this.sprite.y + Phaser.Math.Between(-4, 4),
+          Phaser.Math.Between(2, 5),
+          trailColors[Phaser.Math.Between(0, 2)], 0.8,
+        ).setDepth(this.depth + 2);
+        this.scene.tweens.add({
+          targets: t,
+          alpha: 0,
+          scaleX: 0.2,
+          scaleY: 0.2,
+          y: t.y + Phaser.Math.Between(8, 20),
+          duration: 300,
+          onComplete: () => t.destroy(),
+        });
+      },
+    });
+
+    // Fade in as they fall
+    this.scene.tweens.add({
+      targets: this.sprite,
+      alpha: 1,
+      duration: 100,
+    });
+
+    this.scene.tweens.add({
+      targets: this.sprite,
+      y: origY,
+      duration: 700,
+      ease: 'Bounce.easeOut',
+      onComplete: () => {
+        trailEvent.destroy();
+
+        // Squash on land
+        this.scene.tweens.add({
+          targets: this.sprite,
+          scaleY: 1.2,
+          scaleX: 2.8,
+          duration: 100,
+          yoyo: true,
+          ease: 'Power1',
+        });
+
+        // Shockwave ring
+        const shockwave = this.scene.add.circle(this.x, this.y + 6, 4, 0xffffff, 0.0)
+          .setStrokeStyle(2, 0xffffff, 0.9).setDepth(this.depth + 2);
+        this.scene.tweens.add({
+          targets: shockwave,
+          scaleX: 12,
+          scaleY: 6,
+          alpha: 0,
+          duration: 500,
+          ease: 'Power2',
+          onComplete: () => shockwave.destroy(),
+        });
+
+        // Ground flash
+        const groundFlash = this.scene.add.circle(this.x, this.y + 4, 30, 0xffffff, 0.5)
+          .setDepth(this.depth + 1);
+        this.scene.tweens.add({
+          targets: groundFlash,
+          alpha: 0,
+          scaleX: 2,
+          scaleY: 1,
+          duration: 400,
+          onComplete: () => groundFlash.destroy(),
+        });
+
+        // Big dust cloud
+        for (let i = 0; i < 16; i++) {
+          const dust = this.scene.add.circle(
+            this.x + Phaser.Math.Between(-8, 8),
+            this.y + 6,
+            Phaser.Math.Between(2, 5), 0xcccccc, 0.7,
+          ).setDepth(this.depth + 1);
+          this.scene.tweens.add({
+            targets: dust,
+            x: dust.x + Phaser.Math.Between(-40, 40),
+            y: dust.y + Phaser.Math.Between(-15, 5),
+            alpha: 0,
+            scaleX: Phaser.Math.FloatBetween(0.3, 0.8),
+            scaleY: Phaser.Math.FloatBetween(0.3, 0.8),
+            duration: Phaser.Math.Between(400, 800),
+            ease: 'Power2',
+            onComplete: () => dust.destroy(),
+          });
+        }
+
+        // Sparkle burst
+        for (let i = 0; i < 8; i++) {
+          const spark = this.scene.add.circle(
+            this.x, this.y,
+            Phaser.Math.Between(1, 3), 0xffff88, 0.9,
+          ).setDepth(this.depth + 2);
+          const angle = (i / 8) * Math.PI * 2;
+          this.scene.tweens.add({
+            targets: spark,
+            x: this.x + Math.cos(angle) * 35,
+            y: this.y + Math.sin(angle) * 25,
+            alpha: 0,
+            duration: 500,
+            ease: 'Power2',
+            onComplete: () => spark.destroy(),
+          });
+        }
+      },
+    });
+
+    // Nametag and glow also fade in
+    this.nametag.setAlpha(0);
+    this.neonGlow.setAlpha(0);
+    this.scene.tweens.add({
+      targets: [this.nametag, this.neonGlow],
+      alpha: { from: 0, to: 1 },
+      duration: 400,
+      delay: 500,
+    });
+  }
+
+  /** Pixels assemble from scattered positions into the sprite */
+  private spawnPixelAssemble() {
+    this.sprite.setAlpha(0);
+    this.nametag.setAlpha(0);
+    this.neonGlow.setAlpha(0);
+
+    const colors = [0x00ffff, 0xff00ff, 0xffff00, 0x00ff66, 0xff4488, 0xffffff, 0x88aaff];
+
+    // Phase 1: scattered glowing pixels converge in waves
+    for (let wave = 0; wave < 3; wave++) {
+      for (let i = 0; i < 14; i++) {
+        this.scene.time.delayedCall(wave * 200, () => {
+          if (!this.scene) return;
+          const spread = 100 - wave * 15;
+          const p = this.scene.add.rectangle(
+            this.x + Phaser.Math.Between(-spread, spread),
+            this.y + Phaser.Math.Between(-spread, spread),
+            Phaser.Math.Between(3, 8),
+            Phaser.Math.Between(3, 8),
+            colors[Phaser.Math.Between(0, colors.length - 1)],
+            0.9,
+          ).setDepth(this.depth + 1);
+
+          // Converge to center
+          this.scene.tweens.add({
+            targets: p,
+            x: this.x + Phaser.Math.Between(-6, 6),
+            y: this.y + Phaser.Math.Between(-8, 4),
+            scaleX: 0.2,
+            scaleY: 0.2,
+            alpha: 0.4,
+            duration: Phaser.Math.Between(400, 700),
+            ease: 'Power3',
+            onComplete: () => p.destroy(),
+          });
+        });
+      }
+    }
+
+    // Orbiting sparkle ring during assembly
+    for (let i = 0; i < 16; i++) {
+      this.scene.time.delayedCall(i * 50, () => {
+        if (!this.scene) return;
+        const angle = (i / 16) * Math.PI * 2;
+        const r = 40;
+        const spark = this.scene.add.circle(
+          this.x + Math.cos(angle) * r,
+          this.y + Math.sin(angle) * r,
+          Phaser.Math.Between(1, 3), 0xffffff, 0.9,
+        ).setDepth(this.depth + 2);
+        this.scene.tweens.add({
+          targets: spark,
+          x: this.x + Math.cos(angle + Math.PI) * (r * 0.3),
+          y: this.y + Math.sin(angle + Math.PI) * (r * 0.3),
+          alpha: 0,
+          duration: 600,
+          ease: 'Power2',
+          onComplete: () => spark.destroy(),
+        });
+      });
+    }
+
+    // Pop in the sprite after pixels converge
+    this.scene.time.delayedCall(750, () => {
+      this.sprite.setAlpha(1);
+      this.sprite.setScale(0.2);
+      this.scene.tweens.add({
+        targets: this.sprite,
+        scaleX: 2.3,
+        scaleY: 2.3,
+        duration: 250,
+        ease: 'Back.easeOut',
+        onComplete: () => {
+          this.scene.tweens.add({
+            targets: this.sprite,
+            scaleX: 2,
+            scaleY: 2,
+            duration: 150,
+            ease: 'Sine.easeInOut',
+          });
+        },
+      });
+      this.scene.tweens.add({
+        targets: [this.nametag, this.neonGlow],
+        alpha: { from: 0, to: 1 },
+        duration: 300,
+      });
+
+      // Big bright flash
+      const flash = this.scene.add.circle(this.x, this.y, 30, 0xffffff, 0.7).setDepth(this.depth + 2);
+      this.scene.tweens.add({
+        targets: flash,
+        alpha: 0,
+        scaleX: 4,
+        scaleY: 4,
+        duration: 400,
+        onComplete: () => flash.destroy(),
+      });
+
+      // Starburst rays
+      for (let i = 0; i < 10; i++) {
+        const angle = (i / 10) * Math.PI * 2;
+        const ray = this.scene.add.rectangle(
+          this.x, this.y, 3, 12,
+          colors[Phaser.Math.Between(0, colors.length - 1)], 0.8,
+        ).setDepth(this.depth + 2).setAngle(Phaser.Math.RadToDeg(angle));
+        this.scene.tweens.add({
+          targets: ray,
+          x: this.x + Math.cos(angle) * 45,
+          y: this.y + Math.sin(angle) * 45,
+          alpha: 0,
+          scaleY: 0.3,
+          duration: 400,
+          ease: 'Power2',
+          onComplete: () => ray.destroy(),
+        });
+      }
+    });
+  }
+
+  /** Swirling portal opens, agent steps out */
+  private spawnPortal() {
+    this.sprite.setAlpha(0);
+    this.nametag.setAlpha(0);
+    this.neonGlow.setAlpha(0);
+
+    const portalColor = [0x8844ff, 0x4488ff, 0xff44aa][Phaser.Math.Between(0, 2)];
+    const portalColor2 = [0xaa66ff, 0x66bbff, 0xff66cc][Phaser.Math.Between(0, 2)];
+
+    // Outer glow
+    const outerGlow = this.scene.add.circle(this.x, this.y, 6, portalColor, 0.0).setDepth(this.depth + 1);
+    this.scene.tweens.add({
+      targets: outerGlow,
+      scaleX: 14,
+      scaleY: 14,
+      alpha: 0.15,
+      duration: 500,
+      ease: 'Power2',
+      onComplete: () => {
+        this.scene.tweens.add({
+          targets: outerGlow,
+          alpha: 0,
+          duration: 600,
+          onComplete: () => outerGlow.destroy(),
+        });
+      },
+    });
+
+    // Portal ring — thick and bright
+    const ring = this.scene.add.circle(this.x, this.y, 3, portalColor, 0.0).setDepth(this.depth + 2);
+    ring.setStrokeStyle(4, portalColor, 0.9);
+
+    // Inner ring
+    const innerRing = this.scene.add.circle(this.x, this.y, 2, portalColor2, 0.0).setDepth(this.depth + 2);
+    innerRing.setStrokeStyle(2, portalColor2, 0.7);
+
+    // Expand rings
+    this.scene.tweens.add({
+      targets: ring,
+      scaleX: 12,
+      scaleY: 12,
+      alpha: 0.8,
+      duration: 500,
+      ease: 'Power2',
+    });
+    this.scene.tweens.add({
+      targets: innerRing,
+      scaleX: 8,
+      scaleY: 8,
+      alpha: 0.6,
+      duration: 500,
+      ease: 'Power2',
+    });
+
+    // Swirling particles — two rings, more particles
+    for (let i = 0; i < 20; i++) {
+      this.scene.time.delayedCall(i * 35, () => {
+        if (!this.scene) return;
+        const angle = (i / 20) * Math.PI * 4; // double spiral
+        const radius = 35 + (i % 2) * 15;
+        const p = this.scene.add.circle(
+          this.x + Math.cos(angle) * radius,
+          this.y + Math.sin(angle) * radius,
+          Phaser.Math.Between(2, 4),
+          i % 2 === 0 ? portalColor : portalColor2, 0.9,
+        ).setDepth(this.depth + 2);
+
+        this.scene.tweens.add({
+          targets: p,
+          x: this.x + Math.cos(angle + Math.PI * 0.5) * 8,
+          y: this.y + Math.sin(angle + Math.PI * 0.5) * 8,
+          alpha: 0,
+          scaleX: 0.3,
+          scaleY: 0.3,
+          duration: 500,
+          ease: 'Power2',
+          onComplete: () => p.destroy(),
+        });
+      });
+    }
+
+    // Lightning/energy crackles
+    for (let i = 0; i < 6; i++) {
+      this.scene.time.delayedCall(100 + i * 80, () => {
+        if (!this.scene) return;
+        const a = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const r = Phaser.Math.Between(15, 35);
+        const bolt = this.scene.add.rectangle(
+          this.x + Math.cos(a) * r,
+          this.y + Math.sin(a) * r,
+          Phaser.Math.Between(8, 20), 2,
+          0xffffff, 0.9,
+        ).setDepth(this.depth + 3).setAngle(Phaser.Math.RadToDeg(a));
+        this.scene.tweens.add({
+          targets: bolt,
+          alpha: 0,
+          scaleX: 0.2,
+          duration: 150,
+          onComplete: () => bolt.destroy(),
+        });
+      });
+    }
+
+    // Agent emerges
+    this.scene.time.delayedCall(600, () => {
+      this.sprite.setAlpha(1);
+      this.sprite.setScale(0.05);
+
+      // Bright emergence flash
+      const flash = this.scene.add.circle(this.x, this.y, 20, 0xffffff, 0.8).setDepth(this.depth + 3);
+      this.scene.tweens.add({
+        targets: flash,
+        alpha: 0,
+        scaleX: 4,
+        scaleY: 4,
+        duration: 400,
+        onComplete: () => flash.destroy(),
+      });
+
+      this.scene.tweens.add({
+        targets: this.sprite,
+        scaleX: 2,
+        scaleY: 2,
+        duration: 500,
+        ease: 'Back.easeOut',
+      });
+      this.scene.tweens.add({
+        targets: [this.nametag, this.neonGlow],
+        alpha: { from: 0, to: 1 },
+        duration: 300,
+        delay: 200,
+      });
+
+      // Rings collapse with flash
+      this.scene.tweens.add({
+        targets: [ring, innerRing],
+        scaleX: 0,
+        scaleY: 0,
+        alpha: 0,
+        duration: 400,
+        ease: 'Power3',
+        onComplete: () => { ring.destroy(); innerRing.destroy(); },
+      });
+    });
+  }
+
+  /** Flip in from 2D edge like a card being dealt */
+  private spawnFlipIn() {
+    this.nametag.setAlpha(0);
+    this.neonGlow.setAlpha(0);
+
+    // Start as a thin line (scaleX near 0) off to the side
+    const fromLeft = Phaser.Math.Between(0, 1) === 0;
+    const dir = fromLeft ? -1 : 1;
+    this.sprite.setScale(0.1, 2);
+    this.sprite.setX(dir * -60);
+    this.sprite.setAngle(dir * -30);
+
+    // Speed lines behind the sprite
+    const speedLineColors = [0x00ffff, 0x44ffff, 0xffffff];
+    for (let i = 0; i < 10; i++) {
+      this.scene.time.delayedCall(i * 40, () => {
+        if (!this.scene) return;
+        const trail = this.scene.add.rectangle(
+          this.x + this.sprite.x + (dir * (-15 - i * 10)),
+          this.y + Phaser.Math.Between(-8, 8),
+          Phaser.Math.Between(10, 25), Phaser.Math.Between(2, 4),
+          speedLineColors[Phaser.Math.Between(0, 2)], 0.7,
+        ).setDepth(this.depth + 1);
+        this.scene.tweens.add({
+          targets: trail,
+          alpha: 0,
+          scaleX: 0.05,
+          x: trail.x + dir * -20,
+          duration: 350,
+          ease: 'Power2',
+          onComplete: () => trail.destroy(),
+        });
+      });
+    }
+
+    // Slide + flip with more drama
+    this.scene.tweens.add({
+      targets: this.sprite,
+      scaleX: 2,
+      x: 0,
+      angle: 0,
+      duration: 550,
+      ease: 'Back.easeOut',
+      onComplete: () => {
+        // Overshoot wobble
+        this.scene.tweens.add({
+          targets: this.sprite,
+          scaleX: 2.4,
+          duration: 100,
+          yoyo: true,
+          ease: 'Sine.easeInOut',
+        });
+
+        // Arrival flash
+        const flash = this.scene.add.circle(this.x, this.y, 20, 0x00ffff, 0.6).setDepth(this.depth + 2);
+        this.scene.tweens.add({
+          targets: flash,
+          alpha: 0,
+          scaleX: 3,
+          scaleY: 3,
+          duration: 350,
+          onComplete: () => flash.destroy(),
+        });
+
+        // Sparkle burst on arrival
+        for (let i = 0; i < 10; i++) {
+          const spark = this.scene.add.circle(
+            this.x, this.y,
+            Phaser.Math.Between(1, 3), 0x00ffff, 0.9,
+          ).setDepth(this.depth + 2);
+          const angle = (i / 10) * Math.PI * 2;
+          this.scene.tweens.add({
+            targets: spark,
+            x: this.x + Math.cos(angle) * Phaser.Math.Between(20, 40),
+            y: this.y + Math.sin(angle) * Phaser.Math.Between(15, 30),
+            alpha: 0,
+            duration: Phaser.Math.Between(300, 500),
+            ease: 'Power2',
+            onComplete: () => spark.destroy(),
+          });
+        }
+      },
+    });
+
+    this.scene.tweens.add({
+      targets: [this.nametag, this.neonGlow],
+      alpha: { from: 0, to: 1 },
+      duration: 300,
+      delay: 450,
+    });
+  }
+
+  /** Glitch/static effect — sprite flickers in with scan lines */
+  private spawnGlitchIn() {
+    this.nametag.setAlpha(0);
+    this.neonGlow.setAlpha(0);
+    this.sprite.setAlpha(0);
+
+    const glitchColors = [0x00ffff, 0xff00ff, 0xffff00];
+
+    // Static noise field around spawn point
+    for (let i = 0; i < 12; i++) {
+      this.scene.time.delayedCall(i * 60, () => {
+        if (!this.scene) return;
+        const noise = this.scene.add.rectangle(
+          this.x + Phaser.Math.Between(-30, 30),
+          this.y + Phaser.Math.Between(-25, 15),
+          Phaser.Math.Between(4, 16), Phaser.Math.Between(2, 6),
+          glitchColors[Phaser.Math.Between(0, 2)], 0.5,
+        ).setDepth(this.depth + 1);
+        this.scene.tweens.add({
+          targets: noise,
+          alpha: 0,
+          x: noise.x + Phaser.Math.Between(-10, 10),
+          duration: 200,
+          onComplete: () => noise.destroy(),
+        });
+      });
+    }
+
+    // Rapid flicker with random offset + tint — more intense
+    let flickerCount = 0;
+    const flickerEvent = this.scene.time.addEvent({
+      delay: 45,
+      repeat: 18,
+      callback: () => {
+        flickerCount++;
+        if (flickerCount % 2 === 0) {
+          this.sprite.setAlpha(Phaser.Math.FloatBetween(0.6, 1.0));
+          this.sprite.setX(Phaser.Math.Between(-8, 8));
+          this.sprite.setY(Phaser.Math.Between(-3, 3));
+          this.sprite.setTint(glitchColors[Phaser.Math.Between(0, 2)]);
+        } else {
+          this.sprite.setAlpha(Phaser.Math.FloatBetween(0.1, 0.4));
+          this.sprite.setX(Phaser.Math.Between(-4, 4));
+          this.sprite.setY(0);
+        }
+
+        // Big scanline artifacts
+        if (flickerCount % 2 === 0) {
+          const line = this.scene.add.rectangle(
+            this.x + Phaser.Math.Between(-20, 20),
+            this.y + Phaser.Math.Between(-18, 12),
+            Phaser.Math.Between(20, 50), Phaser.Math.Between(2, 4),
+            glitchColors[Phaser.Math.Between(0, 2)], 0.7,
+          ).setDepth(this.depth + 2);
+          this.scene.tweens.add({
+            targets: line,
+            alpha: 0,
+            scaleX: 0.05,
+            duration: 180,
+            onComplete: () => line.destroy(),
+          });
+        }
+
+        // Chromatic aberration — ghost copies
+        if (flickerCount % 4 === 0 && flickerCount < 14) {
+          for (const [color, offsetX] of [[0xff0000, -6], [0x0000ff, 6]] as [number, number][]) {
+            const ghost = this.scene.add.circle(
+              this.x + offsetX + Phaser.Math.Between(-3, 3),
+              this.y + Phaser.Math.Between(-8, 4),
+              Phaser.Math.Between(8, 14), color, 0.3,
+            ).setDepth(this.depth + 1);
+            this.scene.tweens.add({
+              targets: ghost,
+              alpha: 0,
+              scaleX: 1.5,
+              scaleY: 1.5,
+              duration: 200,
+              onComplete: () => ghost.destroy(),
+            });
+          }
+        }
+      },
+    });
+
+    // Settle into place
+    this.scene.time.delayedCall(900, () => {
+      flickerEvent.destroy();
+      this.sprite.setAlpha(1);
+      this.sprite.setX(0);
+      this.sprite.setY(0);
+      this.sprite.clearTint();
+
+      // Restore original tint if avatar had one
+      if (this.sessionData.avatar?.color && this.sessionData.avatar.hairStyle === undefined) {
+        const hex = parseInt(this.sessionData.avatar.color.replace('#', ''), 16);
+        if (!isNaN(hex)) this.sprite.setTint(hex);
+      }
+
+      this.scene.tweens.add({
+        targets: [this.nametag, this.neonGlow],
+        alpha: { from: 0, to: 1 },
+        duration: 300,
+      });
+
+      // Big "lock in" flash + shockwave
+      const flash = this.scene.add.circle(this.x, this.y, 25, 0xffffff, 0.7).setDepth(this.depth + 3);
+      this.scene.tweens.add({
+        targets: flash,
+        alpha: 0,
+        scaleX: 3.5,
+        scaleY: 3.5,
+        duration: 350,
+        onComplete: () => flash.destroy(),
+      });
+
+      // Digital sparks scatter outward
+      for (let i = 0; i < 8; i++) {
+        const spark = this.scene.add.rectangle(
+          this.x, this.y,
+          Phaser.Math.Between(3, 8), Phaser.Math.Between(2, 4),
+          glitchColors[Phaser.Math.Between(0, 2)], 0.9,
+        ).setDepth(this.depth + 2);
+        const angle = (i / 8) * Math.PI * 2;
+        this.scene.tweens.add({
+          targets: spark,
+          x: this.x + Math.cos(angle) * 35,
+          y: this.y + Math.sin(angle) * 25,
+          alpha: 0,
+          angle: Phaser.Math.Between(-90, 90),
+          duration: 400,
+          ease: 'Power2',
+          onComplete: () => spark.destroy(),
+        });
+      }
+    });
+  }
+
   // ── Emotes ───────────────────────────────────────────────────────
 
   playEmote(emote: string) {
