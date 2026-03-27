@@ -74,7 +74,7 @@ export class CommandInput {
   private createDOM(): HTMLDivElement {
     const el = document.createElement('div');
     el.id = 'command-input';
-    el.innerHTML = `<span class="prompt-char">&gt;</span><input type="text" placeholder="Type a command or message..." autocomplete="off" spellcheck="false" />`;
+    el.innerHTML = `<span class="prompt-char">&gt;</span><input type="text" placeholder="message or /command..." autocomplete="off" spellcheck="false" /><span class="hint">Tab ↹</span>`;
 
     const input = el.querySelector('input') as HTMLInputElement;
 
@@ -171,6 +171,15 @@ export class CommandInput {
 
   private renderSuggestions(): void {
     this.suggestionsEl.innerHTML = '';
+
+    // Header
+    const value = this.input.value;
+    const isEmoteSub = value.startsWith('/emote ');
+    const header = document.createElement('div');
+    header.className = 'suggestions-header';
+    header.textContent = isEmoteSub ? 'emotes' : 'commands';
+    this.suggestionsEl.appendChild(header);
+
     this.suggestions.forEach((s, i) => {
       const div = document.createElement('div');
       div.className = 'suggestion' + (i === this.activeIndex ? ' active' : '');
