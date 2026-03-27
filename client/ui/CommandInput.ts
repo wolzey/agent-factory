@@ -3,9 +3,30 @@ import type { SocketClient } from '../network/socket';
 import type { ChatMessage } from '@shared/types';
 import { VALID_EMOTES } from '@shared/constants';
 
+interface CommandDef {
+  cmd: string;
+  desc: string;
+  hasArg?: boolean;
+}
+
+const COMMANDS: CommandDef[] = [
+  { cmd: '/emote', desc: 'trigger an emote', hasArg: true },
+  { cmd: '/vortex', desc: 'swirl all agents in a vortex' },
+  { cmd: '/chat', desc: 'send a chat message', hasArg: true },
+  { cmd: '/help', desc: 'show available commands' },
+  { cmd: '/logout', desc: 'log out' },
+];
+
+const EMOTE_DESCRIPTIONS: Record<string, string> = {
+  dance: 'rainbow sway', jump: 'bounce!', guitar: 'rock out',
+  gun: 'pew pew', laugh: 'haha', wave: 'say hi',
+  sleep: 'zzz', explode: 'kaboom', dizzy: 'spinning',
+  flex: 'show off', rage: 'angry stomp', fart: 'toot',
+};
+
 const HELP_TEXT = [
   'Commands:',
-  '  /emote <name> — trigger an emote (dance, jump, guitar, gun, laugh, wave, sleep, explode, dizzy, flex, rage, fart)',
+  '  /emote <name> — trigger an emote',
   '  /vortex — trigger a massive vortex that swirls all agents',
   '  /chat <msg> — send a chat message',
   '  /help — show this help',
@@ -14,10 +35,15 @@ const HELP_TEXT = [
 ].join('\n');
 
 export class CommandInput {
-  private container: HTMLDivElement;
+  private inputRow: HTMLDivElement;
+  private loginHint: HTMLDivElement;
   private input: HTMLInputElement;
+  private suggestionsEl: HTMLDivElement;
   private history: string[] = [];
   private historyIndex = -1;
+  private suggestions: { text: string; desc: string }[] = [];
+  private activeIndex = -1;
+  private loggedIn = false;
 
   constructor(
     private auth: AuthManager,
@@ -25,62 +51,199 @@ export class CommandInput {
     private onChat: (chat: ChatMessage) => void,
     private onLogout: () => void,
   ) {
-    this.container = this.createDOM();
-    this.input = this.container.querySelector('input') as HTMLInputElement;
-    document.body.appendChild(this.container);
-    this.hide();
+    this.inputRow = this.createInputRow();
+    this.loginHint = this.createLoginHint();
+    this.input = this.inputRow.querySelector('input') as HTMLInputElement;
+    this.suggestionsEl = this.createSuggestionsEl();
+    document.body.appendChild(this.suggestionsEl);
+  }
+
+  /** Attach input row and login hint to the chat panel container */
+  attachTo(panel: HTMLDivElement): void {
+    panel.appendChild(this.loginHint);
+    panel.appendChild(this.inputRow);
+    this.updateVisibility();
   }
 
   show(): void {
-    this.container.style.display = 'flex';
+    this.loggedIn = true;
+    this.updateVisibility();
   }
 
   hide(): void {
-    this.container.style.display = 'none';
+    this.loggedIn = false;
+    this.updateVisibility();
+    this.hideSuggestions();
   }
 
-  private createDOM(): HTMLDivElement {
+  private updateVisibility(): void {
+    // Input is always visible — login hint shows above it when not authenticated
+    this.inputRow.style.display = 'flex';
+    this.loginHint.style.display = this.loggedIn ? 'none' : 'block';
+  }
+
+  private createLoginHint(): HTMLDivElement {
     const el = document.createElement('div');
-    el.id = 'command-input';
-    el.innerHTML = `<span class="prompt-char">&gt;</span><input type="text" placeholder="Type a command or message..." autocomplete="off" spellcheck="false" />`;
+    el.className = 'chat-login-hint';
+    el.innerHTML = '<a id="chat-login-link">log in</a> to chat';
+    el.querySelector('a')!.addEventListener('click', () => {
+      // Click the main login button
+      const btn = document.getElementById('login-btn');
+      if (btn) btn.click();
+    });
+    return el;
+  }
+
+  private createSuggestionsEl(): HTMLDivElement {
+    const el = document.createElement('div');
+    el.id = 'command-suggestions';
+    el.addEventListener('mousedown', (e) => e.preventDefault());
+    return el;
+  }
+
+  private createInputRow(): HTMLDivElement {
+    const el = document.createElement('div');
+    el.className = 'chat-input-row';
+    el.innerHTML = `<span class="prompt-char">&gt;</span><input type="text" placeholder="/help for commands..." autocomplete="off" spellcheck="false" /><span class="hint">Tab ↹</span>`;
 
     const input = el.querySelector('input') as HTMLInputElement;
 
-    // Prevent Phaser from capturing keystrokes
     input.addEventListener('keydown', (e) => {
       e.stopPropagation();
 
       if (e.key === 'Enter') {
+        if (this.activeIndex >= 0 && this.suggestions.length > 0) {
+          this.applySuggestion(this.suggestions[this.activeIndex]);
+          e.preventDefault();
+          return;
+        }
         const value = input.value.trim();
         if (value) {
           this.handleCommand(value);
           this.history.push(value);
           this.historyIndex = this.history.length;
           input.value = '';
+          this.hideSuggestions();
+        }
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        if (this.suggestions.length > 0) {
+          const idx = this.activeIndex >= 0 ? this.activeIndex : 0;
+          this.applySuggestion(this.suggestions[idx]);
         }
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        if (this.historyIndex > 0) {
+        if (this.suggestions.length > 0) {
+          this.activeIndex = this.activeIndex <= 0 ? this.suggestions.length - 1 : this.activeIndex - 1;
+          this.renderSuggestions();
+        } else if (this.historyIndex > 0) {
           this.historyIndex--;
           input.value = this.history[this.historyIndex];
         }
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
-        if (this.historyIndex < this.history.length - 1) {
+        if (this.suggestions.length > 0) {
+          this.activeIndex = this.activeIndex >= this.suggestions.length - 1 ? 0 : this.activeIndex + 1;
+          this.renderSuggestions();
+        } else if (this.historyIndex < this.history.length - 1) {
           this.historyIndex++;
           input.value = this.history[this.historyIndex];
         } else {
           this.historyIndex = this.history.length;
           input.value = '';
         }
+      } else if (e.key === 'Escape') {
+        this.hideSuggestions();
       }
     });
 
-    // Also stop keyup/keypress propagation
+    input.addEventListener('input', () => this.updateSuggestions());
+    input.addEventListener('focus', () => this.positionSuggestions());
     input.addEventListener('keyup', (e) => e.stopPropagation());
     input.addEventListener('keypress', (e) => e.stopPropagation());
 
     return el;
+  }
+
+  private positionSuggestions(): void {
+    const rect = this.inputRow.getBoundingClientRect();
+    this.suggestionsEl.style.bottom = `${window.innerHeight - rect.top + 4}px`;
+  }
+
+  private updateSuggestions(): void {
+    const value = this.input.value;
+
+    if (!value.startsWith('/')) {
+      this.hideSuggestions();
+      return;
+    }
+
+    const parts = value.split(' ');
+    const cmd = parts[0].toLowerCase();
+
+    if (parts.length === 1) {
+      this.suggestions = COMMANDS
+        .filter(c => c.cmd.startsWith(cmd))
+        .map(c => ({ text: c.cmd, desc: c.desc }));
+    } else if (cmd === '/emote' && parts.length === 2) {
+      const partial = parts[1].toLowerCase();
+      this.suggestions = (VALID_EMOTES as string[])
+        .filter(e => e.startsWith(partial))
+        .map(e => ({ text: `/emote ${e}`, desc: EMOTE_DESCRIPTIONS[e] || '' }));
+    } else {
+      this.hideSuggestions();
+      return;
+    }
+
+    if (this.suggestions.length === 0) {
+      this.hideSuggestions();
+      return;
+    }
+
+    this.activeIndex = 0;
+    this.positionSuggestions();
+    this.renderSuggestions();
+    this.suggestionsEl.style.display = 'block';
+  }
+
+  private renderSuggestions(): void {
+    this.suggestionsEl.innerHTML = '';
+
+    const value = this.input.value;
+    const isEmoteSub = value.startsWith('/emote ');
+    const header = document.createElement('div');
+    header.className = 'suggestions-header';
+    header.textContent = isEmoteSub ? 'emotes' : 'commands';
+    this.suggestionsEl.appendChild(header);
+
+    this.suggestions.forEach((s, i) => {
+      const div = document.createElement('div');
+      div.className = 'suggestion' + (i === this.activeIndex ? ' active' : '');
+      div.innerHTML = `<span class="cmd">${s.text}</span><span class="desc">${s.desc}</span>`;
+      div.addEventListener('click', () => this.applySuggestion(s));
+      this.suggestionsEl.appendChild(div);
+    });
+
+    const active = this.suggestionsEl.querySelector('.active') as HTMLElement;
+    if (active) active.scrollIntoView({ block: 'nearest' });
+  }
+
+  private applySuggestion(s: { text: string; desc: string }): void {
+    const cmd = COMMANDS.find(c => s.text.startsWith(c.cmd));
+    if (cmd?.hasArg && s.text === cmd.cmd) {
+      this.input.value = s.text + ' ';
+      this.updateSuggestions();
+    } else {
+      this.input.value = s.text;
+      this.hideSuggestions();
+    }
+    this.input.focus();
+  }
+
+  private hideSuggestions(): void {
+    this.suggestionsEl.style.display = 'none';
+    this.suggestions = [];
+    this.activeIndex = -1;
   }
 
   private handleCommand(value: string): void {
@@ -108,7 +271,6 @@ export class CommandInput {
     } else if (value.startsWith('/')) {
       this.showLocalMessage(`Unknown command. Type /help for available commands.`);
     } else {
-      // Bare text = chat
       this.socket.send({ type: 'chat', message: value });
     }
   }

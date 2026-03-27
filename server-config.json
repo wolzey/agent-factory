@@ -1,5 +1,6 @@
 {
   "title": "Order Protection",
   "graphicDeath": true,
-  "environment": "office"
+  "environment": "office",
+  "tokenSecret": "564b86e0ca7e99f93091b6dd94367590f1916666c0714a2f428bd5cbf11cbf51"
 }

@@ -59,6 +59,7 @@ export class FactoryScene extends Phaser.Scene {
       (chat) => this.chatOverlay.addMessage(chat),
       () => this.loginOverlay.showLoggedOut(),
     );
+    this.commandInput.attachTo(this.chatOverlay.getContainer());
 
     this.loginOverlay = new LoginOverlay(
       this.authManager,
