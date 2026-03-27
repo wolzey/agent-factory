@@ -11,6 +11,7 @@ interface CommandDef {
 
 const COMMANDS: CommandDef[] = [
   { cmd: '/emote', desc: 'trigger an emote', hasArg: true },
+  { cmd: '/vortex', desc: 'swirl all agents in a vortex' },
   { cmd: '/chat', desc: 'send a chat message', hasArg: true },
   { cmd: '/help', desc: 'show available commands' },
   { cmd: '/logout', desc: 'log out' },
@@ -26,6 +27,7 @@ const EMOTE_DESCRIPTIONS: Record<string, string> = {
 const HELP_TEXT = [
   'Commands:',
   '  /emote <name> — trigger an emote',
+  '  /vortex — trigger a massive vortex that swirls all agents',
   '  /chat <msg> — send a chat message',
   '  /help — show this help',
   '  /logout — log out',
@@ -252,6 +254,9 @@ export class CommandInput {
       } else {
         this.showLocalMessage(`Unknown emote. Valid: ${VALID_EMOTES.join(', ')}`);
       }
+    } else if (value === '/vortex') {
+      fetch('/api/vortex', { method: 'POST' }).catch(() => {});
+      this.showLocalMessage('Vortex activated!');
     } else if (value.startsWith('/chat ')) {
       const message = value.slice(6).trim();
       if (message) {

@@ -1,5 +1,5 @@
 import type { WebSocket } from '@fastify/websocket';
-import type { WSMessageToClient, AgentSession, EffectType, ChatMessage } from '../../shared/types.js';
+import type { WSMessageToClient, AgentSession, EffectType, ChatMessage, GlobalEffectType } from '../../shared/types.js';
 
 interface SocketMeta {
   username?: string;
@@ -47,6 +47,10 @@ export class BroadcastManager {
 
   broadcastEffect(sessionId: string, effect: EffectType, data?: Record<string, unknown>) {
     this.broadcast({ type: 'effect', sessionId, effect, data });
+  }
+
+  broadcastGlobalEffect(effect: GlobalEffectType, data?: Record<string, unknown>) {
+    this.broadcast({ type: 'global_effect', effect, data });
   }
 
   broadcastChatMessage(chat: ChatMessage) {
