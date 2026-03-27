@@ -1,5 +1,4 @@
 import type { ChatMessage } from '@shared/types';
-import { CHAT_FADE_TIMEOUT_MS } from '@shared/constants';
 
 const MAX_DOM_MESSAGES = 100;
 const USER_COLORS = 8;
@@ -7,28 +6,26 @@ const USER_COLORS = 8;
 export class ChatOverlay {
   private container: HTMLDivElement;
   private messageList: HTMLDivElement;
-  private fadeTimer: ReturnType<typeof setTimeout> | null = null;
-  private hovered = false;
+  private emptyEl: HTMLDivElement;
   private userColorMap = new Map<string, number>();
   private nextColorIndex = 0;
 
   constructor() {
     this.container = this.createDOM();
     this.messageList = this.container.querySelector('.chat-messages')!;
+    this.emptyEl = this.container.querySelector('.chat-empty')!;
     document.body.appendChild(this.container);
+  }
 
-    this.container.addEventListener('mouseenter', () => {
-      this.hovered = true;
-      if (this.fadeTimer) clearTimeout(this.fadeTimer);
-    });
-
-    this.container.addEventListener('mouseleave', () => {
-      this.hovered = false;
-      this.resetFadeTimer();
-    });
+  /** Returns the container element so CommandInput can embed its input row */
+  getContainer(): HTMLDivElement {
+    return this.container;
   }
 
   addMessage(chat: ChatMessage) {
+    // Hide empty placeholder
+    this.emptyEl.style.display = 'none';
+
     const el = document.createElement('div');
     el.className = 'chat-msg';
 
@@ -62,17 +59,15 @@ export class ChatOverlay {
 
     this.messageList.appendChild(el);
 
-    while (this.messageList.children.length > MAX_DOM_MESSAGES) {
-      this.messageList.removeChild(this.messageList.firstChild!);
+    while (this.messageList.children.length > MAX_DOM_MESSAGES + 1) {
+      // +1 for the empty placeholder
+      this.messageList.removeChild(this.messageList.children[1]!);
     }
 
     const { scrollHeight, scrollTop, clientHeight } = this.messageList;
     if (scrollHeight - scrollTop - clientHeight < 30) {
       this.messageList.scrollTop = scrollHeight;
     }
-
-    this.show();
-    this.resetFadeTimer();
   }
 
   private getUserColor(username: string): number {
@@ -84,50 +79,27 @@ export class ChatOverlay {
   }
 
   private highlightMessage(text: string): string {
-    // Escape HTML
     let safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-    // Highlight /commands
     safe = safe.replace(/(\/\w+)/g, '<span class="hl-cmd">$1</span>');
-
-    // Highlight :emotes:
     safe = safe.replace(/:(\w+):/g, '<span class="hl-emote">:$1:</span>');
-
-    // Highlight @mentions
     safe = safe.replace(/@(\w+)/g, '<span class="hl-mention">@$1</span>');
-
     return safe;
   }
 
-  private show() {
-    this.container.classList.remove('chat-hidden');
-    this.container.classList.add('chat-visible');
-  }
-
-  private hide() {
-    this.container.classList.remove('chat-visible');
-    this.container.classList.add('chat-hidden');
-  }
-
-  private resetFadeTimer() {
-    if (this.fadeTimer) clearTimeout(this.fadeTimer);
-    if (this.hovered) return;
-    this.fadeTimer = setTimeout(() => this.hide(), CHAT_FADE_TIMEOUT_MS);
-  }
-
   private createDOM(): HTMLDivElement {
-    const existing = document.getElementById('chat-overlay');
+    const existing = document.getElementById('chat-panel');
     if (existing) existing.remove();
 
     const el = document.createElement('div');
-    el.id = 'chat-overlay';
-    el.className = 'chat-hidden';
+    el.id = 'chat-panel';
     el.innerHTML = `
       <div class="chat-header">
         <span class="chat-label">chat</span>
-        <span>tab to focus</span>
+        <span>/ for commands</span>
       </div>
-      <div class="chat-messages"></div>
+      <div class="chat-messages">
+        <div class="chat-empty">no messages yet — say something!</div>
+      </div>
     `;
     return el;
   }

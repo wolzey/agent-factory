@@ -25,7 +25,7 @@ const EMOTE_DESCRIPTIONS: Record<string, string> = {
 
 const HELP_TEXT = [
   'Commands:',
-  '  /emote <name> — trigger an emote (dance, jump, guitar, gun, laugh, wave, sleep, explode, dizzy, flex, rage, fart)',
+  '  /emote <name> — trigger an emote',
   '  /chat <msg> — send a chat message',
   '  /help — show this help',
   '  /logout — log out',
@@ -33,13 +33,15 @@ const HELP_TEXT = [
 ].join('\n');
 
 export class CommandInput {
-  private container: HTMLDivElement;
+  private inputRow: HTMLDivElement;
+  private loginHint: HTMLDivElement;
   private input: HTMLInputElement;
   private suggestionsEl: HTMLDivElement;
   private history: string[] = [];
   private historyIndex = -1;
   private suggestions: { text: string; desc: string }[] = [];
   private activeIndex = -1;
+  private loggedIn = false;
 
   constructor(
     private auth: AuthManager,
@@ -47,21 +49,47 @@ export class CommandInput {
     private onChat: (chat: ChatMessage) => void,
     private onLogout: () => void,
   ) {
-    this.container = this.createDOM();
-    this.input = this.container.querySelector('input') as HTMLInputElement;
+    this.inputRow = this.createInputRow();
+    this.loginHint = this.createLoginHint();
+    this.input = this.inputRow.querySelector('input') as HTMLInputElement;
     this.suggestionsEl = this.createSuggestionsEl();
-    document.body.appendChild(this.container);
     document.body.appendChild(this.suggestionsEl);
-    this.hide();
+  }
+
+  /** Attach input row and login hint to the chat panel container */
+  attachTo(panel: HTMLDivElement): void {
+    panel.appendChild(this.loginHint);
+    panel.appendChild(this.inputRow);
+    this.updateVisibility();
   }
 
   show(): void {
-    this.container.style.display = 'flex';
+    this.loggedIn = true;
+    this.updateVisibility();
   }
 
   hide(): void {
-    this.container.style.display = 'none';
+    this.loggedIn = false;
+    this.updateVisibility();
     this.hideSuggestions();
+  }
+
+  private updateVisibility(): void {
+    // Input is always visible — login hint shows above it when not authenticated
+    this.inputRow.style.display = 'flex';
+    this.loginHint.style.display = this.loggedIn ? 'none' : 'block';
+  }
+
+  private createLoginHint(): HTMLDivElement {
+    const el = document.createElement('div');
+    el.className = 'chat-login-hint';
+    el.innerHTML = '<a id="chat-login-link">log in</a> to chat';
+    el.querySelector('a')!.addEventListener('click', () => {
+      // Click the main login button
+      const btn = document.getElementById('login-btn');
+      if (btn) btn.click();
+    });
+    return el;
   }
 
   private createSuggestionsEl(): HTMLDivElement {
@@ -71,10 +99,10 @@ export class CommandInput {
     return el;
   }
 
-  private createDOM(): HTMLDivElement {
+  private createInputRow(): HTMLDivElement {
     const el = document.createElement('div');
-    el.id = 'command-input';
-    el.innerHTML = `<span class="prompt-char">&gt;</span><input type="text" placeholder="message or /command..." autocomplete="off" spellcheck="false" /><span class="hint">Tab ↹</span>`;
+    el.className = 'chat-input-row';
+    el.innerHTML = `<span class="prompt-char">&gt;</span><input type="text" placeholder="/help for commands..." autocomplete="off" spellcheck="false" /><span class="hint">Tab ↹</span>`;
 
     const input = el.querySelector('input') as HTMLInputElement;
 
@@ -128,10 +156,16 @@ export class CommandInput {
     });
 
     input.addEventListener('input', () => this.updateSuggestions());
+    input.addEventListener('focus', () => this.positionSuggestions());
     input.addEventListener('keyup', (e) => e.stopPropagation());
     input.addEventListener('keypress', (e) => e.stopPropagation());
 
     return el;
+  }
+
+  private positionSuggestions(): void {
+    const rect = this.inputRow.getBoundingClientRect();
+    this.suggestionsEl.style.bottom = `${window.innerHeight - rect.top + 4}px`;
   }
 
   private updateSuggestions(): void {
@@ -165,6 +199,7 @@ export class CommandInput {
     }
 
     this.activeIndex = 0;
+    this.positionSuggestions();
     this.renderSuggestions();
     this.suggestionsEl.style.display = 'block';
   }
@@ -172,7 +207,6 @@ export class CommandInput {
   private renderSuggestions(): void {
     this.suggestionsEl.innerHTML = '';
 
-    // Header
     const value = this.input.value;
     const isEmoteSub = value.startsWith('/emote ');
     const header = document.createElement('div');
