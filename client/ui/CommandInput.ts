@@ -168,6 +168,8 @@ export class CommandInput {
   private positionSuggestions(): void {
     const rect = this.inputRow.getBoundingClientRect();
     this.suggestionsEl.style.bottom = `${window.innerHeight - rect.top + 4}px`;
+    this.suggestionsEl.style.left = `${rect.left}px`;
+    this.suggestionsEl.style.width = `${rect.width}px`;
   }
 
   private updateSuggestions(): void {
