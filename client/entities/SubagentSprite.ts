@@ -55,7 +55,7 @@ export class SubagentSprite extends Phaser.GameObjects.Container {
 
     const spriteKey = `agent_${spriteIndex % 8}`;
     this.sprite = scene.add.sprite(0, 0, spriteKey, 1);
-    this.sprite.setScale(1.2);
+    this.sprite.setScale(0.5);
     this.sprite.setOrigin(0.5, 0.5);
     this.sprite.setTint(tint);
     this.sprite.setAlpha(isZombie ? 0.75 : 0.85);

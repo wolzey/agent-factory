@@ -64,7 +64,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
 
     // Character sprite
     this.sprite = scene.add.sprite(0, 0, this.spriteKey, 1);
-    this.sprite.setScale(2);
+    this.sprite.setScale(1);
     this.sprite.setOrigin(0.5, 0.5);
     this.add(this.sprite);
 
@@ -594,8 +594,8 @@ export class AgentSprite extends Phaser.GameObjects.Container {
         // Squash on land
         this.scene.tweens.add({
           targets: this.sprite,
-          scaleY: 1.2,
-          scaleX: 2.8,
+          scaleY: 0.6,
+          scaleX: 1.4,
           duration: 100,
           yoyo: true,
           ease: 'Power1',
@@ -742,18 +742,18 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     // Pop in the sprite after pixels converge
     this.scene.time.delayedCall(750, () => {
       this.sprite.setAlpha(1);
-      this.sprite.setScale(0.2);
+      this.sprite.setScale(0.1);
       this.scene.tweens.add({
         targets: this.sprite,
-        scaleX: 2.3,
-        scaleY: 2.3,
+        scaleX: 1.15,
+        scaleY: 1.15,
         duration: 250,
         ease: 'Back.easeOut',
         onComplete: () => {
           this.scene.tweens.add({
             targets: this.sprite,
-            scaleX: 2,
-            scaleY: 2,
+            scaleX: 1,
+            scaleY: 1,
             duration: 150,
             ease: 'Sine.easeInOut',
           });
@@ -918,8 +918,8 @@ export class AgentSprite extends Phaser.GameObjects.Container {
 
       this.scene.tweens.add({
         targets: this.sprite,
-        scaleX: 2,
-        scaleY: 2,
+        scaleX: 1,
+        scaleY: 1,
         duration: 500,
         ease: 'Back.easeOut',
       });
@@ -951,7 +951,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     // Start as a thin line (scaleX near 0) off to the side
     const fromLeft = Phaser.Math.Between(0, 1) === 0;
     const dir = fromLeft ? -1 : 1;
-    this.sprite.setScale(0.1, 2);
+    this.sprite.setScale(0.05, 1);
     this.sprite.setX(dir * -60);
     this.sprite.setAngle(dir * -30);
 
@@ -981,7 +981,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     // Slide + flip with more drama
     this.scene.tweens.add({
       targets: this.sprite,
-      scaleX: 2,
+      scaleX: 1,
       x: 0,
       angle: 0,
       duration: 550,
@@ -990,7 +990,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
         // Overshoot wobble
         this.scene.tweens.add({
           targets: this.sprite,
-          scaleX: 2.4,
+          scaleX: 1.2,
           duration: 100,
           yoyo: true,
           ease: 'Sine.easeInOut',
@@ -1200,7 +1200,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     // Reset sprite transform in case an emote left it altered
     this.sprite.setAngle(0);
     this.sprite.setPosition(0, 0);
-    this.sprite.setScale(2);
+    this.sprite.setScale(1);
   }
 
   playGunDeath() {
@@ -1434,8 +1434,8 @@ export class AgentSprite extends Phaser.GameObjects.Container {
             // Squash on landing
             this.scene.tweens.add({
               targets: this.sprite,
-              scaleY: 1.4,
-              scaleX: 2.6,
+              scaleY: 0.7,
+              scaleX: 1.3,
               duration: 80,
               yoyo: true,
               ease: 'Power1',
@@ -1946,12 +1946,12 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     // Phase 4: Agent reappears
     this.scene.time.delayedCall(1200, () => {
       if (!this.scene) return;
-      this.sprite.setScale(0.5);
+      this.sprite.setScale(0.25);
       this.sprite.setAlpha(0);
       this.scene.tweens.add({
         targets: this.sprite,
-        scaleX: 2,
-        scaleY: 2,
+        scaleX: 1,
+        scaleY: 1,
         alpha: 1,
         duration: 300,
         ease: 'Back.easeOut',
@@ -2074,24 +2074,24 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     // Phase 1: Squat down
     this.scene.tweens.add({
       targets: this.sprite,
-      scaleY: 1.6,
-      scaleX: 2.3,
+      scaleY: 0.8,
+      scaleX: 1.15,
       duration: 300,
       ease: 'Power2',
       onComplete: () => {
         // Phase 2: Stand tall
         this.scene.tweens.add({
           targets: this.sprite,
-          scaleY: 2.4,
-          scaleX: 1.8,
+          scaleY: 1.2,
+          scaleX: 0.9,
           duration: 300,
           ease: 'Back.easeOut',
           onComplete: () => {
             // Reset to normal scale for the flex phase
             this.scene.tweens.add({
               targets: this.sprite,
-              scaleX: 2,
-              scaleY: 2,
+              scaleX: 1,
+              scaleY: 1,
               duration: 150,
             });
           },
@@ -2367,8 +2367,8 @@ export class AgentSprite extends Phaser.GameObjects.Container {
       // Squash
       this.scene.tweens.add({
         targets: this.sprite,
-        scaleY: 1.5,
-        scaleX: 2.5,
+        scaleY: 0.75,
+        scaleX: 1.25,
         duration: 80,
         yoyo: true,
         ease: 'Power1',
