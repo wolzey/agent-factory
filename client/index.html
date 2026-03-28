@@ -10,9 +10,11 @@
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a1a; }
+    body { display: flex; }
     #game-container {
-      width: 100%;
-      height: 100%;
+      flex: 1;
+      height: 100vh;
+      min-width: 0;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -90,19 +92,17 @@
 
     /* Chat Panel — unified block with messages + input */
     #chat-panel {
-      position: fixed;
-      bottom: 12px;
-      left: 12px;
-      width: 400px;
+      position: relative;
+      width: 340px;
+      height: 100vh;
+      flex-shrink: 0;
       display: flex;
       flex-direction: column;
-      background: rgba(6, 6, 18, 0.92);
-      border: 1px solid #2a2a3a;
-      border-radius: 6px;
+      background: rgba(6, 6, 18, 0.95);
+      border-left: 1px solid #2a2a3a;
       font-family: monospace;
       font-size: 11px;
       z-index: 999;
-      backdrop-filter: blur(4px);
       overflow: hidden;
     }
     #chat-panel .chat-header {
@@ -121,7 +121,8 @@
       font-weight: bold;
     }
     #chat-panel .chat-messages {
-      height: 220px;
+      flex: 1;
+      min-height: 0;
       overflow-y: auto;
       padding: 6px 0;
       scrollbar-width: thin;
@@ -359,8 +360,6 @@
     #command-suggestions {
       display: none;
       position: fixed;
-      left: 12px;
-      width: 400px;
       max-height: 200px;
       overflow-y: auto;
       background: rgba(6, 6, 18, 0.97);
