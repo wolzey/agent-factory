@@ -30,21 +30,84 @@ type HairDrawFn = (ctx: CanvasRenderingContext2D, x: number, y: number, hairColo
 
 const HAIR_STYLES: HairDrawFn[] = [
   // 0: Short flat
-  (ctx, x, y, hc) => { ctx.fillStyle = hc; ctx.fillRect(x + 5, y, 6, 2); },
+  (ctx, x, y, hc) => {
+    ctx.fillStyle = hc;
+    ctx.fillRect(x + 10, y, 12, 4);
+    ctx.fillRect(x + 9, y + 1, 1, 3);
+    ctx.fillRect(x + 22, y + 1, 1, 3);
+    // Highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(x + 13, y + 1, 6, 1);
+  },
   // 1: Spiky
-  (ctx, x, y, hc) => { ctx.fillStyle = hc; ctx.fillRect(x + 5, y + 1, 6, 2); ctx.fillRect(x + 6, y, 1, 1); ctx.fillRect(x + 8, y - 1, 1, 2); ctx.fillRect(x + 10, y, 1, 1); },
+  (ctx, x, y, hc) => {
+    ctx.fillStyle = hc;
+    ctx.fillRect(x + 10, y + 2, 12, 3);
+    ctx.fillRect(x + 11, y, 2, 2);
+    ctx.fillRect(x + 15, y - 2, 2, 4);
+    ctx.fillRect(x + 19, y - 1, 2, 3);
+    ctx.fillRect(x + 13, y + 1, 2, 1);
+    ctx.fillRect(x + 17, y, 1, 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.fillRect(x + 15, y - 1, 1, 2);
+  },
   // 2: Long sides
-  (ctx, x, y, hc) => { ctx.fillStyle = hc; ctx.fillRect(x + 5, y, 6, 3); ctx.fillRect(x + 4, y + 2, 1, 4); ctx.fillRect(x + 11, y + 2, 1, 4); },
+  (ctx, x, y, hc) => {
+    ctx.fillStyle = hc;
+    ctx.fillRect(x + 10, y, 12, 5);
+    ctx.fillRect(x + 8, y + 4, 2, 8);
+    ctx.fillRect(x + 22, y + 4, 2, 8);
+    ctx.fillRect(x + 9, y + 2, 1, 4);
+    ctx.fillRect(x + 22, y + 2, 1, 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(x + 13, y + 1, 6, 2);
+  },
   // 3: Cap/hat (uses body color)
-  (ctx, x, y, _hc, bc) => { ctx.fillStyle = bc; ctx.fillRect(x + 4, y, 8, 3); ctx.fillRect(x + 3, y + 2, 10, 1); },
+  (ctx, x, y, _hc, bc) => {
+    ctx.fillStyle = bc;
+    ctx.fillRect(x + 8, y, 16, 5);
+    ctx.fillRect(x + 6, y + 4, 20, 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(x + 10, y + 1, 8, 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(x + 6, y + 5, 20, 1);
+  },
   // 4: Mohawk
-  (ctx, x, y, hc) => { ctx.fillStyle = hc; ctx.fillRect(x + 7, y - 2, 2, 4); ctx.fillRect(x + 5, y + 1, 6, 1); },
-  // 5: Bald (no hair, just skin highlight)
-  (ctx, x, y) => { ctx.fillStyle = '#ffddb3'; ctx.fillRect(x + 6, y, 4, 1); },
+  (ctx, x, y, hc) => {
+    ctx.fillStyle = hc;
+    ctx.fillRect(x + 14, y - 4, 4, 8);
+    ctx.fillRect(x + 13, y - 2, 6, 2);
+    ctx.fillRect(x + 10, y + 2, 12, 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.fillRect(x + 15, y - 3, 2, 4);
+  },
+  // 5: Bald (just skin highlight)
+  (ctx, x, y) => {
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fillRect(x + 12, y, 8, 2);
+    ctx.fillRect(x + 14, y - 1, 4, 1);
+  },
   // 6: Afro
-  (ctx, x, y, hc) => { ctx.fillStyle = hc; ctx.fillRect(x + 4, y - 1, 8, 4); ctx.fillRect(x + 3, y, 1, 2); ctx.fillRect(x + 12, y, 1, 2); },
+  (ctx, x, y, hc) => {
+    ctx.fillStyle = hc;
+    ctx.fillRect(x + 8, y - 2, 16, 8);
+    ctx.fillRect(x + 6, y, 2, 4);
+    ctx.fillRect(x + 24, y, 2, 4);
+    ctx.fillRect(x + 7, y - 1, 1, 3);
+    ctx.fillRect(x + 24, y - 1, 1, 3);
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.fillRect(x + 12, y - 1, 6, 2);
+  },
   // 7: Bandana (body colored)
-  (ctx, x, y, _hc, bc) => { ctx.fillStyle = bc; ctx.fillRect(x + 4, y, 8, 2); ctx.fillRect(x + 3, y + 1, 1, 1); ctx.fillRect(x + 12, y + 1, 1, 1); },
+  (ctx, x, y, _hc, bc) => {
+    ctx.fillStyle = bc;
+    ctx.fillRect(x + 8, y, 16, 4);
+    ctx.fillRect(x + 6, y + 2, 2, 2);
+    ctx.fillRect(x + 24, y + 2, 2, 2);
+    ctx.fillRect(x + 24, y + 3, 3, 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(x + 12, y + 1, 8, 1);
+  },
 ];
 
 // Mouth style drawing functions (fixed colors per style)
@@ -54,15 +117,40 @@ const MOUTH_STYLES: FaceDrawFn[] = [
   // 0: Default (none)
   () => {},
   // 1: Smile
-  (ctx, x, y, b) => { ctx.fillStyle = '#cc6666'; ctx.fillRect(x + 7, y + 6 + b, 2, 1); },
+  (ctx, x, y, b) => {
+    ctx.fillStyle = '#cc6666';
+    ctx.fillRect(x + 14, y + 12 + b, 4, 1);
+    ctx.fillRect(x + 13, y + 11 + b, 1, 1);
+    ctx.fillRect(x + 18, y + 11 + b, 1, 1);
+  },
   // 2: Frown
-  (ctx, x, y, b) => { ctx.fillStyle = '#886666'; ctx.fillRect(x + 7, y + 6 + b, 2, 1); },
+  (ctx, x, y, b) => {
+    ctx.fillStyle = '#886666';
+    ctx.fillRect(x + 14, y + 11 + b, 4, 1);
+    ctx.fillRect(x + 13, y + 12 + b, 1, 1);
+    ctx.fillRect(x + 18, y + 12 + b, 1, 1);
+  },
   // 3: Open
-  (ctx, x, y, b) => { ctx.fillStyle = '#331111'; ctx.fillRect(x + 7, y + 5 + b, 2, 1); ctx.fillStyle = '#cc6666'; ctx.fillRect(x + 7, y + 6 + b, 2, 1); },
+  (ctx, x, y, b) => {
+    ctx.fillStyle = '#331111';
+    ctx.fillRect(x + 14, y + 11 + b, 4, 2);
+    ctx.fillStyle = '#cc6666';
+    ctx.fillRect(x + 14, y + 12 + b, 4, 1);
+  },
   // 4: Teeth Grin
-  (ctx, x, y, b) => { ctx.fillStyle = '#ffffff'; ctx.fillRect(x + 7, y + 6 + b, 2, 1); },
+  (ctx, x, y, b) => {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x + 14, y + 12 + b, 4, 1);
+    ctx.fillStyle = '#dddddd';
+    ctx.fillRect(x + 16, y + 12 + b, 1, 1);
+  },
   // 5: Tongue Out
-  (ctx, x, y, b) => { ctx.fillStyle = '#ff6699'; ctx.fillRect(x + 7, y + 6 + b, 2, 1); },
+  (ctx, x, y, b) => {
+    ctx.fillStyle = '#cc6666';
+    ctx.fillRect(x + 14, y + 12 + b, 4, 1);
+    ctx.fillStyle = '#ff6699';
+    ctx.fillRect(x + 15, y + 13 + b, 2, 1);
+  },
 ];
 
 // Facial hair drawing functions (uses hairColor)
@@ -72,15 +160,40 @@ const FACIAL_HAIR_STYLES: FacialHairDrawFn[] = [
   // 0: None
   () => {},
   // 1: Stubble
-  (ctx, x, y, b, hc) => { ctx.fillStyle = hc; ctx.globalAlpha = 0.5; ctx.fillRect(x + 6, y + 6 + b, 1, 1); ctx.fillRect(x + 8, y + 6 + b, 1, 1); ctx.fillRect(x + 9, y + 5 + b, 1, 1); ctx.globalAlpha = 1.0; },
+  (ctx, x, y, b, hc) => {
+    ctx.fillStyle = hc; ctx.globalAlpha = 0.4;
+    ctx.fillRect(x + 12, y + 12 + b, 1, 1);
+    ctx.fillRect(x + 14, y + 13 + b, 1, 1);
+    ctx.fillRect(x + 17, y + 13 + b, 1, 1);
+    ctx.fillRect(x + 19, y + 12 + b, 1, 1);
+    ctx.fillRect(x + 16, y + 12 + b, 1, 1);
+    ctx.globalAlpha = 1.0;
+  },
   // 2: Mustache
-  (ctx, x, y, b, hc) => { ctx.fillStyle = hc; ctx.fillRect(x + 6, y + 5 + b, 4, 1); },
+  (ctx, x, y, b, hc) => {
+    ctx.fillStyle = hc;
+    ctx.fillRect(x + 12, y + 11 + b, 8, 1);
+    ctx.fillRect(x + 13, y + 10 + b, 2, 1);
+    ctx.fillRect(x + 17, y + 10 + b, 2, 1);
+  },
   // 3: Full Beard
-  (ctx, x, y, b, hc) => { ctx.fillStyle = hc; ctx.fillRect(x + 5, y + 5 + b, 6, 2); ctx.fillRect(x + 6, y + 7 + b, 4, 1); },
+  (ctx, x, y, b, hc) => {
+    ctx.fillStyle = hc;
+    ctx.fillRect(x + 10, y + 11 + b, 12, 3);
+    ctx.fillRect(x + 12, y + 14 + b, 8, 2);
+    ctx.fillRect(x + 14, y + 16 + b, 4, 1);
+  },
   // 4: Goatee
-  (ctx, x, y, b, hc) => { ctx.fillStyle = hc; ctx.fillRect(x + 7, y + 5 + b, 2, 2); },
+  (ctx, x, y, b, hc) => {
+    ctx.fillStyle = hc;
+    ctx.fillRect(x + 14, y + 11 + b, 4, 3);
+    ctx.fillRect(x + 15, y + 14 + b, 2, 1);
+  },
   // 5: Soul Patch
-  (ctx, x, y, b, hc) => { ctx.fillStyle = hc; ctx.fillRect(x + 7, y + 6 + b, 2, 1); },
+  (ctx, x, y, b, hc) => {
+    ctx.fillStyle = hc;
+    ctx.fillRect(x + 15, y + 13 + b, 2, 2);
+  },
 ];
 
 // Face accessory drawing functions (fixed colors, follows bounce + eyeY)
@@ -93,50 +206,59 @@ const FACE_ACCESSORIES: FaceAccDrawFn[] = [
   (ctx, x, y, b, ey) => {
     ctx.fillStyle = '#666666';
     // Left lens frame
-    ctx.fillRect(x + 5, y + ey - 1 + b, 3, 1);
-    ctx.fillRect(x + 5, y + ey + 1 + b, 3, 1);
-    ctx.fillRect(x + 5, y + ey + b, 1, 1);
-    ctx.fillRect(x + 7, y + ey + b, 1, 1);
+    ctx.fillRect(x + 10, y + ey - 1 + b, 5, 1);
+    ctx.fillRect(x + 10, y + ey + 3 + b, 5, 1);
+    ctx.fillRect(x + 10, y + ey + b, 1, 3);
+    ctx.fillRect(x + 14, y + ey + b, 1, 3);
     // Right lens frame
-    ctx.fillRect(x + 8, y + ey - 1 + b, 3, 1);
-    ctx.fillRect(x + 8, y + ey + 1 + b, 3, 1);
-    ctx.fillRect(x + 8, y + ey + b, 1, 1);
-    ctx.fillRect(x + 10, y + ey + b, 1, 1);
+    ctx.fillRect(x + 17, y + ey - 1 + b, 5, 1);
+    ctx.fillRect(x + 17, y + ey + 3 + b, 5, 1);
+    ctx.fillRect(x + 17, y + ey + b, 1, 3);
+    ctx.fillRect(x + 21, y + ey + b, 1, 3);
     // Bridge
-    ctx.fillRect(x + 7, y + ey + b, 1, 1);
+    ctx.fillRect(x + 14, y + ey + b, 3, 1);
+    // Lens tint
+    ctx.fillStyle = 'rgba(200,220,255,0.15)';
+    ctx.fillRect(x + 11, y + ey + b, 3, 3);
+    ctx.fillRect(x + 18, y + ey + b, 3, 3);
   },
   // 2: Sunglasses
   (ctx, x, y, b, ey) => {
     ctx.fillStyle = '#111111';
-    ctx.fillRect(x + 5, y + ey + b, 3, 2);
-    ctx.fillRect(x + 8, y + ey + b, 3, 2);
+    ctx.fillRect(x + 10, y + ey + b, 5, 3);
+    ctx.fillRect(x + 17, y + ey + b, 5, 3);
     ctx.fillStyle = '#333333';
-    ctx.fillRect(x + 7, y + ey + b, 2, 1);
+    ctx.fillRect(x + 15, y + ey + b, 2, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fillRect(x + 11, y + ey + b, 2, 1);
+    ctx.fillRect(x + 18, y + ey + b, 2, 1);
   },
   // 3: Monocle
   (ctx, x, y, b, ey) => {
     ctx.fillStyle = '#ccaa44';
-    ctx.fillRect(x + 8, y + ey - 1 + b, 3, 1);
-    ctx.fillRect(x + 8, y + ey + 1 + b, 3, 1);
-    ctx.fillRect(x + 8, y + ey + b, 1, 1);
-    ctx.fillRect(x + 10, y + ey + b, 1, 1);
-    // Chain
-    ctx.fillRect(x + 10, y + ey + 2 + b, 1, 2);
+    ctx.fillRect(x + 17, y + ey - 1 + b, 5, 1);
+    ctx.fillRect(x + 17, y + ey + 3 + b, 5, 1);
+    ctx.fillRect(x + 17, y + ey + b, 1, 3);
+    ctx.fillRect(x + 21, y + ey + b, 1, 3);
+    ctx.fillRect(x + 21, y + ey + 4 + b, 1, 4);
+    ctx.fillRect(x + 22, y + ey + 6 + b, 1, 2);
   },
   // 4: Eye Patch
   (ctx, x, y, b, ey) => {
     ctx.fillStyle = '#222222';
-    ctx.fillRect(x + 5, y + ey - 1 + b, 3, 3);
-    // Strap
-    ctx.fillRect(x + 4, y + ey - 2 + b, 1, 1);
-    ctx.fillRect(x + 8, y + ey - 2 + b, 4, 1);
+    ctx.fillRect(x + 10, y + ey - 1 + b, 5, 5);
+    ctx.fillStyle = '#333333';
+    ctx.fillRect(x + 8, y + ey - 3 + b, 2, 2);
+    ctx.fillRect(x + 16, y + ey - 3 + b, 8, 1);
   },
   // 5: Visor
   (ctx, x, y, b, ey) => {
     ctx.fillStyle = '#00ffff';
     ctx.globalAlpha = 0.7;
-    ctx.fillRect(x + 4, y + ey + b, 8, 2);
+    ctx.fillRect(x + 8, y + ey + b, 16, 3);
     ctx.globalAlpha = 1.0;
+    ctx.fillStyle = '#008888';
+    ctx.fillRect(x + 8, y + ey + b, 16, 1);
   },
 ];
 
@@ -149,58 +271,69 @@ const HEAD_ACCESSORIES: HeadAccDrawFn[] = [
   // 1: Crown
   (ctx, x, y, b) => {
     ctx.fillStyle = '#ffd700';
-    ctx.fillRect(x + 5, y + 1 + b, 6, 2);
-    // Peaks
-    ctx.fillRect(x + 5, y + b, 1, 1);
-    ctx.fillRect(x + 7, y + b, 1, 1);
-    ctx.fillRect(x + 10, y + b, 1, 1);
-    // Gems
+    ctx.fillRect(x + 10, y + 2 + b, 12, 4);
+    ctx.fillRect(x + 10, y + b, 2, 2);
+    ctx.fillRect(x + 14, y - 1 + b, 2, 3);
+    ctx.fillRect(x + 20, y + b, 2, 2);
     ctx.fillStyle = '#ff0000';
-    ctx.fillRect(x + 6, y + 1 + b, 1, 1);
+    ctx.fillRect(x + 12, y + 2 + b, 2, 2);
     ctx.fillStyle = '#0044ff';
-    ctx.fillRect(x + 9, y + 1 + b, 1, 1);
+    ctx.fillRect(x + 18, y + 2 + b, 2, 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fillRect(x + 12, y + 1 + b, 8, 1);
   },
   // 2: Top Hat
   (ctx, x, y, b) => {
     ctx.fillStyle = '#111111';
-    ctx.fillRect(x + 6, y + b - 2, 4, 3);
-    // Brim
-    ctx.fillRect(x + 4, y + b + 1, 8, 1);
-    // Band
+    ctx.fillRect(x + 12, y + b - 4, 8, 6);
+    ctx.fillRect(x + 8, y + b + 2, 16, 2);
     ctx.fillStyle = '#cc0000';
-    ctx.fillRect(x + 6, y + b, 4, 1);
+    ctx.fillRect(x + 12, y + b, 8, 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.fillRect(x + 13, y + b - 3, 2, 4);
   },
   // 3: Halo
   (ctx, x, y, b) => {
     ctx.fillStyle = '#ffdd44';
-    ctx.fillRect(x + 6, y + b, 4, 1);
-    ctx.fillRect(x + 5, y + b + 1, 1, 1);
-    ctx.fillRect(x + 10, y + b + 1, 1, 1);
+    ctx.fillRect(x + 12, y + b - 1, 8, 1);
+    ctx.fillRect(x + 10, y + b, 2, 2);
+    ctx.fillRect(x + 20, y + b, 2, 2);
+    ctx.fillRect(x + 12, y + b + 2, 8, 1);
+    ctx.fillStyle = 'rgba(255,255,100,0.3)';
+    ctx.fillRect(x + 13, y + b, 6, 2);
   },
   // 4: Devil Horns
   (ctx, x, y, b) => {
     ctx.fillStyle = '#cc0000';
-    ctx.fillRect(x + 4, y + 1 + b, 2, 2);
-    ctx.fillRect(x + 10, y + 1 + b, 2, 2);
-    ctx.fillRect(x + 4, y + b, 1, 1);
-    ctx.fillRect(x + 11, y + b, 1, 1);
+    ctx.fillRect(x + 8, y + 2 + b, 4, 4);
+    ctx.fillRect(x + 20, y + 2 + b, 4, 4);
+    ctx.fillRect(x + 8, y + b, 2, 2);
+    ctx.fillRect(x + 22, y + b, 2, 2);
+    ctx.fillStyle = '#880000';
+    ctx.fillRect(x + 8, y + b + 1, 1, 1);
+    ctx.fillRect(x + 23, y + b + 1, 1, 1);
   },
   // 5: Antenna
   (ctx, x, y, b) => {
     ctx.fillStyle = '#888888';
-    ctx.fillRect(x + 8, y + b - 1, 1, 3);
+    ctx.fillRect(x + 16, y + b - 2, 1, 6);
+    ctx.fillRect(x + 15, y + b - 1, 3, 1);
     ctx.fillStyle = '#00ff00';
-    ctx.fillRect(x + 8, y + b - 2, 1, 1);
+    ctx.fillRect(x + 15, y + b - 4, 3, 3);
+    ctx.fillStyle = 'rgba(0,255,0,0.3)';
+    ctx.fillRect(x + 14, y + b - 5, 5, 5);
   },
   // 6: Flower
   (ctx, x, y, b) => {
+    ctx.fillStyle = '#22aa22';
+    ctx.fillRect(x + 21, y + 6 + b, 1, 3);
     ctx.fillStyle = '#ff69b4';
-    ctx.fillRect(x + 10, y + 2 + b, 3, 1);
-    ctx.fillRect(x + 10, y + 4 + b, 3, 1);
-    ctx.fillRect(x + 10, y + 3 + b, 1, 1);
-    ctx.fillRect(x + 12, y + 3 + b, 1, 1);
+    ctx.fillRect(x + 20, y + 4 + b, 3, 1);
+    ctx.fillRect(x + 20, y + 8 + b, 3, 1);
+    ctx.fillRect(x + 19, y + 5 + b, 1, 3);
+    ctx.fillRect(x + 23, y + 5 + b, 1, 3);
     ctx.fillStyle = '#ffff00';
-    ctx.fillRect(x + 11, y + 3 + b, 1, 1);
+    ctx.fillRect(x + 20, y + 5 + b, 3, 3);
   },
 ];
 
@@ -211,39 +344,52 @@ const SHIRT_DESIGNS: ShirtDesignDrawFn[] = [
   // 0: Solid (none)
   () => {},
   // 1: H-Stripe
-  (ctx, x, y, b, br, dc) => { ctx.fillStyle = dc; ctx.fillRect(x + 4, y + 9 + b + br, 8, 1); },
+  (ctx, x, y, b, br, dc) => {
+    ctx.fillStyle = dc;
+    ctx.fillRect(x + 8, y + 18 + b + br, 16, 2);
+  },
   // 2: V-Stripe
-  (ctx, x, y, b, br, _dc, lc) => { ctx.fillStyle = lc; ctx.fillRect(x + 7, y + 8 + b + br, 2, 3); },
+  (ctx, x, y, b, br, _dc, lc) => {
+    ctx.fillStyle = lc;
+    ctx.fillRect(x + 14, y + 16 + b + br, 4, 6);
+  },
   // 3: Heart
   (ctx, x, y, b, br) => {
     ctx.fillStyle = '#ff0000';
-    ctx.fillRect(x + 6, y + 8 + b + br, 1, 1);
-    ctx.fillRect(x + 9, y + 8 + b + br, 1, 1);
-    ctx.fillRect(x + 6, y + 9 + b + br, 4, 1);
-    ctx.fillRect(x + 7, y + 10 + b + br, 2, 1);
+    ctx.fillRect(x + 12, y + 16 + b + br, 3, 2);
+    ctx.fillRect(x + 17, y + 16 + b + br, 3, 2);
+    ctx.fillRect(x + 11, y + 18 + b + br, 10, 2);
+    ctx.fillRect(x + 13, y + 20 + b + br, 6, 1);
+    ctx.fillRect(x + 15, y + 21 + b + br, 2, 1);
   },
   // 4: Star
   (ctx, x, y, b, br) => {
     ctx.fillStyle = '#ffff00';
-    ctx.fillRect(x + 7, y + 8 + b + br, 2, 1);
-    ctx.fillRect(x + 6, y + 9 + b + br, 4, 1);
-    ctx.fillRect(x + 7, y + 10 + b + br, 2, 1);
+    ctx.fillRect(x + 15, y + 16 + b + br, 2, 1);
+    ctx.fillRect(x + 12, y + 17 + b + br, 8, 2);
+    ctx.fillRect(x + 14, y + 19 + b + br, 4, 1);
+    ctx.fillRect(x + 13, y + 20 + b + br, 2, 1);
+    ctx.fillRect(x + 17, y + 20 + b + br, 2, 1);
   },
   // 5: Number 1
   (ctx, x, y, b, br) => {
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(x + 7, y + 8 + b + br, 2, 3);
-    ctx.fillRect(x + 6, y + 8 + b + br, 1, 1);
+    ctx.fillRect(x + 15, y + 16 + b + br, 2, 5);
+    ctx.fillRect(x + 13, y + 16 + b + br, 2, 2);
+    ctx.fillRect(x + 13, y + 21 + b + br, 6, 1);
   },
   // 6: Skull
   (ctx, x, y, b, br) => {
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(x + 7, y + 8 + b + br, 2, 2);
+    ctx.fillRect(x + 13, y + 16 + b + br, 6, 4);
     ctx.fillStyle = '#000000';
-    ctx.fillRect(x + 7, y + 8 + b + br, 1, 1);
-    ctx.fillRect(x + 8, y + 8 + b + br, 1, 1);
+    ctx.fillRect(x + 14, y + 17 + b + br, 2, 2);
+    ctx.fillRect(x + 17, y + 17 + b + br, 2, 2);
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(x + 7, y + 10 + b + br, 2, 1);
+    ctx.fillRect(x + 14, y + 20 + b + br, 4, 1);
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(x + 15, y + 20 + b + br, 1, 1);
+    ctx.fillRect(x + 17, y + 20 + b + br, 1, 1);
   },
 ];
 
@@ -333,7 +479,7 @@ export class BootScene extends Phaser.Scene {
 
   // ── Character sprites ─────────────────────────────────────────────
   private generateCharacterSprites() {
-    const size = 16;
+    const size = 32;
     const framesPerRow = 4;
     const animations = ['idle', 'walk_right', 'walk_left', 'walk_down', 'walk_up', 'work', 'sit'];
     const rows = animations.length;
@@ -373,7 +519,7 @@ export class BootScene extends Phaser.Scene {
     if (this.textures.exists(key)) return key;
 
     const resolved = resolveAvatar(avatar);
-    const size = 16;
+    const size = 32;
     const framesPerRow = 4;
     const animations = ['idle', 'walk_right', 'walk_left', 'walk_down', 'walk_up', 'work', 'sit'];
     const rows = animations.length;
@@ -447,118 +593,211 @@ export class BootScene extends Phaser.Scene {
 
     ctx.clearRect(x, y, size, size);
 
-    const bounce = (anim.startsWith('walk') && frame % 2 === 0) ? -1 : 0;
+    const bounce = (anim.startsWith('walk') && frame % 2 === 0) ? -2 : 0;
     const breathe = (anim === 'idle' && frame === 2) ? 1 : 0;
 
-    // Head (skin)
+    // ── Head (skin) — rounded shape ──
     ctx.fillStyle = skinColor;
-    ctx.fillRect(x + 5, y + 2 + bounce, 6, 5);
+    ctx.fillRect(x + 11, y + 4 + bounce, 10, 10);
+    ctx.fillRect(x + 10, y + 5 + bounce, 12, 8);
+    // Ears
+    ctx.fillRect(x + 9, y + 7 + bounce, 1, 3);
+    ctx.fillRect(x + 22, y + 7 + bounce, 1, 3);
+    // Head shading (right side + ear)
+    ctx.fillStyle = 'rgba(0,0,0,0.08)';
+    ctx.fillRect(x + 20, y + 5 + bounce, 2, 8);
+    ctx.fillRect(x + 22, y + 8 + bounce, 1, 2);
+    // Chin highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillRect(x + 13, y + 12 + bounce, 6, 1);
 
-    // Hair/hat (varies by hairStyle)
+    // ── Hair / hat ──
     const drawHair = HAIR_STYLES[colors.hairStyle % HAIR_STYLES.length];
-    drawHair(ctx, x, y + 2 + bounce, hairColor, bodyColor);
+    drawHair(ctx, x, y + 4 + bounce, hairColor, bodyColor);
 
-    // Eyes - blink on idle frame 2
-    ctx.fillStyle = '#000';
+    // ── Eyes ──
     const isBlink = anim === 'idle' && frame === 2;
-    const eyeY = anim === 'work' ? 5 : 4;
+    const eyeY = anim === 'work' ? 9 : 8;
     if (isBlink) {
-      ctx.fillRect(x + 6, y + eyeY + bounce, 2, 1);
-      ctx.fillRect(x + 9, y + eyeY + bounce, 2, 1);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(x + 12, y + eyeY + 1 + bounce, 3, 1);
+      ctx.fillRect(x + 18, y + eyeY + 1 + bounce, 3, 1);
     } else {
-      ctx.fillRect(x + 6, y + eyeY + bounce, 1, 1);
-      ctx.fillRect(x + 9, y + eyeY + bounce, 1, 1);
+      // Eye whites
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x + 12, y + eyeY + bounce, 3, 3);
+      ctx.fillRect(x + 18, y + eyeY + bounce, 3, 3);
+      // Iris
+      ctx.fillStyle = '#4466aa';
+      ctx.fillRect(x + 13, y + eyeY + bounce, 2, 3);
+      ctx.fillRect(x + 19, y + eyeY + bounce, 2, 3);
+      // Pupil
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(x + 13, y + eyeY + 1 + bounce, 2, 1);
+      ctx.fillRect(x + 19, y + eyeY + 1 + bounce, 2, 1);
+      // Highlight
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x + 14, y + eyeY + bounce, 1, 1);
+      ctx.fillRect(x + 20, y + eyeY + bounce, 1, 1);
     }
 
-    // Mouth
+    // ── Nose (subtle shadow) ──
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fillRect(x + 16, y + 10 + bounce, 1, 2);
+
+    // ── Mouth ──
     const drawMouth = MOUTH_STYLES[colors.mouthStyle % MOUTH_STYLES.length];
     drawMouth(ctx, x, y, bounce);
 
-    // Facial hair
+    // ── Facial hair ──
     const drawBeard = FACIAL_HAIR_STYLES[colors.facialHair % FACIAL_HAIR_STYLES.length];
     drawBeard(ctx, x, y, bounce, hairColor);
 
-    // Face accessory
+    // ── Face accessory ──
     const drawFaceAcc = FACE_ACCESSORIES[colors.faceAccessory % FACE_ACCESSORIES.length];
     drawFaceAcc(ctx, x, y, bounce, eyeY);
 
-    // Head accessory (on top of hair)
+    // ── Head accessory ──
     const drawHeadAcc = HEAD_ACCESSORIES[colors.headAccessory % HEAD_ACCESSORIES.length];
     drawHeadAcc(ctx, x, y, bounce);
 
-    // Shirt / body
+    // ── Neck ──
+    ctx.fillStyle = skinColor;
+    ctx.fillRect(x + 14, y + 14 + bounce, 4, 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.1)';
+    ctx.fillRect(x + 17, y + 14 + bounce, 1, 2);
+
+    // ── Shirt / body ──
     ctx.fillStyle = bodyColor;
     if (anim === 'sit') {
-      ctx.fillRect(x + 4, y + 7 + bounce, 8, 4);
+      ctx.fillRect(x + 8, y + 15 + bounce, 16, 8);
     } else if (anim === 'work') {
-      ctx.fillRect(x + 3, y + 7 + bounce, 8, 4);
+      ctx.fillRect(x + 6, y + 15 + bounce, 16, 8);
     } else {
-      ctx.fillRect(x + 4, y + 7 + bounce + breathe, 8, 4);
+      ctx.fillRect(x + 8, y + 15 + bounce + breathe, 16, 8);
     }
 
-    // Shirt design
+    // Body shading (right side)
+    ctx.fillStyle = darkColor;
+    if (anim === 'sit') {
+      ctx.fillRect(x + 22, y + 15 + bounce, 2, 8);
+    } else if (anim === 'work') {
+      ctx.fillRect(x + 20, y + 15 + bounce, 2, 8);
+    } else {
+      ctx.fillRect(x + 22, y + 15 + bounce + breathe, 2, 8);
+    }
+
+    // Body highlight (left side)
+    ctx.fillStyle = lightColor;
+    if (anim === 'sit') {
+      ctx.fillRect(x + 8, y + 16 + bounce, 1, 4);
+    } else if (anim === 'work') {
+      ctx.fillRect(x + 6, y + 16 + bounce, 1, 4);
+    } else {
+      ctx.fillRect(x + 8, y + 16 + bounce + breathe, 1, 4);
+    }
+
+    // Collar
+    ctx.fillStyle = lightColor;
+    if (anim === 'sit') {
+      ctx.fillRect(x + 12, y + 15 + bounce, 8, 1);
+    } else if (anim === 'work') {
+      ctx.fillRect(x + 10, y + 15 + bounce, 8, 1);
+    } else {
+      ctx.fillRect(x + 12, y + 15 + bounce, 8, 1);
+    }
+
+    // ── Shirt design ──
     const drawDesign = SHIRT_DESIGNS[colors.shirtDesign % SHIRT_DESIGNS.length];
     if (anim === 'sit') {
       drawDesign(ctx, x, y, bounce, 0, darkColor, lightColor);
     } else if (anim === 'work') {
-      drawDesign(ctx, x - 1, y, bounce, 0, darkColor, lightColor);
+      drawDesign(ctx, x - 2, y, bounce, 0, darkColor, lightColor);
     } else {
       drawDesign(ctx, x, y, bounce, breathe, darkColor, lightColor);
     }
 
-    // Collar highlight
-    ctx.fillStyle = lightColor;
-    if (anim !== 'sit') {
-      ctx.fillRect(x + 6, y + 7 + bounce, 4, 1);
+    // ── Belt ──
+    ctx.fillStyle = '#443322';
+    if (anim === 'sit') {
+      ctx.fillRect(x + 8, y + 22 + bounce, 16, 1);
+    } else if (anim === 'work') {
+      ctx.fillRect(x + 6, y + 22 + bounce, 16, 1);
+    } else {
+      ctx.fillRect(x + 8, y + 22 + bounce + breathe, 16, 1);
+    }
+    // Belt buckle
+    ctx.fillStyle = '#887744';
+    if (anim === 'sit') {
+      ctx.fillRect(x + 15, y + 22 + bounce, 2, 1);
+    } else if (anim === 'work') {
+      ctx.fillRect(x + 13, y + 22 + bounce, 2, 1);
+    } else {
+      ctx.fillRect(x + 15, y + 22 + bounce + breathe, 2, 1);
     }
 
-    // Pants
+    // ── Pants ──
     ctx.fillStyle = colors.pantsColor;
     if (anim === 'sit') {
-      ctx.fillRect(x + 4, y + 11, 8, 2);
+      ctx.fillRect(x + 8, y + 23, 16, 4);
     } else if (anim === 'work') {
-      ctx.fillRect(x + 3, y + 11 + bounce, 8, 2);
+      ctx.fillRect(x + 6, y + 23 + bounce, 16, 4);
     } else {
-      ctx.fillRect(x + 4, y + 11 + bounce + breathe, 8, 2);
+      ctx.fillRect(x + 8, y + 23 + bounce + breathe, 16, 4);
     }
 
-    // Arms
+    // ── Arms ──
     ctx.fillStyle = darkColor;
     if (anim === 'work') {
-      ctx.fillRect(x + 2, y + 8 + bounce, 2, 3);
-      ctx.fillRect(x + 11, y + 8 + bounce, 2, 3);
+      ctx.fillRect(x + 3, y + 16 + bounce, 4, 6);
+      ctx.fillRect(x + 21, y + 16 + bounce, 4, 6);
+      // Hands
       ctx.fillStyle = skinColor;
       if (frame % 2 === 0) {
-        ctx.fillRect(x + 1, y + 9 + bounce, 2, 1);
+        ctx.fillRect(x + 2, y + 20 + bounce, 3, 2);
       } else {
-        ctx.fillRect(x + 12, y + 9 + bounce, 2, 1);
+        ctx.fillRect(x + 23, y + 20 + bounce, 3, 2);
       }
     } else if (anim === 'sit') {
-      ctx.fillRect(x + 3, y + 8 + bounce, 2, 3);
-      ctx.fillRect(x + 11, y + 8 + bounce, 2, 3);
+      ctx.fillRect(x + 5, y + 16 + bounce, 4, 6);
+      ctx.fillRect(x + 23, y + 16 + bounce, 4, 6);
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(x + 5, y + 21 + bounce, 3, 2);
+      ctx.fillRect(x + 24, y + 21 + bounce, 3, 2);
     } else {
-      const swing = anim.startsWith('walk') ? (frame % 2 === 0 ? 2 : -2) : 0;
-      ctx.fillRect(x + 3, y + 8 + bounce + swing, 2, 3);
-      ctx.fillRect(x + 11, y + 8 + bounce - swing, 2, 3);
+      const swing = anim.startsWith('walk') ? (frame % 2 === 0 ? 3 : -3) : 0;
+      ctx.fillRect(x + 5, y + 16 + bounce + swing, 4, 6);
+      ctx.fillRect(x + 23, y + 16 + bounce - swing, 4, 6);
+      // Hands
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(x + 5, y + 21 + bounce + swing, 3, 2);
+      ctx.fillRect(x + 24, y + 21 + bounce - swing, 3, 2);
     }
 
-    // Legs
-    ctx.fillStyle = '#334';
+    // ── Legs ──
+    ctx.fillStyle = colors.pantsColor;
     if (anim === 'sit') {
-      ctx.fillRect(x + 5, y + 12, 2, 3);
-      ctx.fillRect(x + 9, y + 12, 2, 3);
+      ctx.fillRect(x + 10, y + 26, 4, 4);
+      ctx.fillRect(x + 18, y + 26, 4, 4);
     } else {
-      const legOffset = anim.startsWith('walk') ? (frame % 2 === 0 ? 1 : -1) : 0;
-      ctx.fillRect(x + 5, y + 13 + bounce, 2, 2);
-      ctx.fillRect(x + 9, y + 13 + bounce + legOffset, 2, 2);
+      const legOffset = anim.startsWith('walk') ? (frame % 2 === 0 ? 2 : -2) : 0;
+      ctx.fillRect(x + 10, y + 27 + bounce, 4, 3);
+      ctx.fillRect(x + 18, y + 27 + bounce + legOffset, 4, 3);
     }
 
-    // Shoes
+    // ── Shoes ──
     ctx.fillStyle = colors.shoeColor;
     if (anim !== 'sit') {
-      const legOffset = anim.startsWith('walk') ? (frame % 2 === 0 ? 1 : -1) : 0;
-      ctx.fillRect(x + 5, y + 15 + bounce, 2, 1);
-      ctx.fillRect(x + 9, y + 15 + bounce + legOffset, 2, 1);
+      const legOffset = anim.startsWith('walk') ? (frame % 2 === 0 ? 2 : -2) : 0;
+      ctx.fillRect(x + 9, y + 30 + bounce, 5, 2);
+      ctx.fillRect(x + 17, y + 30 + bounce + legOffset, 5, 2);
+      // Shoe sole
+      ctx.fillStyle = '#111111';
+      ctx.fillRect(x + 9, y + 31 + bounce, 5, 1);
+      ctx.fillRect(x + 17, y + 31 + bounce + legOffset, 5, 1);
+    } else {
+      ctx.fillRect(x + 10, y + 29, 4, 2);
+      ctx.fillRect(x + 18, y + 29, 4, 2);
     }
   }
 
