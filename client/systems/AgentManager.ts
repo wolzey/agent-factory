@@ -7,9 +7,13 @@ import { Machine } from '../entities/Machine';
 import { LayoutManager } from './LayoutManager';
 import { getTheme } from '../environments';
 import type { EnvironmentTheme } from '../environments';
+import type { SoundBank } from '../audio/SoundBank';
+
+const WORKING_STATES = ['reading', 'writing', 'running', 'searching', 'chatting', 'planning', 'compacting'];
 
 export class AgentManager {
   private scene: Phaser.Scene;
+  private soundBank: SoundBank | null = null;
   private agents = new Map<string, AgentSprite>();
   private subagents = new Map<string, SubagentSprite>();
   private machines: Machine[] = [];
@@ -50,6 +54,10 @@ export class AgentManager {
     this.serverGraphicDeath = enabled;
   }
 
+  setSoundBank(sb: SoundBank) {
+    this.soundBank = sb;
+  }
+
   handleFullState(agents: AgentSession[]) {
     // Remove agents not in new state
     const newIds = new Set(agents.map(a => a.sessionId));
@@ -87,12 +95,15 @@ export class AgentManager {
         break;
       case 'tool_complete':
         this.emitSparks(agent.x, agent.y, 0x00ff66);
+        this.soundBank?.play('effect_tool_complete');
         break;
       case 'session_start':
         this.emitSparks(agent.x, agent.y, 0x00ffff, 12);
+        this.soundBank?.play('effect_session_start');
         break;
       case 'session_end':
         this.emitSparks(agent.x, agent.y, 0xff0044, 8);
+        this.soundBank?.play('effect_session_end');
         break;
       case 'subagent_spawn':
         this.emitSparks(agent.x, agent.y, 0xaa00ff, 10);
@@ -102,6 +113,7 @@ export class AgentManager {
         break;
       case 'error':
         this.emitSparks(agent.x, agent.y, 0xff0000, 8);
+        this.soundBank?.play('effect_error');
         break;
       case 'prompt_received':
         this.emitSparks(agent.x, agent.y, 0x00ffff, 10);
@@ -109,10 +121,12 @@ export class AgentManager {
       case 'task_completed':
         this.emitSparks(agent.x, agent.y, 0x00ff66, 15);
         agent.showFloatingLabel('DONE!', '#00ff66');
+        this.soundBank?.play('effect_task_completed');
         break;
       case 'notification':
         this.emitSparks(agent.x, agent.y, 0xffdd00, 6);
         if (data?.message) agent.showFloatingLabel(String(data.message).slice(0, 20), '#ffdd00');
+        this.soundBank?.play('effect_notification');
         break;
       case 'info_flash': {
         const colorMap: Record<string, number> = {
@@ -140,16 +154,22 @@ export class AgentManager {
         break;
       case 'emote':
         if (data?.emote) {
-          agent.playEmote(data.emote as string);
-          if (data.emote === 'gun') {
+          const emote = data.emote as string;
+          agent.playEmote(emote);
+          // Play emote sound if we have one
+          this.soundBank?.play(`emote_${emote}`);
+          if (emote === 'gun') {
             for (const [otherId, other] of this.agents) {
               if (otherId === sessionId) continue;
               if (other.x > agent.x && other.x - agent.x < 200) {
-                this.scene.time.delayedCall(300, () => other.playGunDeath());
+                this.scene.time.delayedCall(300, () => {
+                  other.playGunDeath();
+                  this.soundBank?.play('gun_victim');
+                });
               }
             }
           }
-          if (data.emote === 'fart') {
+          if (emote === 'fart') {
             for (const [otherId, other] of this.agents) {
               if (otherId === sessionId) continue;
               const dx = agent.x - other.x;
@@ -207,8 +227,11 @@ export class AgentManager {
     this.flowerVisitors.delete(session.sessionId);
 
     let agent = this.agents.get(session.sessionId);
+    const prevActivity = agent?.sessionData.activity;
+    let isNewAgent = false;
 
     if (!agent) {
+      isNewAgent = true;
       agent = new AgentSprite(this.scene, session);
       const tomb = this.tombstones.get(session.sessionId);
       if (tomb) {
@@ -227,6 +250,8 @@ export class AgentManager {
         this.scene.time.delayedCall(3000, () => {
           this.zombieRising.delete(session.sessionId);
         });
+
+        this.soundBank?.play('zombie_rise');
       } else {
         // New agent - spawn at entrance with a random animation
         const entrance = this.layout.entrance;
@@ -251,8 +276,7 @@ export class AgentManager {
     //   idle (session started, no activity yet) -> lounge
     //   stopped -> die in place (slot kept for tombstone, removeAgent handles release)
 
-    const workingStates = ['reading', 'writing', 'running', 'searching', 'chatting', 'planning', 'compacting'];
-    const isWorking = workingStates.includes(session.activity);
+    const isWorking = WORKING_STATES.includes(session.activity);
     const isThinking = session.activity === 'thinking';
 
     if (session.activity === 'stopped') {
@@ -299,6 +323,22 @@ export class AgentManager {
 
     // Sync subagents
     this.syncSubagents(session);
+
+    // Sound is LAST — after all routing, movement, and subagent sync.
+    // Fire-and-forget, no return value used, no side effects on agent state.
+    if (!isNewAgent && prevActivity !== session.activity) {
+      if (session.activity === 'waiting') {
+        this.soundBank?.play('state_waiting', session.sessionId);
+      } else if (session.activity === 'stopped') {
+        this.soundBank?.play('state_stopped', session.sessionId);
+      } else if (session.activity === 'idle') {
+        this.soundBank?.play('state_idle', session.sessionId);
+      } else if (session.activity === 'thinking') {
+        this.soundBank?.play('state_thinking', session.sessionId);
+      } else if (WORKING_STATES.includes(session.activity)) {
+        this.soundBank?.play('state_working', session.sessionId);
+      }
+    }
   }
 
   /** Check if a position is within proximity of any active tombstone. */
@@ -316,6 +356,9 @@ export class AgentManager {
   private removeAgent(sessionId: string) {
     const agent = this.agents.get(sessionId);
     if (agent) {
+      const graphic = !!(this.serverGraphicDeath || agent.sessionData.avatar?.graphicDeath);
+      this.soundBank?.play(graphic ? 'death_graphic' : 'death_standard');
+
       // Deactivate machine while slot still has the agent's sessionId
       this.deactivateMachineFor(sessionId);
       // Reserve the workstation slot for the tombstone (changes occupant to __tomb__ prefix)

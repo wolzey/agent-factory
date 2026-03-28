@@ -8,6 +8,7 @@ import { CommandInput } from '../ui/CommandInput';
 import type { WSMessageToClient, EnvironmentType } from '@shared/types';
 import { getTheme } from '../environments';
 import type { EnvironmentTheme } from '../environments';
+import { SoundBank } from '../audio/SoundBank';
 
 export class FactoryScene extends Phaser.Scene {
   private socket!: SocketClient;
@@ -78,6 +79,37 @@ export class FactoryScene extends Phaser.Scene {
     this.socket.connect();
 
     this.fetchConfig();
+    this.initAudio();
+  }
+
+  private async initAudio() {
+    try {
+      const soundBank = new SoundBank();
+      await soundBank.initialize();
+      this.agentManager.setSoundBank(soundBank);
+
+      // Wire HUD audio controls
+      const slider = document.getElementById('volume-slider') as HTMLInputElement | null;
+      const toggle = document.getElementById('audio-toggle') as HTMLElement | null;
+
+      if (slider) {
+        slider.value = String(Math.round(soundBank.getVolume() * 100));
+        slider.addEventListener('input', () => {
+          soundBank.setVolume(parseInt(slider.value, 10) / 100);
+        });
+      }
+
+      if (toggle) {
+        const updateIcon = () => { toggle.textContent = soundBank.isMuted() ? '\uD83D\uDD07' : '\uD83D\uDD0A'; };
+        updateIcon();
+        toggle.addEventListener('click', () => {
+          soundBank.setMuted(!soundBank.isMuted());
+          updateIcon();
+        });
+      }
+    } catch (e) {
+      console.warn('[audio] Sound init failed:', e);
+    }
   }
 
   update(time: number, delta: number) {
