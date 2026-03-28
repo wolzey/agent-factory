@@ -9,12 +9,53 @@ export class ChatOverlay {
   private emptyEl: HTMLDivElement;
   private userColorMap = new Map<string, number>();
   private nextColorIndex = 0;
+  private visible = false;
+  private toggleBtn: HTMLButtonElement;
 
   constructor() {
     this.container = this.createDOM();
+    this.container.classList.add('chat-hidden');
     this.messageList = this.container.querySelector('.chat-messages')!;
     this.emptyEl = this.container.querySelector('.chat-empty')!;
     document.body.appendChild(this.container);
+
+    this.toggleBtn = this.createToggleButton();
+    document.body.appendChild(this.toggleBtn);
+    this.toggleBtn.addEventListener('click', () => this.toggle());
+    this.setupKeyboardShortcut();
+  }
+
+  toggle(): void {
+    this.visible = !this.visible;
+    this.container.classList.toggle('chat-hidden', !this.visible);
+    this.toggleBtn.classList.toggle('chat-visible', this.visible);
+    this.updateToggleContent();
+  }
+
+  private createToggleButton(): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.id = 'chat-toggle';
+    this.updateToggleContent(btn);
+    return btn;
+  }
+
+  private updateToggleContent(btn?: HTMLButtonElement): void {
+    const el = btn || this.toggleBtn;
+    if (this.visible) {
+      el.innerHTML = '&#x203a;';
+    } else {
+      el.innerHTML = 'CHAT<span class="toggle-hint">[C]</span>';
+    }
+  }
+
+  private setupKeyboardShortcut(): void {
+    document.addEventListener('keydown', (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.key === 'c' || e.key === 'C') {
+        this.toggle();
+      }
+    });
   }
 
   /** Returns the container element so CommandInput can embed its input row */

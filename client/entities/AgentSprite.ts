@@ -2931,11 +2931,6 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   private computeLabel(session: AgentSession): string {
-    if (session.sessionName) {
-      return session.sessionName.length > 16
-        ? session.sessionName.slice(0, 14) + '..'
-        : session.sessionName;
-    }
     return session.username;
   }
 
