@@ -29,6 +29,12 @@ export const HAIR_COLORS = [
   { name: 'Chestnut', hex: '#553311' },
   { name: 'Gray', hex: '#444444' },
   { name: 'Sandy Blonde', hex: '#cc8844' },
+  { name: 'Platinum Blonde', hex: '#e8d5b5' },
+  { name: 'Auburn', hex: '#8b4513' },
+  { name: 'Bright Red', hex: '#ff2200' },
+  { name: 'Silver', hex: '#aaaaaa' },
+  { name: 'Blue Black', hex: '#0a0a1a' },
+  { name: 'Dirty Blonde', hex: '#b89a5a' },
 ];
 
 export const SKIN_TONES = [
@@ -49,6 +55,14 @@ export const SHIRT_COLORS = [
   { name: 'Orange', hex: '#ff922b' },
   { name: 'Teal', hex: '#20c997' },
   { name: 'Pink', hex: '#f06595' },
+  { name: 'White', hex: '#ffffff' },
+  { name: 'Black', hex: '#333333' },
+  { name: 'Charcoal', hex: '#555555' },
+  { name: 'Crimson', hex: '#b22222' },
+  { name: 'Lime', hex: '#a3e635' },
+  { name: 'Navy', hex: '#1a1a5c' },
+  { name: 'Maroon', hex: '#800040' },
+  { name: 'Coral', hex: '#ff7f50' },
 ];
 
 export const PANTS_COLORS = [
@@ -57,6 +71,10 @@ export const PANTS_COLORS = [
   { name: 'Brown', hex: '#4a3728' },
   { name: 'Dark Green', hex: '#1a3a1a' },
   { name: 'Dark Purple', hex: '#2a1a3e' },
+  { name: 'Black', hex: '#1a1a1a' },
+  { name: 'Khaki', hex: '#8b7d5b' },
+  { name: 'Olive', hex: '#4a5a2a' },
+  { name: 'Charcoal', hex: '#333333' },
 ];
 
 export const SHOE_COLORS = [
@@ -64,6 +82,9 @@ export const SHOE_COLORS = [
   { name: 'Brown', hex: '#3d2a1a' },
   { name: 'Navy', hex: '#2a2a3e' },
   { name: 'White', hex: '#ffffff' },
+  { name: 'Red', hex: '#8b2222' },
+  { name: 'Gray', hex: '#666666' },
+  { name: 'Tan', hex: '#a0845a' },
 ];
 
 export const FACIAL_HAIR_NAMES = [
@@ -84,6 +105,7 @@ export const HEAD_ACCESSORY_NAMES = [
 
 export const SHIRT_DESIGN_NAMES = [
   'Solid', 'H-Stripe', 'V-Stripe', 'Heart', 'Star', 'Number 1', 'Skull',
+  'Checkerboard', 'Diamond', 'Lightning', 'Dots', 'X-Cross',
 ];
 
 export const VALID_EMOTES: import('./types.js').EmoteType[] = ['dance', 'jump', 'guitar', 'gun', 'laugh', 'wave', 'sleep', 'explode', 'dizzy', 'flex', 'rage', 'fart'];

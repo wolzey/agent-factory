@@ -29,7 +29,7 @@ export interface AvatarConfig {
   mouthStyle?: number;      // 0-5 index (0=default)
   faceAccessory?: number;   // 0-5 index (0=none)
   headAccessory?: number;   // 0-6 index (0=none)
-  shirtDesign?: number;     // 0-6 index (0=solid)
+  shirtDesign?: number;     // 0-11 index (0=solid)
 }
 
 // === Subagent Info ===

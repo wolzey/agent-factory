@@ -39,6 +39,12 @@ var HairColors = []ColorOption{
 	{"Chestnut", "#553311"},
 	{"Gray", "#444444"},
 	{"Sandy Blonde", "#cc8844"},
+	{"Platinum Blonde", "#e8d5b5"},
+	{"Auburn", "#8b4513"},
+	{"Bright Red", "#ff2200"},
+	{"Silver", "#aaaaaa"},
+	{"Blue Black", "#0a0a1a"},
+	{"Dirty Blonde", "#b89a5a"},
 }
 
 var SkinTones = []ColorOption{
@@ -59,6 +65,14 @@ var ShirtColors = []ColorOption{
 	{"Orange", "#ff922b"},
 	{"Teal", "#20c997"},
 	{"Pink", "#f06595"},
+	{"White", "#ffffff"},
+	{"Black", "#333333"},
+	{"Charcoal", "#555555"},
+	{"Crimson", "#b22222"},
+	{"Lime", "#a3e635"},
+	{"Navy", "#1a1a5c"},
+	{"Maroon", "#800040"},
+	{"Coral", "#ff7f50"},
 }
 
 var PantsColors = []ColorOption{
@@ -67,6 +81,10 @@ var PantsColors = []ColorOption{
 	{"Brown", "#4a3728"},
 	{"Dark Green", "#1a3a1a"},
 	{"Dark Purple", "#2a1a3e"},
+	{"Black", "#1a1a1a"},
+	{"Khaki", "#8b7d5b"},
+	{"Olive", "#4a5a2a"},
+	{"Charcoal", "#333333"},
 }
 
 var ShoeColors = []ColorOption{
@@ -74,6 +92,9 @@ var ShoeColors = []ColorOption{
 	{"Brown", "#3d2a1a"},
 	{"Navy", "#2a2a3e"},
 	{"White", "#ffffff"},
+	{"Red", "#8b2222"},
+	{"Gray", "#666666"},
+	{"Tan", "#a0845a"},
 }
 
 var FacialHairStyles = []StyleOption{
@@ -121,6 +142,11 @@ var ShirtDesigns = []StyleOption{
 	{"Star", 4},
 	{"Number 1", 5},
 	{"Skull", 6},
+	{"Checkerboard", 7},
+	{"Diamond", 8},
+	{"Lightning", 9},
+	{"Dots", 10},
+	{"X-Cross", 11},
 }
 
 // AllFields returns the ordered list of customization fields.
