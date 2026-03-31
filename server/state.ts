@@ -219,10 +219,25 @@ export class StateManager {
 
   private handleSessionStart(payload: HookPayload): void {
     const now = Date.now();
+
+    // Cancel any pending removal from a previous SessionEnd so it doesn't
+    // delete the session we're about to (re-)create.
+    const pendingTimer = this.pendingRemovals.get(payload.session_id);
+    if (pendingTimer) {
+      clearTimeout(pendingTimer);
+      this.pendingRemovals.delete(payload.session_id);
+    }
+
     const existing = this.sessions.get(payload.session_id);
 
-    if (existing) {
-      // Session resumed - update identity and reset activity
+    if (existing && existing.activity === 'stopped') {
+      // Session is resuming after a SessionEnd — remove first so the client
+      // goes through the tombstone → zombie resurrection path.
+      this.sessions.delete(payload.session_id);
+      this.emit('remove', { sessionId: payload.session_id });
+      // Fall through to create a fresh session below
+    } else if (existing) {
+      // Session resumed (wasn't stopped) — update in place
       existing.username = payload.username || existing.username;
       existing.avatar = payload.avatar || existing.avatar;
       existing.cwd = payload.cwd || existing.cwd;
@@ -231,7 +246,10 @@ export class StateManager {
       existing.currentToolInput = null;
       existing.lastEventAt = now;
       this.emit('update', { agent: existing });
-    } else {
+      return;
+    }
+
+    {
       const session: AgentSession = {
         sessionId: payload.session_id,
         username: payload.username || 'anonymous',
@@ -273,11 +291,13 @@ export class StateManager {
     this.emit('update', { agent: session });
     this.emit('effect', { sessionId: payload.session_id, effect: 'session_end' });
 
-    // Remove after delay for exit animation
-    setTimeout(() => {
+    // Remove after delay for exit animation (cancellable if session resumes)
+    const timer = setTimeout(() => {
+      this.pendingRemovals.delete(payload.session_id);
       this.sessions.delete(payload.session_id);
       this.emit('remove', { sessionId: payload.session_id });
     }, STOPPED_REMOVAL_DELAY_MS);
+    this.pendingRemovals.set(payload.session_id, timer);
   }
 
   private handlePreToolUse(payload: HookPayload): void {
@@ -392,6 +412,13 @@ export class StateManager {
 
   /** Ensure a session exists (creates one if a hook fires before SessionStart) */
   private ensureSession(payload: HookPayload): AgentSession {
+    // Cancel any pending removal — this session is clearly still alive
+    const pendingTimer = this.pendingRemovals.get(payload.session_id);
+    if (pendingTimer) {
+      clearTimeout(pendingTimer);
+      this.pendingRemovals.delete(payload.session_id);
+    }
+
     let session = this.sessions.get(payload.session_id);
     if (!session) {
       session = {
