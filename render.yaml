@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: agent-factory
+    runtime: docker
+    repo: https://github.com/wolzey/agent-factory
+    branch: main
+    autoDeploy: true
+    plan: free
+    envVars:
+      - key: AF_TOKEN_SECRET
+        generateValue: true
+      - key: HOST
+        value: 0.0.0.0

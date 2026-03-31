@@ -27,6 +27,9 @@ importers:
       concurrently:
         specifier: ^9.2.1
         version: 9.2.1
+      jsfxr:
+        specifier: ^1.4.0
+        version: 1.4.0
       phaser:
         specifier: ^3.90.0
         version: 3.90.0
@@ -529,6 +532,10 @@ packages:
   is-fullwidth-code-point@3.0.0:
     resolution: {integrity: sha512-zymm5+u+sCsSWyD9qNaejV3DFvhCKclKdizYaJUuHA83RLjb7nSuGnddCHGv0hk+KY7BMAlsWeK4Ueg6EV6XQg==}
     engines: {node: '>=8'}
+
+  jsfxr@1.4.0:
+    resolution: {integrity: sha512-izrgCMfJKEcut8f8YXps5gSk1N0Lf3GLcEAxm42+XYZL2JbYjhVrlmRughzQ+Xzeg9sp5blG6jzkwBa6Goy1Vg==}
+    hasBin: true
 
   json-schema-ref-resolver@3.0.0:
     resolution: {integrity: sha512-hOrZIVL5jyYFjzk7+y7n5JDzGlU8rfWDuYyHwGa2WA8/pcmMHezp2xsVwxrebD/Q9t8Nc5DboieySDpCp4WG4A==}
@@ -1318,6 +1325,8 @@ snapshots:
   ipaddr.js@2.3.0: {}
 
   is-fullwidth-code-point@3.0.0: {}
+
+  jsfxr@1.4.0: {}
 
   json-schema-ref-resolver@3.0.0:
     dependencies:

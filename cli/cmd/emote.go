@@ -78,7 +78,7 @@ func runEmote(cmd *cobra.Command, args []string) error {
 	case 200:
 		ui.Success(fmt.Sprintf("Emote '%s' sent!", emote))
 	case 404:
-		ui.Warn("No active session found. Start a Claude Code session first.")
+		ui.Warn("No active session found. Start a Claude Code or Codex session first.")
 	default:
 		var result map[string]string
 		if json.Unmarshal(body, &result) == nil {

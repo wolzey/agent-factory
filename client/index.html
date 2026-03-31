@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <title>Agent Factory</title>
   <style>
     :root {
@@ -89,6 +90,39 @@
     #hud .hud-stat {
       color: #00ffff;
     }
+    #hud .hud-audio {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+      padding-top: 4px;
+      border-top: 1px solid #222;
+    }
+    #hud .hud-audio button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 0;
+      line-height: 1;
+    }
+    #hud .hud-audio .volume-slider {
+      width: 60px;
+      height: 4px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: #333;
+      border-radius: 2px;
+      outline: none;
+    }
+    #hud .hud-audio .volume-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent-color);
+      cursor: pointer;
+    }
 
     /* Chat Panel — unified block with messages + input */
     #chat-panel {
@@ -104,6 +138,44 @@
       font-size: 11px;
       z-index: 999;
       overflow: hidden;
+      transition: margin-right 0.3s ease;
+    }
+    #chat-panel.chat-hidden {
+      margin-right: -340px;
+    }
+
+    /* Chat toggle tab */
+    #chat-toggle {
+      position: fixed;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(6, 6, 18, 0.95);
+      border: 1px solid #2a2a3a;
+      border-right: none;
+      border-radius: 4px 0 0 4px;
+      padding: 8px 4px;
+      color: var(--accent-color);
+      font-family: monospace;
+      font-size: 14px;
+      cursor: pointer;
+      z-index: 1000;
+      transition: right 0.3s ease, border-color 0.2s;
+      writing-mode: vertical-lr;
+      letter-spacing: 2px;
+      line-height: 1;
+    }
+    #chat-toggle:hover {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 8px color-mix(in srgb, var(--accent-color) 30%, transparent);
+    }
+    #chat-toggle.chat-visible {
+      right: 340px;
+    }
+    #chat-toggle .toggle-hint {
+      font-size: 9px;
+      color: #555;
+      margin-top: 4px;
     }
     #chat-panel .chat-header {
       display: flex;
@@ -425,6 +497,11 @@
     <div class="hud-title">AGENT FACTORY</div>
     <div>Agents: <span class="hud-stat" id="hud-agents">0</span></div>
     <div>Connected: <span class="hud-stat" id="hud-connected">--</span></div>
+    <div class="hud-audio">
+      <button id="audio-toggle" title="Toggle sound">&#x1F50A;</button>
+      <input type="range" id="volume-slider" min="0" max="100" value="30"
+             class="volume-slider" title="Volume">
+    </div>
   </div>
   <script type="module" src="./main.ts"></script>
 </body>

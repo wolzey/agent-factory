@@ -6,10 +6,18 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
-var hookEvents = []string{
+type HookTarget string
+
+const (
+	TargetClaude HookTarget = "claude"
+	TargetCodex  HookTarget = "codex"
+)
+
+var hookEventsClaude = []string{
 	"SessionStart",
 	"SessionEnd",
 	"PreToolUse",
@@ -36,61 +44,117 @@ var hookEvents = []string{
 	"ElicitationResult",
 }
 
-func SettingsPath() string {
+var hookEventsCodex = []string{
+	"SessionStart",
+	"PreToolUse",
+	"PostToolUse",
+	"UserPromptSubmit",
+	"Stop",
+}
+
+func ClaudeSettingsPath() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".claude", "settings.json")
 }
 
-func BackupPath() string {
-	return SettingsPath() + ".agent-factory-backup"
+func CodexHooksPath() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".codex", "hooks.json")
 }
 
-func SettingsExist() bool {
-	_, err := os.Stat(SettingsPath())
-	return err == nil
+func CodexConfigPath() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".codex", "config.toml")
 }
 
-func BackupSettings() error {
-	src, err := os.ReadFile(SettingsPath())
+func SettingsPath(target HookTarget) string {
+	switch target {
+	case TargetCodex:
+		return CodexHooksPath()
+	case TargetClaude:
+		fallthrough
+	default:
+		return ClaudeSettingsPath()
+	}
+}
+
+func BackupPath(target HookTarget) string {
+	return SettingsPath(target) + ".agent-factory-backup"
+}
+
+func ClaudeDetected() bool {
+	return fileExists(ClaudeSettingsPath())
+}
+
+func CodexDetected() bool {
+	return fileExists(CodexConfigPath()) || fileExists(CodexHooksPath())
+}
+
+func DetectedTargets() []HookTarget {
+	targets := make([]HookTarget, 0, 2)
+	if ClaudeDetected() {
+		targets = append(targets, TargetClaude)
+	}
+	if CodexDetected() {
+		targets = append(targets, TargetCodex)
+	}
+	return targets
+}
+
+func BackupSettings(target HookTarget) error {
+	src, err := os.ReadFile(SettingsPath(target))
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return err
 	}
-	return os.WriteFile(BackupPath(), src, 0o644)
+	return os.WriteFile(BackupPath(target), src, 0o644)
 }
 
-// IsInstalled checks if any agent-factory hooks are registered in settings.json.
-func IsInstalled() bool {
-	data, err := os.ReadFile(SettingsPath())
+// IsInstalled checks if any agent-factory hooks are registered for a target.
+func IsInstalled(target HookTarget) bool {
+	data, err := os.ReadFile(SettingsPath(target))
 	if err != nil {
 		return false
 	}
 	return strings.Contains(string(data), "agent-factory-hook")
 }
 
-// RegisterHooks adds agent-factory hook entries to ~/.claude/settings.json
+func InstalledTargets() []HookTarget {
+	targets := make([]HookTarget, 0, 2)
+	for _, target := range []HookTarget{TargetClaude, TargetCodex} {
+		if IsInstalled(target) {
+			targets = append(targets, target)
+		}
+	}
+	return targets
+}
+
+// RegisterHooks adds agent-factory hook entries to target hook settings
 // for each event type, skipping events that already have one.
-func RegisterHooks(hookScriptPath string) (registered, skipped int, err error) {
-	settings, err := readSettings()
+func RegisterHooks(target HookTarget, hookScriptPath string) (registered, skipped int, err error) {
+	if target == TargetCodex {
+		if err := EnsureCodexHooksEnabled(); err != nil {
+			return 0, 0, fmt.Errorf("enabling codex hooks in config.toml: %w", err)
+		}
+	}
+
+	settings, err := readSettings(target)
 	if err != nil {
 		return 0, 0, fmt.Errorf("reading settings: %w", err)
 	}
 
 	hooksMap := getOrCreateMap(settings, "hooks")
+	events := eventsForTarget(target)
 
-	for _, event := range hookEvents {
+	for _, event := range events {
 		if eventHasHook(hooksMap, event) {
 			skipped++
 			continue
 		}
 
-		entry := map[string]interface{}{
-			"hooks": []interface{}{
-				map[string]interface{}{
-					"type":    "command",
-					"command": hookScriptPath,
-				},
-			},
-		}
+		entry := makeHookEntry(target, hookScriptPath)
 
 		eventArr := getOrCreateArray(hooksMap, event)
 		hooksMap[event] = append(eventArr, entry)
@@ -99,17 +163,20 @@ func RegisterHooks(hookScriptPath string) (registered, skipped int, err error) {
 
 	settings["hooks"] = hooksMap
 
-	if err := writeSettings(settings); err != nil {
+	if err := writeSettings(target, settings); err != nil {
 		return 0, 0, fmt.Errorf("writing settings: %w", err)
 	}
 
 	return registered, skipped, nil
 }
 
-// UnregisterHooks removes all agent-factory hook entries from settings.json.
-func UnregisterHooks() error {
-	settings, err := readSettings()
+// UnregisterHooks removes all agent-factory hook entries from target settings.
+func UnregisterHooks(target HookTarget) error {
+	settings, err := readSettings(target)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return fmt.Errorf("reading settings: %w", err)
 	}
 
@@ -123,12 +190,7 @@ func UnregisterHooks() error {
 		return nil
 	}
 
-	for _, event := range hookEvents {
-		eventArr, ok := hooksMap[event]
-		if !ok {
-			continue
-		}
-
+	for event, eventArr := range hooksMap {
 		arr, ok := eventArr.([]interface{})
 		if !ok {
 			continue
@@ -154,13 +216,19 @@ func UnregisterHooks() error {
 		settings["hooks"] = hooksMap
 	}
 
-	return writeSettings(settings)
+	return writeSettings(target, settings)
 }
 
-func readSettings() (map[string]interface{}, error) {
-	data, err := os.ReadFile(SettingsPath())
+func readSettings(target HookTarget) (map[string]interface{}, error) {
+	data, err := os.ReadFile(SettingsPath(target))
 	if err != nil {
+		if os.IsNotExist(err) && target == TargetCodex {
+			return map[string]interface{}{}, nil
+		}
 		return nil, err
+	}
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return map[string]interface{}{}, nil
 	}
 
 	var settings map[string]interface{}
@@ -171,7 +239,7 @@ func readSettings() (map[string]interface{}, error) {
 	return settings, nil
 }
 
-func writeSettings(settings map[string]interface{}) error {
+func writeSettings(target HookTarget, settings map[string]interface{}) error {
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return err
@@ -179,7 +247,10 @@ func writeSettings(settings map[string]interface{}) error {
 	data = append(data, '\n')
 
 	// Atomic write: write to temp file in same dir, then rename
-	dir := filepath.Dir(SettingsPath())
+	dir := filepath.Dir(SettingsPath(target))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
 	tmp, err := os.CreateTemp(dir, ".settings-*.json")
 	if err != nil {
 		return err
@@ -197,7 +268,126 @@ func writeSettings(settings map[string]interface{}) error {
 		return err
 	}
 
-	return os.Rename(tmpPath, SettingsPath())
+	return os.Rename(tmpPath, SettingsPath(target))
+}
+
+func EnsureCodexHooksEnabled() error {
+	configPath := CodexConfigPath()
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		return err
+	}
+
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return os.WriteFile(configPath, []byte("[features]\ncodex_hooks = true\n"), 0o644)
+		}
+		return err
+	}
+
+	updated := enableCodexHooksInToml(string(content))
+	if updated == string(content) {
+		return nil
+	}
+
+	return os.WriteFile(configPath, []byte(updated), 0o644)
+}
+
+func enableCodexHooksInToml(input string) string {
+	lines := strings.Split(input, "\n")
+	sectionRegex := regexp.MustCompile(`^\s*\[([^\]]+)\]\s*$`)
+	flagRegex := regexp.MustCompile(`(?i)^\s*codex_hooks\s*=\s*(true|false)\s*(#.*)?$`)
+
+	featuresStart := -1
+	featuresEnd := len(lines)
+	currentSection := ""
+	flagLine := -1
+	flagValue := ""
+
+	for i, line := range lines {
+		if m := sectionRegex.FindStringSubmatch(line); m != nil {
+			if currentSection == "features" && featuresEnd == len(lines) {
+				featuresEnd = i
+			}
+			currentSection = strings.TrimSpace(m[1])
+			if currentSection == "features" && featuresStart == -1 {
+				featuresStart = i
+			}
+			continue
+		}
+
+		if currentSection == "features" {
+			m := flagRegex.FindStringSubmatch(line)
+			if m == nil {
+				continue
+			}
+			flagLine = i
+			flagValue = strings.ToLower(m[1])
+		}
+	}
+
+	if currentSection == "features" && featuresEnd == len(lines) {
+		featuresEnd = len(lines)
+	}
+
+	if flagLine >= 0 {
+		if flagValue == "true" {
+			return input
+		}
+		lines[flagLine] = "codex_hooks = true"
+		return strings.Join(lines, "\n")
+	}
+
+	if featuresStart >= 0 {
+		newLines := make([]string, 0, len(lines)+1)
+		newLines = append(newLines, lines[:featuresEnd]...)
+		newLines = append(newLines, "codex_hooks = true")
+		newLines = append(newLines, lines[featuresEnd:]...)
+		return strings.Join(newLines, "\n")
+	}
+
+	out := strings.TrimRight(input, "\n")
+	if out != "" {
+		out += "\n\n"
+	}
+	out += "[features]\ncodex_hooks = true\n"
+	return out
+}
+
+func eventsForTarget(target HookTarget) []string {
+	if target == TargetCodex {
+		return hookEventsCodex
+	}
+	return hookEventsClaude
+}
+
+func makeHookEntry(target HookTarget, hookScriptPath string) map[string]interface{} {
+	command := interface{}(hookScriptPath)
+	entry := map[string]interface{}{
+		"hooks": []interface{}{
+			map[string]interface{}{
+				"type":    "command",
+				"command": command,
+			},
+		},
+	}
+
+	if target == TargetCodex {
+		entry["matcher"] = "*"
+		entry["hooks"] = []interface{}{
+			map[string]interface{}{
+				"type":    "command",
+				"command": []interface{}{hookScriptPath},
+			},
+		}
+	}
+
+	return entry
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func getOrCreateMap(parent map[string]interface{}, key string) map[string]interface{} {
@@ -267,14 +457,25 @@ func entryContainsHook(entry interface{}) bool {
 		if !ok {
 			continue
 		}
-		cmdStr, ok := cmd.(string)
-		if !ok {
-			continue
-		}
-		if strings.Contains(cmdStr, "agent-factory-hook") {
+		if commandContainsHook(cmd) {
 			return true
 		}
 	}
 
+	return false
+}
+
+func commandContainsHook(command interface{}) bool {
+	switch cmd := command.(type) {
+	case string:
+		return strings.Contains(cmd, "agent-factory-hook")
+	case []interface{}:
+		for _, part := range cmd {
+			partStr, ok := part.(string)
+			if ok && strings.Contains(partStr, "agent-factory-hook") {
+				return true
+			}
+		}
+	}
 	return false
 }

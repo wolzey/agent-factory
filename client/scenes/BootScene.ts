@@ -23,6 +23,12 @@ const HAIR_COLOR_HEXES = [
   '#553311', // chestnut
   '#444444', // gray
   '#cc8844', // sandy blonde
+  '#e8d5b5', // platinum blonde
+  '#8b4513', // auburn
+  '#ff2200', // bright red
+  '#aaaaaa', // silver
+  '#0a0a1a', // blue black
+  '#b89a5a', // dirty blonde
 ];
 
 // Hair style drawing functions per spriteIndex
@@ -390,6 +396,69 @@ const SHIRT_DESIGNS: ShirtDesignDrawFn[] = [
     ctx.fillStyle = '#000000';
     ctx.fillRect(x + 15, y + 20 + b + br, 1, 1);
     ctx.fillRect(x + 17, y + 20 + b + br, 1, 1);
+  },
+  // 7: Checkerboard
+  (ctx, x, y, b, br, dc) => {
+    ctx.fillStyle = dc;
+    ctx.fillRect(x + 8, y + 16 + b + br, 2, 2);
+    ctx.fillRect(x + 12, y + 16 + b + br, 2, 2);
+    ctx.fillRect(x + 16, y + 16 + b + br, 2, 2);
+    ctx.fillRect(x + 20, y + 16 + b + br, 2, 2);
+    ctx.fillRect(x + 10, y + 18 + b + br, 2, 2);
+    ctx.fillRect(x + 14, y + 18 + b + br, 2, 2);
+    ctx.fillRect(x + 18, y + 18 + b + br, 2, 2);
+    ctx.fillRect(x + 22, y + 18 + b + br, 2, 2);
+    ctx.fillRect(x + 8, y + 20 + b + br, 2, 2);
+    ctx.fillRect(x + 12, y + 20 + b + br, 2, 2);
+    ctx.fillRect(x + 16, y + 20 + b + br, 2, 2);
+    ctx.fillRect(x + 20, y + 20 + b + br, 2, 2);
+  },
+  // 8: Diamond
+  (ctx, x, y, b, br) => {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x + 15, y + 16 + b + br, 2, 1);
+    ctx.fillRect(x + 14, y + 17 + b + br, 4, 1);
+    ctx.fillRect(x + 13, y + 18 + b + br, 6, 1);
+    ctx.fillRect(x + 14, y + 19 + b + br, 4, 1);
+    ctx.fillRect(x + 15, y + 20 + b + br, 2, 1);
+  },
+  // 9: Lightning
+  (ctx, x, y, b, br) => {
+    ctx.fillStyle = '#ffff00';
+    ctx.fillRect(x + 16, y + 16 + b + br, 3, 1);
+    ctx.fillRect(x + 15, y + 17 + b + br, 3, 1);
+    ctx.fillRect(x + 14, y + 18 + b + br, 3, 1);
+    ctx.fillRect(x + 15, y + 19 + b + br, 3, 1);
+    ctx.fillRect(x + 16, y + 20 + b + br, 3, 1);
+    ctx.fillRect(x + 15, y + 21 + b + br, 3, 1);
+  },
+  // 10: Dots
+  (ctx, x, y, b, br, _dc, lc) => {
+    ctx.fillStyle = lc;
+    ctx.fillRect(x + 10, y + 16 + b + br, 1, 1);
+    ctx.fillRect(x + 14, y + 16 + b + br, 1, 1);
+    ctx.fillRect(x + 18, y + 16 + b + br, 1, 1);
+    ctx.fillRect(x + 22, y + 16 + b + br, 1, 1);
+    ctx.fillRect(x + 12, y + 18 + b + br, 1, 1);
+    ctx.fillRect(x + 16, y + 18 + b + br, 1, 1);
+    ctx.fillRect(x + 20, y + 18 + b + br, 1, 1);
+    ctx.fillRect(x + 10, y + 20 + b + br, 1, 1);
+    ctx.fillRect(x + 14, y + 20 + b + br, 1, 1);
+    ctx.fillRect(x + 18, y + 20 + b + br, 1, 1);
+    ctx.fillRect(x + 22, y + 20 + b + br, 1, 1);
+  },
+  // 11: X-Cross
+  (ctx, x, y, b, br) => {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x + 10, y + 16 + b + br, 2, 1);
+    ctx.fillRect(x + 20, y + 16 + b + br, 2, 1);
+    ctx.fillRect(x + 12, y + 17 + b + br, 2, 1);
+    ctx.fillRect(x + 18, y + 17 + b + br, 2, 1);
+    ctx.fillRect(x + 14, y + 18 + b + br, 4, 2);
+    ctx.fillRect(x + 12, y + 20 + b + br, 2, 1);
+    ctx.fillRect(x + 18, y + 20 + b + br, 2, 1);
+    ctx.fillRect(x + 10, y + 21 + b + br, 2, 1);
+    ctx.fillRect(x + 20, y + 21 + b + br, 2, 1);
   },
 ];
 

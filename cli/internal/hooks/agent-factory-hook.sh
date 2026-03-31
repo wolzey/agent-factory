@@ -1,5 +1,5 @@
 #!/bin/bash
-# Agent Factory hook - sends Claude Code events to the visualization server
+# Agent Factory hook - sends Claude/Codex events to the visualization server
 CONFIG_FILE="${HOME}/.config/agent-factory/config.json"
 SERVER_URL="http://localhost:4242"
 

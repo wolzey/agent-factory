@@ -115,19 +115,26 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	ui.Success(fmt.Sprintf("Updated to %s!", release.TagName))
 
-	// Re-register hooks to pick up any new event types added in this version
-	if hooks.IsInstalled() {
-		registered, _, err := hooks.RegisterHooks(hooks.HookScriptPath())
-		if err != nil {
-			ui.Warn("Could not update hooks: " + err.Error())
-			ui.Info("Run 'agent-factory install' to fix hooks manually.")
-		} else if registered > 0 {
-			ui.Success(fmt.Sprintf("Registered %d new hook event(s)", registered))
+	// Re-register hooks to pick up any new event types added in this version.
+	installedTargets := hooks.InstalledTargets()
+	if len(installedTargets) > 0 {
+		for _, target := range installedTargets {
+			registered, _, err := hooks.RegisterHooks(target, hooks.HookScriptPath())
+			if err != nil {
+				ui.Warn(fmt.Sprintf("Could not update %s hooks: %v", target, err))
+				ui.Info("Run 'agent-factory install' to fix hooks manually.")
+				continue
+			}
+			if registered > 0 {
+				ui.Success(fmt.Sprintf("%s: registered %d new hook event(s)", strings.ToUpper(string(target)), registered))
+			}
 		}
 
-		// Update skill files
-		if err := hooks.WriteSkills(); err != nil {
-			ui.Warn("Could not update skills: " + err.Error())
+		// Update skill files for Claude users.
+		if containsTarget(installedTargets, hooks.TargetClaude) {
+			if err := hooks.WriteSkills(); err != nil {
+				ui.Warn("Could not update skills: " + err.Error())
+			}
 		}
 	}
 
