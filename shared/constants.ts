@@ -1,5 +1,5 @@
 export const DEFAULT_PORT = 4242;
-export const STALE_SESSION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+export const STALE_SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 export const STALE_CHECK_INTERVAL_MS = 30 * 1000; // 30 seconds
 export const STOPPED_REMOVAL_DELAY_MS = 3000; // 3 seconds after session end
 export const TOMBSTONE_DURATION_MS = 30_000; // 30 seconds tombstone lingers

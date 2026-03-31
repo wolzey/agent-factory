@@ -15,9 +15,14 @@ export class StateManager {
   private sessions = new Map<string, AgentSession>();
   private onChange: StateChangeCallback | null = null;
   private sessionNameLookup: ((id: string) => string | undefined) | null = null;
+  private sessionAliveCheck: ((id: string) => boolean) | null = null;
 
   setSessionNameLookup(fn: (id: string) => string | undefined) {
     this.sessionNameLookup = fn;
+  }
+
+  setSessionAliveCheck(fn: (id: string) => boolean) {
+    this.sessionAliveCheck = fn;
   }
 
   onStateChange(cb: StateChangeCallback) {
@@ -209,6 +214,12 @@ export class StateManager {
     const reaped: string[] = [];
     for (const [id, session] of this.sessions) {
       if (now - session.lastEventAt > STALE_SESSION_TIMEOUT_MS) {
+        // Don't reap sessions that are still alive in Claude's session registry
+        if (this.sessionAliveCheck?.(id)) {
+          // Touch to prevent checking every reaper cycle
+          session.lastEventAt = now;
+          continue;
+        }
         this.sessions.delete(id);
         reaped.push(id);
         this.emit('remove', { sessionId: id });
