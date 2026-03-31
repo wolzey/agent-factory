@@ -1,5 +1,39 @@
 import type { EnvironmentType } from '@shared/types';
 
+export interface Position {
+  x: number;
+  y: number;
+}
+
+export type ActivityBucket = 'working' | 'thinking' | 'waiting' | 'idle' | 'stopped';
+export type Zone = 'work' | 'waiting' | 'idle';
+export type ActionPose = 'work' | 'sit';
+export type ActionLoop =
+  | 'default_work'
+  | 'default_waiting'
+  | 'default_idle'
+  | 'mining_work'
+  | 'mining_waiting'
+  | 'mining_idle';
+
+export interface ActionSpec {
+  zone: Zone;
+  pose: ActionPose;
+  loop: ActionLoop;
+}
+
+export interface LayoutSpec {
+  entrance: Position;
+  workSlots: Position[];
+  waitingSlots: Position[];
+  idleSlots: Position[];
+}
+
+export interface BehaviorConfig {
+  layout: LayoutSpec;
+  actionsByBucket: Record<ActivityBucket, ActionSpec>;
+}
+
 export interface FloorConfig {
   key: string;
   generate: (textures: Phaser.Textures.TextureManager) => void;
@@ -84,6 +118,7 @@ export interface ParticleConfig {
 export interface EnvironmentTheme {
   type: EnvironmentType;
   backgroundColor: string;
+  behavior: BehaviorConfig;
 
   floors: {
     main: FloorConfig;

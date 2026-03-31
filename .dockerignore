@@ -1,0 +1,46 @@
+# Version control
+.git
+.gitignore
+
+# Go CLI (local use only)
+cli/
+
+# Build artifacts (rebuilt in container)
+dist/
+node_modules/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Environment and secrets
+.env
+.env.*
+
+# Local-only scripts
+install.sh
+install-cli.sh
+uninstall.sh
+test-zombie.sh
+
+# CI/CD and repo metadata
+.github/
+.claude/
+.worktrees/
+
+# Documentation
+README.md
+
+# Local hooks and config templates
+hooks/
+scripts/
+config/
+
+# Logs
+*.log

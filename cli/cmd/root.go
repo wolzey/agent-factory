@@ -9,8 +9,8 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "agent-factory",
-	Short: "Agent Factory CLI - install/uninstall Claude Code visualization hooks",
-	Long:  "Install and manage Agent Factory hooks for Claude Code.\nYour coding sessions will appear as pixel art avatars in a retro arcade.",
+	Short: "Agent Factory CLI - install/uninstall Claude/Codex visualization hooks",
+	Long:  "Install and manage Agent Factory hooks for Claude Code and Codex.\nYour coding sessions will appear as pixel art avatars in a retro arcade.",
 }
 
 func Execute() {
@@ -28,4 +28,5 @@ func init() {
 	rootCmd.AddCommand(emoteCmd)
 	rootCmd.AddCommand(chatCmd)
 	rootCmd.AddCommand(tokenCmd)
+	rootCmd.AddCommand(configCmd)
 }

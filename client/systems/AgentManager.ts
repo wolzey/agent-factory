@@ -6,10 +6,14 @@ import { SubagentSprite } from '../entities/SubagentSprite';
 import { Machine } from '../entities/Machine';
 import { LayoutManager } from './LayoutManager';
 import { getTheme } from '../environments';
-import type { EnvironmentTheme } from '../environments';
+import type { ActivityBucket, EnvironmentTheme } from '../environments';
+import type { SoundBank } from '../audio/SoundBank';
+
+const WORKING_STATES = ['reading', 'writing', 'running', 'searching', 'chatting', 'planning', 'compacting'];
 
 export class AgentManager {
   private scene: Phaser.Scene;
+  private soundBank: SoundBank | null = null;
   private agents = new Map<string, AgentSprite>();
   private subagents = new Map<string, SubagentSprite>();
   private machines: Machine[] = [];
@@ -31,23 +35,24 @@ export class AgentManager {
   constructor(scene: Phaser.Scene, envType: EnvironmentType = 'arcade') {
     this.scene = scene;
     this.theme = getTheme(envType);
-    this.layout = new LayoutManager();
+    this.layout = new LayoutManager(this.theme.behavior.layout);
     this.createMachines();
   }
 
   private createMachines() {
-    for (let row = 0; row < 2; row++) {
-      for (let col = 0; col < 6; col++) {
-        const x = 80 + col * 120;
-        const slotY = 110 + row * 110;
-        const machine = new Machine(this.scene, x, slotY - 24, row * 6 + col, this.theme.workstation);
-        this.machines.push(machine);
-      }
+    for (let i = 0; i < this.theme.behavior.layout.workSlots.length; i++) {
+      const slot = this.theme.behavior.layout.workSlots[i];
+      const machine = new Machine(this.scene, slot.x, slot.y - 24, i, this.theme.workstation);
+      this.machines.push(machine);
     }
   }
 
   setServerGraphicDeath(enabled: boolean) {
     this.serverGraphicDeath = enabled;
+  }
+
+  setSoundBank(sb: SoundBank) {
+    this.soundBank = sb;
   }
 
   handleFullState(agents: AgentSession[]) {
@@ -87,12 +92,15 @@ export class AgentManager {
         break;
       case 'tool_complete':
         this.emitSparks(agent.x, agent.y, 0x00ff66);
+        this.soundBank?.play('effect_tool_complete');
         break;
       case 'session_start':
         this.emitSparks(agent.x, agent.y, 0x00ffff, 12);
+        this.soundBank?.play('effect_session_start');
         break;
       case 'session_end':
         this.emitSparks(agent.x, agent.y, 0xff0044, 8);
+        this.soundBank?.play('effect_session_end');
         break;
       case 'subagent_spawn':
         this.emitSparks(agent.x, agent.y, 0xaa00ff, 10);
@@ -102,6 +110,7 @@ export class AgentManager {
         break;
       case 'error':
         this.emitSparks(agent.x, agent.y, 0xff0000, 8);
+        this.soundBank?.play('effect_error');
         break;
       case 'prompt_received':
         this.emitSparks(agent.x, agent.y, 0x00ffff, 10);
@@ -109,10 +118,12 @@ export class AgentManager {
       case 'task_completed':
         this.emitSparks(agent.x, agent.y, 0x00ff66, 15);
         agent.showFloatingLabel('DONE!', '#00ff66');
+        this.soundBank?.play('effect_task_completed');
         break;
       case 'notification':
         this.emitSparks(agent.x, agent.y, 0xffdd00, 6);
         if (data?.message) agent.showFloatingLabel(String(data.message).slice(0, 20), '#ffdd00');
+        this.soundBank?.play('effect_notification');
         break;
       case 'info_flash': {
         const colorMap: Record<string, number> = {
@@ -140,16 +151,22 @@ export class AgentManager {
         break;
       case 'emote':
         if (data?.emote) {
-          agent.playEmote(data.emote as string);
-          if (data.emote === 'gun') {
+          const emote = data.emote as string;
+          agent.playEmote(emote);
+          // Play emote sound if we have one
+          this.soundBank?.play(`emote_${emote}`);
+          if (emote === 'gun') {
             for (const [otherId, other] of this.agents) {
               if (otherId === sessionId) continue;
               if (other.x > agent.x && other.x - agent.x < 200) {
-                this.scene.time.delayedCall(300, () => other.playGunDeath());
+                this.scene.time.delayedCall(300, () => {
+                  other.playGunDeath();
+                  this.soundBank?.play('gun_victim');
+                });
               }
             }
           }
-          if (data.emote === 'fart') {
+          if (emote === 'fart') {
             for (const [otherId, other] of this.agents) {
               if (otherId === sessionId) continue;
               const dx = agent.x - other.x;
@@ -207,8 +224,11 @@ export class AgentManager {
     this.flowerVisitors.delete(session.sessionId);
 
     let agent = this.agents.get(session.sessionId);
+    const prevActivity = agent?.sessionData.activity;
+    let isNewAgent = false;
 
     if (!agent) {
+      isNewAgent = true;
       agent = new AgentSprite(this.scene, session);
       const tomb = this.tombstones.get(session.sessionId);
       if (tomb) {
@@ -216,7 +236,7 @@ export class AgentManager {
         agent.riseFromGrave(tomb.x, tomb.y, tomb.container);
         this.tombstones.delete(session.sessionId);
         this.flowersDone.delete(session.sessionId);
-        // Claim the tombstone's arcade slot so the zombie keeps its original position
+        // Claim the tombstone's work slot so the zombie keeps its original position.
         this.layout.claimTombstoneSlot(session.sessionId);
 
         // Send flower visitors home — tombstone is gone
@@ -227,6 +247,8 @@ export class AgentManager {
         this.scene.time.delayedCall(3000, () => {
           this.zombieRising.delete(session.sessionId);
         });
+
+        this.soundBank?.play('zombie_rise');
       } else {
         // New agent - spawn at entrance with a random animation
         const entrance = this.layout.entrance;
@@ -244,52 +266,38 @@ export class AgentManager {
       return;
     }
 
-    // Route agent to the right area based on activity:
-    //   working (reading/writing/running/searching/chatting/planning) -> arcade cabinet
-    //   thinking (between tool calls) -> stay at arcade cabinet (thought bubble shown by AgentSprite)
-    //   waiting (waiting for user prompt) -> front counter
-    //   idle (session started, no activity yet) -> lounge
-    //   stopped -> die in place (slot kept for tombstone, removeAgent handles release)
+    const activityBucket = this.bucketForActivity(session.activity);
+    const action = this.theme.behavior.actionsByBucket[activityBucket];
+    agent.setBackgroundAction(action, this.theme.type);
 
-    const workingStates = ['reading', 'writing', 'running', 'searching', 'chatting', 'planning', 'compacting'];
-    const isWorking = workingStates.includes(session.activity);
-    const isThinking = session.activity === 'thinking';
-
-    if (session.activity === 'stopped') {
-      // Don't release the arcade slot here — removeAgent will reserve it for the tombstone
+    if (activityBucket === 'stopped') {
+      // Don't release the work slot here — removeAgent will reserve it for the tombstone
       this.deactivateMachineFor(session.sessionId);
       // Die in place — no walking to exit
-    } else if (isWorking || isThinking) {
-      // Working or thinking -> arcade cabinet
-      const pos = this.layout.assignToArcade(session.sessionId);
+    } else if (action.zone === 'work') {
+      const pos = this.layout.assignToWork(session.sessionId);
       const target = { x: pos.x, y: pos.y + 24 };
-      // Non-zombie agents must not work at a tombstone-occupied slot
+      // Non-zombie agents must not work at a tombstone-occupied slot.
       if (!agent.isZombie && this.isNearTombstone(target.x, target.y)) {
-        // Release and reassign to a different slot
+        // Release and reassign to a different work slot.
         this.layout.release(session.sessionId);
-        const altPos = this.layout.assignToArcade(session.sessionId);
+        const altPos = this.layout.assignToWork(session.sessionId);
         agent.moveTo(altPos.x, altPos.y + 24);
       } else {
         agent.moveTo(target.x, target.y);
       }
       this.activateMachineFor(session.sessionId);
-    } else if (session.activity === 'waiting') {
-      // Waiting for user prompt -> front counter
+    } else if (action.zone === 'waiting') {
       this.deactivateMachineFor(session.sessionId);
-      this.layout.release(session.sessionId);
-      const pos = this.layout.assignToCounter(session.sessionId);
-      // If position overlaps a tombstone, offset away
+      const pos = this.layout.assignToWaiting(session.sessionId);
       if (!agent.isZombie && this.isNearTombstone(pos.x, pos.y)) {
         agent.moveTo(pos.x + 30, pos.y);
       } else {
         agent.moveTo(pos.x, pos.y);
       }
     } else {
-      // idle / fallback -> lounge
-      this.layout.release(session.sessionId);
       this.deactivateMachineFor(session.sessionId);
-      const pos = this.layout.assignToLounge(session.sessionId);
-      // If position overlaps a tombstone, offset away
+      const pos = this.layout.assignToIdle(session.sessionId);
       if (!agent.isZombie && this.isNearTombstone(pos.x, pos.y)) {
         agent.moveTo(pos.x + 30, pos.y);
       } else {
@@ -299,6 +307,30 @@ export class AgentManager {
 
     // Sync subagents
     this.syncSubagents(session);
+
+    // Sound is LAST — after all routing, movement, and subagent sync.
+    // Fire-and-forget, no return value used, no side effects on agent state.
+    if (!isNewAgent && prevActivity !== session.activity) {
+      if (session.activity === 'waiting') {
+        this.soundBank?.play('state_waiting', session.sessionId);
+      } else if (session.activity === 'stopped') {
+        this.soundBank?.play('state_stopped', session.sessionId);
+      } else if (session.activity === 'idle') {
+        this.soundBank?.play('state_idle', session.sessionId);
+      } else if (session.activity === 'thinking') {
+        this.soundBank?.play('state_thinking', session.sessionId);
+      } else if (WORKING_STATES.includes(session.activity)) {
+        this.soundBank?.play('state_working', session.sessionId);
+      }
+    }
+  }
+
+  private bucketForActivity(activity: AgentSession['activity']): ActivityBucket {
+    if (WORKING_STATES.includes(activity)) return 'working';
+    if (activity === 'thinking') return 'thinking';
+    if (activity === 'waiting') return 'waiting';
+    if (activity === 'stopped') return 'stopped';
+    return 'idle';
   }
 
   /** Check if a position is within proximity of any active tombstone. */
@@ -316,11 +348,14 @@ export class AgentManager {
   private removeAgent(sessionId: string) {
     const agent = this.agents.get(sessionId);
     if (agent) {
+      const graphic = !!(this.serverGraphicDeath || agent.sessionData.avatar?.graphicDeath);
+      this.soundBank?.play(graphic ? 'death_graphic' : 'death_standard');
+
       // Deactivate machine while slot still has the agent's sessionId
       this.deactivateMachineFor(sessionId);
       // Reserve the workstation slot for the tombstone (changes occupant to __tomb__ prefix)
       this.layout.reserveForTombstone(sessionId);
-      // Release any non-arcade slots (counter/lounge) the agent may hold
+      // Release any non-work slots the agent may hold.
       this.layout.release(sessionId);
 
       agent.die(() => {
@@ -391,7 +426,7 @@ export class AgentManager {
   }
 
   private activateMachineFor(sessionId: string) {
-    const slot = this.layout.getArcadeSlotFor(sessionId);
+    const slot = this.layout.getWorkSlotFor(sessionId);
     if (slot) {
       const machine = this.machines.find(
         m => Math.abs(m.x - slot.pos.x) < 15 && Math.abs(m.y - (slot.pos.y - 24)) < 15,
@@ -401,7 +436,7 @@ export class AgentManager {
   }
 
   private deactivateMachineFor(sessionId: string) {
-    const slot = this.layout.getArcadeSlotFor(sessionId);
+    const slot = this.layout.getWorkSlotFor(sessionId);
     if (slot) {
       const machine = this.machines.find(
         m => Math.abs(m.x - slot.pos.x) < 15 && Math.abs(m.y - (slot.pos.y - 24)) < 15,
@@ -1053,9 +1088,9 @@ export class AgentManager {
         this.flowerVisitors.delete(agentId);
         const agent = this.agents.get(agentId);
         if (agent) {
-          // Restore normal speed and send them back to lounge
+          // Restore normal speed and send them back to the idle zone.
           agent.setMoveSpeed(80);
-          const pos = this.layout.assignToLounge(agentId);
+          const pos = this.layout.assignToIdle(agentId);
           agent.moveTo(pos.x, pos.y);
         }
       }

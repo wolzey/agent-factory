@@ -24,7 +24,7 @@ const (
 	fieldCount
 )
 
-const visibleFields = 8
+const visibleFields = 14
 
 var (
 	titleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ff00ff"))
@@ -159,12 +159,12 @@ func (m *Model) adjustScroll() {
 func (m Model) View() string {
 	var sb strings.Builder
 
-	boxW := 58
+	boxW := 68
 
 	// Title
 	sb.WriteString("\n")
 	sb.WriteString(borderStyle.Render("  ╔"+strings.Repeat("═", boxW)+"╗") + "\n")
-	titleText := fmt.Sprintf("%*s", -(boxW-2), "            ✦ AVATAR DESIGNER ✦")
+	titleText := fmt.Sprintf("%*s", -(boxW-2), "               ✦ AVATAR DESIGNER ✦")
 	sb.WriteString(borderStyle.Render("  ║") + " " + titleStyle.Render(titleText) + " " + borderStyle.Render("║") + "\n")
 	sb.WriteString(borderStyle.Render("  ╠"+strings.Repeat("═", boxW)+"╣") + "\n")
 	sb.WriteString(borderStyle.Render("  ║") + strings.Repeat(" ", boxW) + borderStyle.Render("║") + "\n")
@@ -172,7 +172,7 @@ func (m Model) View() string {
 	// Render preview
 	params := m.currentParams()
 	grid := DrawCharacter(params)
-	preview := RenderPreview(grid, 2)
+	preview := RenderPreview(grid, 1)
 	previewLines := strings.Split(strings.TrimRight(preview, "\n"), "\n")
 
 	// Build visible option lines with scroll window
@@ -200,14 +200,14 @@ func (m Model) View() string {
 			line = fmt.Sprintf("%s %s %s %s",
 				labelStr,
 				arrowStyle.Render("◀"),
-				selectedStyle.Render(fmt.Sprintf("%-13s", value)),
+				selectedStyle.Render(fmt.Sprintf("%-16s", value)),
 				arrowStyle.Render("▶"),
 			)
 		} else {
 			labelStr := normalStyle.Render(fmt.Sprintf("%-14s", label))
 			line = fmt.Sprintf("%s   %s  ",
 				labelStr,
-				valueStyle.Render(fmt.Sprintf("%-13s", value)),
+				valueStyle.Render(fmt.Sprintf("%-16s", value)),
 			)
 		}
 		optionLines = append(optionLines, line)

@@ -14,16 +14,24 @@ interface SessionRegistryEntry {
 }
 
 export type NameChangeCallback = (sessionId: string, name: string) => void;
+export type NewSessionCallback = (sessionId: string, cwd: string, name?: string) => void;
 
 export class SessionRegistryWatcher {
   private cache = new Map<string, string | undefined>(); // sessionId -> name
   private timer: ReturnType<typeof setInterval> | null = null;
+  private onNewSession: NewSessionCallback | null = null;
 
   constructor(private onChange: NameChangeCallback) {}
 
-  start(): void {
-    // Initial poll immediately
-    void this.poll();
+  /** Register a callback for sessions that appear in the registry
+   *  but are not yet known to the state manager. */
+  setNewSessionCallback(cb: NewSessionCallback): void {
+    this.onNewSession = cb;
+  }
+
+  async start(): Promise<void> {
+    // Await first poll so the cache is populated before callers use it
+    await this.poll();
     this.timer = setInterval(() => void this.poll(), POLL_INTERVAL_MS);
   }
 
@@ -36,6 +44,16 @@ export class SessionRegistryWatcher {
 
   getSessionName(sessionId: string): string | undefined {
     return this.cache.get(sessionId);
+  }
+
+  /** Returns true if the session still has a file in ~/.claude/sessions/ */
+  isSessionAlive(sessionId: string): boolean {
+    return this.cache.has(sessionId);
+  }
+
+  /** Returns all session IDs currently in the registry */
+  getAliveSessionIds(): Set<string> {
+    return new Set(this.cache.keys());
   }
 
   private async poll(): Promise<void> {
@@ -58,10 +76,14 @@ export class SessionRegistryWatcher {
         if (!entry.sessionId) continue;
         seen.add(entry.sessionId);
 
+        const isNew = !this.cache.has(entry.sessionId);
         const prevName = this.cache.get(entry.sessionId);
         this.cache.set(entry.sessionId, entry.name);
 
-        if (entry.name && entry.name !== prevName) {
+        if (isNew) {
+          // New session discovered in registry — notify state manager
+          this.onNewSession?.(entry.sessionId, entry.cwd, entry.name);
+        } else if (entry.name && entry.name !== prevName) {
           this.onChange(entry.sessionId, entry.name);
         }
       } catch {

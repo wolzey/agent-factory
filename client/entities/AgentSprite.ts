@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
-import type { AgentSession, AgentActivity } from '@shared/types';
+import type { AgentSession, AgentActivity, EnvironmentType } from '@shared/types';
 import { TOMBSTONE_DURATION_MS } from '@shared/constants';
 import { BootScene } from '../scenes/BootScene';
+import type { ActionSpec } from '../environments';
 
 const ACTIVITY_ICONS: Record<string, string> = {
   running: 'terminal',
@@ -32,6 +33,12 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   private thoughtBubble: Phaser.GameObjects.Container | null = null;
   private questionBubble: Phaser.GameObjects.Container | null = null;
   private planningClipboard: Phaser.GameObjects.Container | null = null;
+  private actionUnderlay: Phaser.GameObjects.Container;
+  private actionOverlay: Phaser.GameObjects.Container;
+  private actionTimers: Phaser.Time.TimerEvent[] = [];
+  private actionTweenTargets: Phaser.Types.Tweens.TweenTarget[] = [];
+  private currentActionKey = '';
+  private currentActionPose: 'work' | 'sit' = 'sit';
 
   public sessionData: AgentSession;
   public isZombie = false;
@@ -62,11 +69,17 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.neonGlow = scene.add.rectangle(0, 6, 20, 6, 0xff00ff, 0.15);
     this.add(this.neonGlow);
 
+    this.actionUnderlay = scene.add.container(0, 0);
+    this.add(this.actionUnderlay);
+
     // Character sprite
     this.sprite = scene.add.sprite(0, 0, this.spriteKey, 1);
     this.sprite.setScale(1);
     this.sprite.setOrigin(0.5, 0.5);
     this.add(this.sprite);
+
+    this.actionOverlay = scene.add.container(0, 0);
+    this.add(this.actionOverlay);
 
     // Nametag
     this.nametag = scene.add.text(0, -24, this.computeLabel(session), {
@@ -155,6 +168,29 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.updateStatusIcon(session.activity, session.currentTool);
   }
 
+  setBackgroundAction(action: ActionSpec, environment: EnvironmentType) {
+    const key = `${environment}:${action.loop}:${action.pose}`;
+    this.currentActionPose = action.pose;
+
+    if (this.currentActionKey === key) {
+      if (!this.isMoving && !this.isEmoting) this.applyPose(this.currentActionPose);
+      return;
+    }
+
+    this.currentActionKey = key;
+    this.clearBackgroundActionLoop();
+
+    if (action.loop === 'mining_work') {
+      this.startMiningWorkLoop();
+    } else if (action.loop === 'mining_waiting') {
+      this.startMiningWaitingLoop();
+    } else if (action.loop === 'mining_idle') {
+      this.startMiningIdleLoop();
+    }
+
+    if (!this.isMoving && !this.isEmoting) this.applyPose(this.currentActionPose);
+  }
+
   die(onComplete?: () => void, serverGraphicDeath?: boolean) {
     if (serverGraphicDeath || this.sessionData.avatar?.graphicDeath) {
       this.dieGraphic(onComplete);
@@ -164,6 +200,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   private dieStandard(onComplete?: () => void) {
+    this.clearBackgroundActionLoop();
     this.hideThoughtBubble();
     this.statusIcon?.setVisible(false);
     this.isMoving = false;
@@ -218,6 +255,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   private dieGraphic(onComplete?: () => void) {
+    this.clearBackgroundActionLoop();
     this.hideThoughtBubble();
     this.statusIcon?.setVisible(false);
     this.isMoving = false;
@@ -2683,12 +2721,186 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   private onArrived() {
-    const activity = this.sessionData.activity;
-    if (activity === 'idle' || activity === 'stopped') {
+    this.applyPose(this.currentActionPose);
+  }
+
+  private applyPose(pose: 'work' | 'sit') {
+    // Reset transform unless a specific action pose overrides it.
+    this.sprite.setAngle(0);
+    this.sprite.setPosition(0, 0);
+
+    if (pose === 'sit' && this.currentActionKey.includes(':mining_idle:')) {
       this.playAnimation('sit');
-    } else {
-      this.playAnimation('work');
+      // Lying down sleep posture for mining idle.
+      this.sprite.setAngle(90);
+      this.sprite.setPosition(0, 7);
+      return;
     }
+
+    this.playAnimation(pose === 'sit' ? 'sit' : 'work');
+  }
+
+  private clearBackgroundActionLoop() {
+    for (const timer of this.actionTimers) {
+      timer.remove(false);
+    }
+    this.actionTimers = [];
+
+    for (const target of this.actionTweenTargets) {
+      this.scene.tweens.killTweensOf(target);
+    }
+    this.actionTweenTargets = [];
+
+    this.actionUnderlay.removeAll(true);
+    this.actionOverlay.removeAll(true);
+    this.sprite.setAngle(0);
+    this.sprite.setPosition(0, 0);
+  }
+
+  private trackActionTweenTarget(...targets: Phaser.Types.Tweens.TweenTarget[]) {
+    for (const target of targets) {
+      this.actionTweenTargets.push(target);
+    }
+  }
+
+  private trackActionTimer(timer: Phaser.Time.TimerEvent) {
+    this.actionTimers.push(timer);
+  }
+
+  private startMiningWorkLoop() {
+    const rockFace = this.scene.add.rectangle(20, 5, 18, 18, 0x4f5862, 0.9);
+    const cartBody = this.scene.add.rectangle(29, 11, 12, 6, 0x4c525a, 1);
+    const cartRim = this.scene.add.rectangle(29, 8, 14, 2, 0x646c75, 1);
+    const cartWheelA = this.scene.add.circle(25, 13, 1.7, 0x262a2f, 1);
+    const cartWheelB = this.scene.add.circle(33, 13, 1.7, 0x262a2f, 1);
+    this.actionUnderlay.add([rockFace, cartBody, cartRim, cartWheelA, cartWheelB]);
+
+    const pickaxe = this.scene.add.container(6, -1);
+    const handle = this.scene.add.rectangle(0, 3, 2, 12, 0x7a5232, 1);
+    const head = this.scene.add.rectangle(0, -2, 8, 3, 0x9ba3ac, 1);
+    pickaxe.add([handle, head]);
+    this.actionOverlay.add(pickaxe);
+    this.trackActionTweenTarget(pickaxe);
+    this.scene.tweens.add({
+      targets: pickaxe,
+      angle: 38,
+      y: pickaxe.y - 1,
+      duration: 240,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    const rockTimer = this.scene.time.addEvent({
+      delay: 850,
+      loop: true,
+      callback: () => {
+        const rock = this.scene.add.circle(16, 4, Phaser.Math.Between(1, 2), 0x8893a0, 1);
+        this.actionOverlay.add(rock);
+        this.scene.tweens.add({
+          targets: rock,
+          x: 29 + Phaser.Math.Between(-1, 2),
+          y: 9 + Phaser.Math.Between(-1, 1),
+          alpha: 0.2,
+          duration: 340,
+          ease: 'Sine.easeOut',
+          onComplete: () => rock.destroy(),
+        });
+      },
+    });
+    this.trackActionTimer(rockTimer);
+  }
+
+  private startMiningWaitingLoop() {
+    const anvilTop = this.scene.add.rectangle(20, 8, 14, 3, 0x848c96, 1);
+    const anvilBody = this.scene.add.rectangle(20, 11, 9, 4, 0x6b737c, 1);
+    const anvilBase = this.scene.add.rectangle(20, 14, 11, 2, 0x525860, 1);
+    this.actionUnderlay.add([anvilTop, anvilBody, anvilBase]);
+
+    const pickaxe = this.scene.add.container(5, 1);
+    const handle = this.scene.add.rectangle(0, 4, 2, 10, 0x7a5232, 1);
+    const fixedHead = this.scene.add.rectangle(0, -1, 8, 3, 0x9ba3ac, 1);
+    const brokenHeadLeft = this.scene.add.rectangle(-3, -1, 3, 3, 0x9ba3ac, 1);
+    const brokenHeadRight = this.scene.add.rectangle(3, -1, 3, 3, 0x9ba3ac, 1);
+    pickaxe.add([handle, fixedHead, brokenHeadLeft, brokenHeadRight]);
+    this.actionOverlay.add(pickaxe);
+
+    const hammer = this.scene.add.container(18, 0);
+    const hammerHandle = this.scene.add.rectangle(0, 4, 2, 8, 0x7a5232, 1);
+    const hammerHead = this.scene.add.rectangle(0, 0, 6, 3, 0xb0b7bf, 1);
+    hammer.add([hammerHandle, hammerHead]);
+    this.actionOverlay.add(hammer);
+
+    this.trackActionTweenTarget(hammer, pickaxe, fixedHead, brokenHeadLeft, brokenHeadRight);
+    this.scene.tweens.add({
+      targets: hammer,
+      angle: -32,
+      y: hammer.y - 1,
+      duration: 220,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    const setBroken = (broken: boolean) => {
+      fixedHead.setVisible(!broken);
+      brokenHeadLeft.setVisible(broken);
+      brokenHeadRight.setVisible(broken);
+    };
+    setBroken(true);
+    let isBroken = true;
+
+    const repairTimer = this.scene.time.addEvent({
+      delay: 900,
+      loop: true,
+      callback: () => {
+        isBroken = !isBroken;
+        setBroken(isBroken);
+        if (!isBroken) {
+          for (let i = 0; i < 4; i++) {
+            const spark = this.scene.add.circle(20 + Phaser.Math.Between(-3, 3), 7, 1, 0xffc266, 1);
+            this.actionOverlay.add(spark);
+            this.scene.tweens.add({
+              targets: spark,
+              x: spark.x + Phaser.Math.Between(-5, 5),
+              y: spark.y - Phaser.Math.Between(4, 8),
+              alpha: 0,
+              duration: 240,
+              onComplete: () => spark.destroy(),
+            });
+          }
+        }
+      },
+    });
+    this.trackActionTimer(repairTimer);
+  }
+
+  private startMiningIdleLoop() {
+    // Beds are fixed world props in the mining theme; do not attach a bed to the agent.
+
+    const zTimer = this.scene.time.addEvent({
+      delay: 700,
+      loop: true,
+      callback: () => {
+        const z = this.scene.add.text(11, -14, 'Z', {
+          fontSize: '9px',
+          fontFamily: 'monospace',
+          color: '#a9c4e6',
+          fontStyle: 'bold',
+        }).setOrigin(0.5, 0.5);
+        this.actionOverlay.add(z);
+        this.scene.tweens.add({
+          targets: z,
+          x: z.x + Phaser.Math.Between(4, 7),
+          y: z.y - Phaser.Math.Between(10, 16),
+          alpha: 0,
+          duration: 900,
+          ease: 'Sine.easeOut',
+          onComplete: () => z.destroy(),
+        });
+      },
+    });
+    this.trackActionTimer(zTimer);
   }
 
   private playAnimation(anim: string) {
@@ -2930,12 +3142,12 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.planningClipboard = null;
   }
 
+  destroy(fromScene?: boolean) {
+    this.clearBackgroundActionLoop();
+    super.destroy(fromScene);
+  }
+
   private computeLabel(session: AgentSession): string {
-    if (session.sessionName) {
-      return session.sessionName.length > 16
-        ? session.sessionName.slice(0, 14) + '..'
-        : session.sessionName;
-    }
     return session.username;
   }
 

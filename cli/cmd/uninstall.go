@@ -15,7 +15,7 @@ var flagForce bool
 
 var uninstallCmd = &cobra.Command{
 	Use:   "uninstall",
-	Short: "Remove Agent Factory hooks from Claude Code",
+	Short: "Remove Agent Factory hooks from Claude/Codex",
 	RunE:  runUninstall,
 }
 
@@ -28,7 +28,8 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  %s\n", ui.ErrorStyle.Render(ui.BoldStyle.Render("Agent Factory - Uninstall")))
 	fmt.Println()
 
-	hasHooks := hooks.IsInstalled()
+	installedTargets := hooks.InstalledTargets()
+	hasHooks := len(installedTargets) > 0
 	hasConfig := config.Exists()
 
 	if !hasHooks && !hasConfig {
@@ -38,8 +39,13 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 
 	// Show what will be removed
 	fmt.Println("  This will:")
-	if hasHooks {
-		fmt.Printf("    - Remove Agent Factory hooks from %s\n", ui.DimStyle.Render("~/.claude/settings.json"))
+	for _, target := range installedTargets {
+		switch target {
+		case hooks.TargetClaude:
+			fmt.Printf("    - Remove Agent Factory hooks from %s\n", ui.DimStyle.Render("~/.claude/settings.json"))
+		case hooks.TargetCodex:
+			fmt.Printf("    - Remove Agent Factory hooks from %s\n", ui.DimStyle.Render("~/.codex/hooks.json"))
+		}
 	}
 	if hasConfig {
 		fmt.Printf("    - Delete %s\n", ui.DimStyle.Render("~/.config/agent-factory/"))
@@ -70,12 +76,17 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	// Remove hooks from settings.json
-	if hasHooks {
-		if err := hooks.UnregisterHooks(); err != nil {
-			ui.Error("Failed to remove hooks: " + err.Error())
+	for _, target := range installedTargets {
+		if err := hooks.UnregisterHooks(target); err != nil {
+			ui.Error(fmt.Sprintf("Failed to remove %s hooks: %v", target, err))
 			return err
 		}
-		ui.Success("Removed hooks from settings.json")
+		switch target {
+		case hooks.TargetClaude:
+			ui.Success("Removed hooks from ~/.claude/settings.json")
+		case hooks.TargetCodex:
+			ui.Success("Removed hooks from ~/.codex/hooks.json")
+		}
 	}
 
 	// Remove config directory
@@ -88,15 +99,17 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	}
 
 	// Remove backup
-	backupPath := hooks.BackupPath()
-	if _, err := os.Stat(backupPath); err == nil {
-		os.Remove(backupPath)
-		ui.Success("Removed settings backup")
+	for _, target := range []hooks.HookTarget{hooks.TargetClaude, hooks.TargetCodex} {
+		backupPath := hooks.BackupPath(target)
+		if _, err := os.Stat(backupPath); err == nil {
+			os.Remove(backupPath)
+			ui.Success("Removed settings backup")
+		}
 	}
 
 	fmt.Println()
 	fmt.Printf("  %s Agent Factory hooks are removed.\n", ui.SuccessStyle.Render(ui.BoldStyle.Render("Uninstalled.")))
-	fmt.Println(ui.DimStyle.Render("  Your Claude Code sessions will no longer send events."))
+	fmt.Println(ui.DimStyle.Render("  Your Claude/Codex sessions will no longer send events."))
 	fmt.Println()
 
 	return nil

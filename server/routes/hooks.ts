@@ -24,6 +24,7 @@ export function registerHookRoutes(
       return reply.status(400).send({ error: 'Missing hook_event_name' });
     }
 
+    console.log(`[hook] event=${payload.hook_event_name} session=${payload.session_id} user=${payload.username || 'unknown'}`);
     state.handleHookEvent(payload);
     return reply.status(200).send({ ok: true });
   });

@@ -289,6 +289,32 @@ function generateCoffee(textures: Phaser.Textures.TextureManager) {
 export const ARCADE_THEME: EnvironmentTheme = {
   type: 'arcade',
   backgroundColor: '#0a0a1a',
+  behavior: {
+    layout: {
+      entrance: { x: 400, y: 470 },
+      workSlots: Array.from({ length: 12 }, (_, idx) => ({
+        x: 80 + (idx % 6) * 120,
+        y: 110 + Math.floor(idx / 6) * 110,
+      })),
+      waitingSlots: Array.from({ length: 4 }, (_, idx) => ({
+        x: 60 + idx * 90,
+        y: 390,
+      })),
+      idleSlots: [
+        { x: 550, y: 424 },
+        { x: 570, y: 424 },
+        { x: 690, y: 424 },
+        { x: 710, y: 424 },
+      ],
+    },
+    actionsByBucket: {
+      working: { zone: 'work', pose: 'work', loop: 'default_work' },
+      thinking: { zone: 'work', pose: 'work', loop: 'default_work' },
+      waiting: { zone: 'waiting', pose: 'work', loop: 'default_waiting' },
+      idle: { zone: 'idle', pose: 'sit', loop: 'default_idle' },
+      stopped: { zone: 'idle', pose: 'sit', loop: 'default_idle' },
+    },
+  },
 
   floors: {
     main: { key: 'floor_arcade', generate: generateFloors },
