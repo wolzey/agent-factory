@@ -46,7 +46,7 @@ func runAvatar(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println()
-	ui.Success("Avatar updated! Changes take effect on your next Claude Code session.")
+	ui.Success("Avatar updated! Changes take effect on your next Claude Code/Codex session.")
 	fmt.Println()
 	return nil
 }

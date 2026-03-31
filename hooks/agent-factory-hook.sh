@@ -1,7 +1,7 @@
 #!/bin/bash
-# Agent Factory hook - sends Claude Code events to the visualization server
+# Agent Factory hook - sends Claude/Codex events to the visualization server
 # Receives JSON from stdin, enriches with user config, POSTs to server
-# Always exits 0 to never block Claude Code
+# Always exits 0 to never block client execution
 
 CONFIG_FILE="${HOME}/.config/agent-factory/config.json"
 SERVER_URL="http://localhost:4242"
@@ -30,7 +30,7 @@ if [ -z "$PAYLOAD" ]; then
   PAYLOAD="$INPUT"
 fi
 
-# Fire and forget - don't block Claude Code
+# Fire and forget - don't block client execution
 curl -s -X POST \
   -H "Content-Type: application/json" \
   -d "$PAYLOAD" \
@@ -39,5 +39,5 @@ curl -s -X POST \
   --max-time 2 \
   > /dev/null 2>&1 &
 
-# Always exit 0 so we never block Claude Code
+# Always exit 0 so we never block client execution
 exit 0

@@ -1,13 +1,13 @@
 # Agent Factory
 
-A 2D pixel art visualization of Claude Code agent sessions. Watch your team's agents work in a retro arcade game room in real time.
+A 2D pixel art visualization of Claude Code/Codex agent sessions. Watch your team's agents work in a retro arcade game room in real time.
 
 ![Retro arcade themed visualization](https://img.shields.io/badge/theme-retro%20arcade-ff00ff)
-![Claude Code hooks](https://img.shields.io/badge/powered%20by-Claude%20Code%20hooks-00ffff)
+![Hook events](https://img.shields.io/badge/powered%20by-hook%20events-00ffff)
 
 ## What it does
 
-- Each active Claude Code session appears as an animated pixel art avatar
+- Each active Claude Code or Codex session appears as an animated pixel art avatar
 - Working agents stand at arcade cabinets with neon glow effects
 - Idle agents hang out in the lounge area
 - Subagents orbit their parent with a purple tint
@@ -27,9 +27,9 @@ This downloads a small binary and runs an interactive wizard that:
 1. Asks for your display name
 2. Asks for the server URL (they'll give you this)
 3. Lets you pick an avatar color and style
-4. Installs the hooks into your Claude Code settings
+4. Installs the hooks into your Claude Code and/or Codex settings
 
-**Requirements:** `curl`, Claude Code installed
+**Requirements:** `curl`, Claude Code and/or Codex installed
 
 For non-interactive installs (CI, scripting):
 
@@ -84,11 +84,11 @@ Set `PORT` and `HOST` environment variables to customize.
 ## How It Works
 
 ```
-Claude Code Hooks  ──curl POST──>  Fastify Server  ──WebSocket──>  Browser (Phaser 3)
+Claude/Codex Hooks  ──curl POST──>  Fastify Server  ──WebSocket──>  Browser (Phaser 3)
 (ephemeral bash)                   (port 4242)                     (2D pixel art arcade)
 ```
 
-1. **Hooks** fire on Claude Code events (session start/end, tool use, subagent spawn/stop)
+1. **Hooks** fire on Claude Code/Codex events (session start/end, tool use, subagent spawn/stop)
 2. The hook script reads `~/.config/agent-factory/config.json` for your identity
 3. It `curl`s the event data to the server (fire-and-forget, never blocks Claude)
 4. The server updates its in-memory state and broadcasts via WebSocket
@@ -191,7 +191,7 @@ Your config lives at `~/.config/agent-factory/config.json`:
 agent-factory uninstall
 ```
 
-This removes all hook entries from `~/.claude/settings.json` (surgically, preserving your other hooks) and deletes `~/.config/agent-factory/`.
+This removes all Agent Factory hook entries from `~/.claude/settings.json` and `~/.codex/hooks.json` (surgically, preserving your other hooks) and deletes `~/.config/agent-factory/`.
 
 ## Architecture
 
@@ -216,7 +216,7 @@ agent-factory/
 │   ├── cmd/          # Cobra commands (install, uninstall, token, emote, chat, avatar, update)
 │   ├── internal/     # Config, hooks, wizard, UI helpers
 │   └── main.go       # Entry point
-├── hooks/            # Claude Code hook scripts (legacy)
+├── hooks/            # Claude/Codex hook scripts (legacy)
 └── install-cli.sh    # Bootstrap script (downloads CLI binary)
 ```
 
@@ -226,7 +226,7 @@ agent-factory/
 
 | Endpoint | Description |
 |----------|-------------|
-| `POST /api/hooks` | Receives hook events from Claude Code |
+| `POST /api/hooks` | Receives hook events from Claude Code/Codex |
 | `POST /api/emote` | Trigger an emote (`{ username, emote }`) |
 | `POST /api/chat` | Send a chat message (`{ username, message }`) |
 | `POST /api/context` | Update agent task description (`{ username, summary }`) |
