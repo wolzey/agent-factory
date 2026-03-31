@@ -13,6 +13,7 @@ export type StateChangeCallback = (
 
 export class StateManager {
   private sessions = new Map<string, AgentSession>();
+  private knownSessions = new Set<string>();
   private onChange: StateChangeCallback | null = null;
   private sessionNameLookup: ((id: string) => string | undefined) | null = null;
 
@@ -62,6 +63,7 @@ export class StateManager {
         break;
       case 'UserPromptSubmit': {
         const s = this.ensureSession(payload);
+        if (!s) break;
         s.activity = 'thinking';
         s.currentTool = null;
         s.currentToolInput = null;
@@ -81,6 +83,7 @@ export class StateManager {
       }
       case 'PostToolUseFailure': {
         const s = this.ensureSession(payload);
+        if (!s) break;
         s.activity = 'thinking';
         s.currentTool = null;
         s.currentToolInput = null;
@@ -89,6 +92,7 @@ export class StateManager {
       }
       case 'StopFailure': {
         const s = this.ensureSession(payload);
+        if (!s) break;
         s.activity = 'idle';
         s.currentTool = null;
         s.currentToolInput = null;
@@ -109,6 +113,7 @@ export class StateManager {
         break;
       case 'CwdChanged': {
         const s = this.ensureSession(payload);
+        if (!s) break;
         s.cwd = payload.cwd;
         this.touchAndEmit(payload, 'info_flash', { type: 'cwd', cwd: payload.cwd });
         break;
@@ -118,24 +123,28 @@ export class StateManager {
         break;
       case 'WorktreeCreate': {
         const s = this.ensureSession(payload);
+        if (!s) break;
         s.sessionName = (payload.tool_input?.name as string) || (payload as Record<string, unknown>).name as string || 'worktree';
         this.touchAndEmit(payload, 'worktree_create');
         break;
       }
       case 'WorktreeRemove': {
         const s = this.ensureSession(payload);
+        if (!s) break;
         s.sessionName = undefined;
         this.touchAndEmit(payload, 'worktree_remove');
         break;
       }
       case 'PreCompact': {
         const s = this.ensureSession(payload);
+        if (!s) break;
         s.activity = 'compacting';
         this.touchAndEmit(payload, 'compact', { phase: 'pre' });
         break;
       }
       case 'PostCompact': {
         const s = this.ensureSession(payload);
+        if (!s) break;
         s.activity = 'thinking';
         this.touchAndEmit(payload, 'compact', { phase: 'post' });
         break;
@@ -145,6 +154,7 @@ export class StateManager {
         break;
       case 'Elicitation': {
         const s = this.ensureSession(payload);
+        if (!s) break;
         s.activity = 'waiting';
         s.currentTool = null;
         s.currentToolInput = null;
@@ -153,6 +163,7 @@ export class StateManager {
       }
       case 'ElicitationResult': {
         const s = this.ensureSession(payload);
+        if (!s) break;
         s.activity = 'thinking';
         this.touchAndEmit(payload, 'prompt_received');
         break;
@@ -210,6 +221,7 @@ export class StateManager {
     for (const [id, session] of this.sessions) {
       if (now - session.lastEventAt > STALE_SESSION_TIMEOUT_MS) {
         this.sessions.delete(id);
+        this.knownSessions.delete(id);
         reaped.push(id);
         this.emit('remove', { sessionId: id });
       }
@@ -219,6 +231,7 @@ export class StateManager {
 
   private handleSessionStart(payload: HookPayload): void {
     const now = Date.now();
+    this.knownSessions.add(payload.session_id);
     const existing = this.sessions.get(payload.session_id);
 
     if (existing) {
@@ -253,6 +266,7 @@ export class StateManager {
         }
       }
 
+      console.log(`[state] NEW session via SessionStart: id=${payload.session_id} user=${payload.username}`);
       this.sessions.set(payload.session_id, session);
       this.emit('update', { agent: session });
       this.emit('effect', {
@@ -276,12 +290,14 @@ export class StateManager {
     // Remove after delay for exit animation
     setTimeout(() => {
       this.sessions.delete(payload.session_id);
+      this.knownSessions.delete(payload.session_id);
       this.emit('remove', { sessionId: payload.session_id });
     }, STOPPED_REMOVAL_DELAY_MS);
   }
 
   private handlePreToolUse(payload: HookPayload): void {
     const session = this.ensureSession(payload);
+    if (!session) return;
     const toolName = payload.tool_name || 'unknown';
 
     session.activity = toolToActivity(toolName);
@@ -303,6 +319,7 @@ export class StateManager {
 
   private handlePostToolUse(payload: HookPayload): void {
     const session = this.ensureSession(payload);
+    if (!session) return;
     const toolName = payload.tool_name;
 
     session.activity = 'thinking';
@@ -328,7 +345,9 @@ export class StateManager {
 
   private handleSubagentStart(payload: HookPayload): void {
     const session = this.ensureSession(payload);
+    if (!session) return;
     const now = Date.now();
+    console.log(`[state] SubagentStart: parent=${payload.session_id} agentId=${payload.agent_id}`);
 
     const subagent: SubagentInfo = {
       agentId: payload.agent_id || `sub-${now}`,
@@ -350,6 +369,7 @@ export class StateManager {
 
   private handleSubagentStop(payload: HookPayload): void {
     const session = this.ensureSession(payload);
+    if (!session) return;
     const agentId = payload.agent_id;
 
     if (agentId) {
@@ -370,6 +390,7 @@ export class StateManager {
 
   private handlePermissionRequest(payload: HookPayload): void {
     const session = this.ensureSession(payload);
+    if (!session) return;
     session.activity = 'waiting';
     session.currentTool = null;
     session.currentToolInput = null;
@@ -380,6 +401,7 @@ export class StateManager {
 
   private handleStop(payload: HookPayload): void {
     const session = this.ensureSession(payload);
+    if (!session) return;
     // Preserve 'waiting' — agent is at the help desk waiting for user input
     if (session.activity !== 'waiting') {
       session.activity = 'idle';
@@ -390,10 +412,17 @@ export class StateManager {
     this.emit('update', { agent: session });
   }
 
-  /** Ensure a session exists (creates one if a hook fires before SessionStart) */
-  private ensureSession(payload: HookPayload): AgentSession {
+  /** Ensure a session exists (creates one if a hook fires before SessionStart).
+   *  Returns null for session_ids that never had a SessionStart — these are
+   *  subagent-owned hooks and should not create phantom top-level sessions. */
+  private ensureSession(payload: HookPayload): AgentSession | null {
     let session = this.sessions.get(payload.session_id);
     if (!session) {
+      if (!this.knownSessions.has(payload.session_id)) {
+        console.log(`[state] REJECTED phantom session: id=${payload.session_id} event=${payload.hook_event_name}`);
+        return null;
+      }
+      console.log(`[state] NEW session via ensureSession: id=${payload.session_id} event=${payload.hook_event_name}`);
       session = {
         sessionId: payload.session_id,
         username: payload.username || 'anonymous',
@@ -418,6 +447,7 @@ export class StateManager {
   /** Update lastEventAt, broadcast state + effect in one call. */
   private touchAndEmit(payload: HookPayload, effect: EffectType, data?: Record<string, unknown>): void {
     const session = this.ensureSession(payload);
+    if (!session) return;
     session.lastEventAt = Date.now();
     this.emit('update', { agent: session });
     this.emit('effect', { sessionId: payload.session_id, effect, effectData: data });
