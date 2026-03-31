@@ -215,6 +215,71 @@ export class StateManager {
     }
   }
 
+  /** Recover or create a session from the Claude session registry.
+   *  Called when the registry watcher discovers a session file that
+   *  doesn't correspond to any session in the state manager. */
+  recoverSessionFromRegistry(sessionId: string, cwd: string, name?: string): void {
+    this.knownSessions.add(sessionId);
+    const existing = this.sessions.get(sessionId);
+    if (existing) {
+      // Session already exists — just update name if provided
+      if (name && existing.sessionName !== name) {
+        existing.sessionName = name;
+        if (!existing.taskDescription) {
+          existing.taskDescription = name.replace(/-/g, ' ');
+        }
+        existing.lastEventAt = Date.now();
+        this.emit('update', { agent: existing });
+      }
+      return;
+    }
+
+    const now = Date.now();
+    const session: AgentSession = {
+      sessionId,
+      username: 'anonymous',
+      avatar: DEFAULT_AVATAR,
+      cwd,
+      activity: 'idle',
+      currentTool: null,
+      currentToolInput: null,
+      subagents: [],
+      startedAt: now,
+      lastEventAt: now,
+    };
+    if (name) {
+      session.sessionName = name;
+      session.taskDescription = name.replace(/-/g, ' ');
+    }
+
+    console.log(`[state] RECOVERED session from registry: id=${sessionId} name=${name || '(none)'}`);
+    this.sessions.set(sessionId, session);
+    this.emit('update', { agent: session });
+  }
+
+  /** Restore sessions from persisted state (e.g. after server restart). */
+  restoreSessions(sessions: AgentSession[]): void {
+    let restored = 0;
+    for (const session of sessions) {
+      if (session.activity === 'stopped') continue;
+      if (this.sessions.has(session.sessionId)) continue;
+
+      // Reset transient state
+      session.lastEventAt = Date.now();
+      session.currentTool = null;
+      session.currentToolInput = null;
+      session.activity = 'idle';
+      session.subagents = [];
+
+      this.knownSessions.add(session.sessionId);
+      this.sessions.set(session.sessionId, session);
+      restored++;
+    }
+    if (restored > 0) {
+      console.log(`[state] Restored ${restored} session(s) from disk`);
+    }
+  }
+
   emitUpdate(session: AgentSession): void {
     this.emit('update', { agent: session });
   }
@@ -240,7 +305,8 @@ export class StateManager {
           continue;
         }
         this.sessions.delete(id);
-        this.knownSessions.delete(id);
+        // Don't clear knownSessions — allow the session to be re-created
+        // by ensureSession() if it sends hooks later (e.g. user resumes work)
         reaped.push(id);
         this.emit('remove', { sessionId: id });
       }
@@ -447,8 +513,14 @@ export class StateManager {
     let session = this.sessions.get(payload.session_id);
     if (!session) {
       if (!this.knownSessions.has(payload.session_id)) {
-        console.log(`[state] REJECTED phantom session: id=${payload.session_id} event=${payload.hook_event_name}`);
-        return null;
+        // Fallback: check if session is still alive in Claude's registry
+        if (this.sessionAliveCheck?.(payload.session_id)) {
+          this.knownSessions.add(payload.session_id);
+          console.log(`[state] RECOVERED session from registry: id=${payload.session_id} event=${payload.hook_event_name}`);
+        } else {
+          console.log(`[state] REJECTED phantom session: id=${payload.session_id} event=${payload.hook_event_name}`);
+          return null;
+        }
       }
       console.log(`[state] NEW session via ensureSession: id=${payload.session_id} event=${payload.hook_event_name}`);
       session = {
