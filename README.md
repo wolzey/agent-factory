@@ -80,6 +80,7 @@ pnpm start  # serves on port 4242 (both API and static client)
 ```
 
 Set `PORT` and `HOST` environment variables to customize.
+Set `ENVIRONMENT` to choose a background: `arcade`, `farm`, `office`, or `mining`.
 
 ## How It Works
 

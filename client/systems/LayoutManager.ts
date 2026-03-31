@@ -1,158 +1,152 @@
-export interface Position {
-  x: number;
-  y: number;
-}
+import type { LayoutSpec, Position, Zone } from '../environments';
 
 interface Slot {
   pos: Position;
   occupant: string | null;
 }
 
-/**
- * Layout zones:
- *   Wall/header:    y 0-44
- *   Arcade floor:   y 55-330  (2 rows of 6 cabinets)
- *   Bottom strip:   y 340-470 (counter LEFT, lounge RIGHT, side by side)
- *   Entrance:       y 470     (center bottom)
- */
 export class LayoutManager {
-  private arcadeSlots: Slot[] = [];
-  private counterSlots: Slot[] = [];
-  private loungeSlots: Slot[] = [];
-  private entrancePos: Position = { x: 400, y: 470 };
+  private workSlots: Slot[] = [];
+  private waitingSlots: Slot[] = [];
+  private idleSlots: Slot[] = [];
+  private entrancePos: Position;
 
-  constructor() {
-    // Arcade cabinet positions (2 rows of 6)
-    for (let row = 0; row < 2; row++) {
-      for (let col = 0; col < 6; col++) {
-        this.arcadeSlots.push({
-          pos: { x: 80 + col * 120, y: 110 + row * 110 },
-          occupant: null,
-        });
-      }
-    }
-
-    // Front counter positions (LEFT side of bottom strip, y ~380)
-    for (let i = 0; i < 4; i++) {
-      this.counterSlots.push({
-        pos: { x: 60 + i * 90, y: 390 },
-        occupant: null,
-      });
-    }
-
-    // Lounge positions - centered on couch cushions
-    // Couches placed at (560, 430) and (700, 430) in scene, 1.5x scale (48x21 on screen)
-    // Two cushion seats per couch, centered on the cushion highlights
-    const couchPositions = [
-      { x: 550, y: 424 }, { x: 570, y: 424 },  // couch 1 cushions
-      { x: 690, y: 424 }, { x: 710, y: 424 },  // couch 2 cushions
-    ];
-    for (const pos of couchPositions) {
-      this.loungeSlots.push({ pos, occupant: null });
-    }
+  constructor(layout: LayoutSpec) {
+    this.entrancePos = { ...layout.entrance };
+    this.workSlots = layout.workSlots.map(pos => ({ pos: { ...pos }, occupant: null }));
+    this.waitingSlots = layout.waitingSlots.map(pos => ({ pos: { ...pos }, occupant: null }));
+    this.idleSlots = layout.idleSlots.map(pos => ({ pos: { ...pos }, occupant: null }));
   }
 
   get entrance(): Position {
     return { ...this.entrancePos };
   }
 
-  assignToArcade(sessionId: string): Position {
-    const existing = this.arcadeSlots.find(s => s.occupant === sessionId);
+  assignToWork(sessionId: string): Position {
+    return this.assignToZone(sessionId, 'work');
+  }
+
+  assignToWaiting(sessionId: string): Position {
+    return this.assignToZone(sessionId, 'waiting');
+  }
+
+  assignToIdle(sessionId: string): Position {
+    return this.assignToZone(sessionId, 'idle');
+  }
+
+  private assignToZone(sessionId: string, zone: Zone): Position {
+    const slots = this.slotsFor(zone);
+
+    const existing = slots.find(s => s.occupant === sessionId);
     if (existing) return { ...existing.pos };
 
-    const empty = this.arcadeSlots.find(s => s.occupant === null);
+    this.clearFromOtherZones(sessionId, zone);
+
+    const empty = slots.find(s => s.occupant === null);
     if (empty) {
       empty.occupant = sessionId;
       return { ...empty.pos };
     }
 
-    const idx = this.arcadeSlots.length;
-    const row = Math.floor(idx / 6);
-    const col = idx % 6;
+    const idx = slots.length;
     const slot: Slot = {
-      pos: { x: 80 + col * 120, y: 110 + row * 110 },
+      pos: this.overflowPos(zone, idx),
       occupant: sessionId,
     };
-    this.arcadeSlots.push(slot);
+    slots.push(slot);
     return { ...slot.pos };
   }
 
-  assignToCounter(sessionId: string): Position {
-    const existing = this.counterSlots.find(s => s.occupant === sessionId);
-    if (existing) return { ...existing.pos };
-
-    const empty = this.counterSlots.find(s => s.occupant === null);
-    if (empty) {
-      empty.occupant = sessionId;
-      return { ...empty.pos };
+  private clearFromOtherZones(sessionId: string, keep: Zone) {
+    if (keep !== 'work') {
+      for (const slot of this.workSlots) {
+        if (slot.occupant === sessionId) slot.occupant = null;
+      }
     }
-
-    const idx = this.counterSlots.length;
-    const slot: Slot = {
-      pos: { x: 60 + (idx % 4) * 90, y: 390 + Math.floor(idx / 4) * 30 },
-      occupant: sessionId,
-    };
-    this.counterSlots.push(slot);
-    return { ...slot.pos };
+    if (keep !== 'waiting') {
+      for (const slot of this.waitingSlots) {
+        if (slot.occupant === sessionId) slot.occupant = null;
+      }
+    }
+    if (keep !== 'idle') {
+      for (const slot of this.idleSlots) {
+        if (slot.occupant === sessionId) slot.occupant = null;
+      }
+    }
   }
 
-  assignToLounge(sessionId: string): Position {
-    const existing = this.loungeSlots.find(s => s.occupant === sessionId);
-    if (existing) return { ...existing.pos };
+  private overflowPos(zone: Zone, idx: number): Position {
+    const slots = this.slotsFor(zone);
+    const base = slots[0]?.pos ?? this.defaultBase(zone);
 
-    const empty = this.loungeSlots.find(s => s.occupant === null);
-    if (empty) {
-      empty.occupant = sessionId;
-      return { ...empty.pos };
+    if (zone === 'work') {
+      const stepX = slots[1] ? slots[1].pos.x - slots[0].pos.x : 110;
+      const stepY = slots[6] ? slots[6].pos.y - slots[0].pos.y : 95;
+      return {
+        x: base.x + (idx % 6) * stepX,
+        y: base.y + Math.floor(idx / 6) * stepY,
+      };
     }
 
-    const idx = this.loungeSlots.length;
-    const slot: Slot = {
-      pos: { x: 440 + (idx % 4) * 70, y: 400 + Math.floor(idx / 4) * 30 },
-      occupant: sessionId,
+    if (zone === 'waiting') {
+      const stepX = slots[1] ? slots[1].pos.x - slots[0].pos.x : 90;
+      return {
+        x: base.x + (idx % 4) * stepX,
+        y: base.y + Math.floor(idx / 4) * 30,
+      };
+    }
+
+    const stepX = slots[1] ? slots[1].pos.x - slots[0].pos.x : 70;
+    return {
+      x: base.x + (idx % 4) * stepX,
+      y: base.y + Math.floor(idx / 4) * 30,
     };
-    this.loungeSlots.push(slot);
-    return { ...slot.pos };
+  }
+
+  private defaultBase(zone: Zone): Position {
+    if (zone === 'work') return { x: 80, y: 110 };
+    if (zone === 'waiting') return { x: 60, y: 390 };
+    return { x: 550, y: 424 };
+  }
+
+  private slotsFor(zone: Zone): Slot[] {
+    if (zone === 'work') return this.workSlots;
+    if (zone === 'waiting') return this.waitingSlots;
+    return this.idleSlots;
   }
 
   release(sessionId: string) {
-    for (const slot of this.arcadeSlots) {
+    for (const slot of this.workSlots) {
       if (slot.occupant === sessionId) slot.occupant = null;
     }
-    for (const slot of this.counterSlots) {
+    for (const slot of this.waitingSlots) {
       if (slot.occupant === sessionId) slot.occupant = null;
     }
-    for (const slot of this.loungeSlots) {
+    for (const slot of this.idleSlots) {
       if (slot.occupant === sessionId) slot.occupant = null;
     }
   }
 
-  getArcadeSlotFor(sessionId: string): Slot | undefined {
-    return this.arcadeSlots.find(s => s.occupant === sessionId);
+  getWorkSlotFor(sessionId: string): Slot | undefined {
+    return this.workSlots.find(s => s.occupant === sessionId);
   }
 
-  /** Reserve a slot with a tombstone marker so no other agent can use it. */
   reserveForTombstone(sessionId: string) {
     const tombId = `__tomb__${sessionId}`;
-    // Find the slot the agent was using before death
-    const slot = this.arcadeSlots.find(s => s.occupant === sessionId);
-    if (slot) {
-      slot.occupant = tombId;
-    }
+    const slot = this.workSlots.find(s => s.occupant === sessionId);
+    if (slot) slot.occupant = tombId;
   }
 
-  /** Release a tombstone reservation, freeing the slot. */
   releaseTombstone(sessionId: string) {
     const tombId = `__tomb__${sessionId}`;
-    for (const slot of this.arcadeSlots) {
+    for (const slot of this.workSlots) {
       if (slot.occupant === tombId) slot.occupant = null;
     }
   }
 
-  /** Claim a tombstone slot for the risen zombie (converts __tomb__ back to sessionId). */
   claimTombstoneSlot(sessionId: string): Position | null {
     const tombId = `__tomb__${sessionId}`;
-    const slot = this.arcadeSlots.find(s => s.occupant === tombId);
+    const slot = this.workSlots.find(s => s.occupant === tombId);
     if (slot) {
       slot.occupant = sessionId;
       return { ...slot.pos };
@@ -160,9 +154,8 @@ export class LayoutManager {
     return null;
   }
 
-  /** Check if an agent had a workstation slot (or tombstone holds one). */
   getTombstoneSlot(sessionId: string): Slot | undefined {
     const tombId = `__tomb__${sessionId}`;
-    return this.arcadeSlots.find(s => s.occupant === tombId);
+    return this.workSlots.find(s => s.occupant === tombId);
   }
 }

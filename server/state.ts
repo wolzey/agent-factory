@@ -78,6 +78,7 @@ export class StateManager {
           }
         }
 
+        console.log(`[state] PROMPT_RECEIVED: id=${payload.session_id} user=${s.username} prompt="${(userPrompt || '').slice(0, 50)}"`);
         this.touchAndEmit(payload, 'prompt_received');
         break;
       }
@@ -87,6 +88,7 @@ export class StateManager {
         s.activity = 'thinking';
         s.currentTool = null;
         s.currentToolInput = null;
+        console.log(`[state] TOOL_FAILURE: id=${payload.session_id} tool=${payload.tool_name} reason=${payload.reason}`);
         this.touchAndEmit(payload, 'error', { tool: payload.tool_name, reason: payload.reason });
         break;
       }
@@ -96,6 +98,7 @@ export class StateManager {
         s.activity = 'idle';
         s.currentTool = null;
         s.currentToolInput = null;
+        console.log(`[state] STOP_FAILURE: id=${payload.session_id} reason=${payload.reason || 'API error'}`);
         this.touchAndEmit(payload, 'error', { reason: payload.reason || 'API error' });
         break;
       }
@@ -139,6 +142,7 @@ export class StateManager {
         const s = this.ensureSession(payload);
         if (!s) break;
         s.activity = 'compacting';
+        console.log(`[state] COMPACT_START: id=${payload.session_id} user=${s.username}`);
         this.touchAndEmit(payload, 'compact', { phase: 'pre' });
         break;
       }
@@ -146,6 +150,7 @@ export class StateManager {
         const s = this.ensureSession(payload);
         if (!s) break;
         s.activity = 'thinking';
+        console.log(`[state] COMPACT_END: id=${payload.session_id} user=${s.username}`);
         this.touchAndEmit(payload, 'compact', { phase: 'post' });
         break;
       }
@@ -158,6 +163,7 @@ export class StateManager {
         s.activity = 'waiting';
         s.currentTool = null;
         s.currentToolInput = null;
+        console.log(`[state] ELICITATION: id=${payload.session_id} user=${s.username} activity=waiting`);
         this.touchAndEmit(payload, 'elicitation', { type: 'mcp_input' });
         break;
       }
@@ -165,6 +171,7 @@ export class StateManager {
         const s = this.ensureSession(payload);
         if (!s) break;
         s.activity = 'thinking';
+        console.log(`[state] ELICITATION_RESULT: id=${payload.session_id} user=${s.username} activity=thinking`);
         this.touchAndEmit(payload, 'prompt_received');
         break;
       }
@@ -208,6 +215,7 @@ export class StateManager {
   }
 
   emitEmote(sessionId: string, emote: string): void {
+    console.log(`[state] EMOTE: sessionId=${sessionId} emote=${emote}`);
     this.emit('effect', {
       sessionId,
       effect: 'emote' as EffectType,
@@ -236,6 +244,7 @@ export class StateManager {
 
     if (existing) {
       // Session resumed - update identity and reset activity
+      const prevActivity = existing.activity;
       existing.username = payload.username || existing.username;
       existing.avatar = payload.avatar || existing.avatar;
       existing.cwd = payload.cwd || existing.cwd;
@@ -243,6 +252,7 @@ export class StateManager {
       existing.currentTool = null;
       existing.currentToolInput = null;
       existing.lastEventAt = now;
+      console.log(`[state] SESSION_RESUME: id=${payload.session_id} user=${existing.username} activity=idle (was=${prevActivity})`);
       this.emit('update', { agent: existing });
     } else {
       const session: AgentSession = {
@@ -279,6 +289,7 @@ export class StateManager {
   private handleSessionEnd(payload: HookPayload): void {
     const session = this.sessions.get(payload.session_id);
     if (!session) return;
+    console.log(`[state] SESSION_END: id=${payload.session_id} user=${session.username} was=${session.activity}`);
 
     session.activity = 'stopped';
     session.currentTool = null;
@@ -291,6 +302,7 @@ export class StateManager {
     setTimeout(() => {
       this.sessions.delete(payload.session_id);
       this.knownSessions.delete(payload.session_id);
+      console.log(`[state] SESSION_REMOVED: id=${payload.session_id} (after ${STOPPED_REMOVAL_DELAY_MS}ms delay)`);
       this.emit('remove', { sessionId: payload.session_id });
     }, STOPPED_REMOVAL_DELAY_MS);
   }
@@ -304,6 +316,7 @@ export class StateManager {
     session.currentTool = toolName;
     session.currentToolInput = payload.tool_input || null;
     session.lastEventAt = Date.now();
+    console.log(`[state] TOOL_START: id=${payload.session_id} user=${session.username} tool=${toolName} activity=${session.activity}`);
 
     if (toolName === 'EnterPlanMode') {
       session.sessionName = 'Planning';
@@ -326,6 +339,7 @@ export class StateManager {
     session.currentTool = null;
     session.currentToolInput = null;
     session.lastEventAt = Date.now();
+    console.log(`[state] TOOL_COMPLETE: id=${payload.session_id} user=${session.username} tool=${payload.tool_name} activity=${session.activity}`);
 
     if (toolName === 'EnterWorktree') {
       const name = payload.tool_input?.name;
@@ -347,8 +361,6 @@ export class StateManager {
     const session = this.ensureSession(payload);
     if (!session) return;
     const now = Date.now();
-    console.log(`[state] SubagentStart: parent=${payload.session_id} agentId=${payload.agent_id}`);
-
     const subagent: SubagentInfo = {
       agentId: payload.agent_id || `sub-${now}`,
       agentType: payload.agent_type || 'unknown',
@@ -358,6 +370,7 @@ export class StateManager {
 
     session.subagents.push(subagent);
     session.lastEventAt = now;
+    console.log(`[state] SUBAGENT_START: parent=${payload.session_id} agentId=${subagent.agentId} type=${subagent.agentType} total=${session.subagents.length}`);
 
     this.emit('update', { agent: session });
     this.emit('effect', {
@@ -380,6 +393,7 @@ export class StateManager {
     }
 
     session.lastEventAt = Date.now();
+    console.log(`[state] SUBAGENT_STOP: parent=${payload.session_id} agentId=${agentId} remaining=${session.subagents.length}`);
     this.emit('update', { agent: session });
     this.emit('effect', {
       sessionId: payload.session_id,
@@ -391,10 +405,12 @@ export class StateManager {
   private handlePermissionRequest(payload: HookPayload): void {
     const session = this.ensureSession(payload);
     if (!session) return;
+    const prevActivity = session.activity;
     session.activity = 'waiting';
     session.currentTool = null;
     session.currentToolInput = null;
     session.lastEventAt = Date.now();
+    console.log(`[state] PERMISSION_REQUEST: id=${payload.session_id} user=${session.username} was=${prevActivity}`);
     this.emit('update', { agent: session });
     this.emit('effect', { sessionId: payload.session_id, effect: 'elicitation', effectData: { type: 'permission' } });
   }
@@ -409,6 +425,7 @@ export class StateManager {
     session.currentTool = null;
     session.currentToolInput = null;
     session.lastEventAt = Date.now();
+    console.log(`[state] STOP: id=${payload.session_id} user=${session.username} activity=${session.activity} preserved=${session.activity === 'waiting'}`);
     this.emit('update', { agent: session });
   }
 
@@ -449,6 +466,7 @@ export class StateManager {
     const session = this.ensureSession(payload);
     if (!session) return;
     session.lastEventAt = Date.now();
+    console.log(`[state] EFFECT: id=${payload.session_id} effect=${effect}${data ? ' data=' + JSON.stringify(data) : ''}`);
     this.emit('update', { agent: session });
     this.emit('effect', { sessionId: payload.session_id, effect, effectData: data });
   }

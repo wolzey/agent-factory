@@ -6,7 +6,7 @@ import { SubagentSprite } from '../entities/SubagentSprite';
 import { Machine } from '../entities/Machine';
 import { LayoutManager } from './LayoutManager';
 import { getTheme } from '../environments';
-import type { EnvironmentTheme } from '../environments';
+import type { ActivityBucket, EnvironmentTheme } from '../environments';
 import type { SoundBank } from '../audio/SoundBank';
 
 const WORKING_STATES = ['reading', 'writing', 'running', 'searching', 'chatting', 'planning', 'compacting'];
@@ -35,18 +35,15 @@ export class AgentManager {
   constructor(scene: Phaser.Scene, envType: EnvironmentType = 'arcade') {
     this.scene = scene;
     this.theme = getTheme(envType);
-    this.layout = new LayoutManager();
+    this.layout = new LayoutManager(this.theme.behavior.layout);
     this.createMachines();
   }
 
   private createMachines() {
-    for (let row = 0; row < 2; row++) {
-      for (let col = 0; col < 6; col++) {
-        const x = 80 + col * 120;
-        const slotY = 110 + row * 110;
-        const machine = new Machine(this.scene, x, slotY - 24, row * 6 + col, this.theme.workstation);
-        this.machines.push(machine);
-      }
+    for (let i = 0; i < this.theme.behavior.layout.workSlots.length; i++) {
+      const slot = this.theme.behavior.layout.workSlots[i];
+      const machine = new Machine(this.scene, slot.x, slot.y - 24, i, this.theme.workstation);
+      this.machines.push(machine);
     }
   }
 
@@ -239,7 +236,7 @@ export class AgentManager {
         agent.riseFromGrave(tomb.x, tomb.y, tomb.container);
         this.tombstones.delete(session.sessionId);
         this.flowersDone.delete(session.sessionId);
-        // Claim the tombstone's arcade slot so the zombie keeps its original position
+        // Claim the tombstone's work slot so the zombie keeps its original position.
         this.layout.claimTombstoneSlot(session.sessionId);
 
         // Send flower visitors home — tombstone is gone
@@ -269,51 +266,38 @@ export class AgentManager {
       return;
     }
 
-    // Route agent to the right area based on activity:
-    //   working (reading/writing/running/searching/chatting/planning) -> arcade cabinet
-    //   thinking (between tool calls) -> stay at arcade cabinet (thought bubble shown by AgentSprite)
-    //   waiting (waiting for user prompt) -> front counter
-    //   idle (session started, no activity yet) -> lounge
-    //   stopped -> die in place (slot kept for tombstone, removeAgent handles release)
+    const activityBucket = this.bucketForActivity(session.activity);
+    const action = this.theme.behavior.actionsByBucket[activityBucket];
+    agent.setBackgroundAction(action, this.theme.type);
 
-    const isWorking = WORKING_STATES.includes(session.activity);
-    const isThinking = session.activity === 'thinking';
-
-    if (session.activity === 'stopped') {
-      // Don't release the arcade slot here — removeAgent will reserve it for the tombstone
+    if (activityBucket === 'stopped') {
+      // Don't release the work slot here — removeAgent will reserve it for the tombstone
       this.deactivateMachineFor(session.sessionId);
       // Die in place — no walking to exit
-    } else if (isWorking || isThinking) {
-      // Working or thinking -> arcade cabinet
-      const pos = this.layout.assignToArcade(session.sessionId);
+    } else if (action.zone === 'work') {
+      const pos = this.layout.assignToWork(session.sessionId);
       const target = { x: pos.x, y: pos.y + 24 };
-      // Non-zombie agents must not work at a tombstone-occupied slot
+      // Non-zombie agents must not work at a tombstone-occupied slot.
       if (!agent.isZombie && this.isNearTombstone(target.x, target.y)) {
-        // Release and reassign to a different slot
+        // Release and reassign to a different work slot.
         this.layout.release(session.sessionId);
-        const altPos = this.layout.assignToArcade(session.sessionId);
+        const altPos = this.layout.assignToWork(session.sessionId);
         agent.moveTo(altPos.x, altPos.y + 24);
       } else {
         agent.moveTo(target.x, target.y);
       }
       this.activateMachineFor(session.sessionId);
-    } else if (session.activity === 'waiting') {
-      // Waiting for user prompt -> front counter
+    } else if (action.zone === 'waiting') {
       this.deactivateMachineFor(session.sessionId);
-      this.layout.release(session.sessionId);
-      const pos = this.layout.assignToCounter(session.sessionId);
-      // If position overlaps a tombstone, offset away
+      const pos = this.layout.assignToWaiting(session.sessionId);
       if (!agent.isZombie && this.isNearTombstone(pos.x, pos.y)) {
         agent.moveTo(pos.x + 30, pos.y);
       } else {
         agent.moveTo(pos.x, pos.y);
       }
     } else {
-      // idle / fallback -> lounge
-      this.layout.release(session.sessionId);
       this.deactivateMachineFor(session.sessionId);
-      const pos = this.layout.assignToLounge(session.sessionId);
-      // If position overlaps a tombstone, offset away
+      const pos = this.layout.assignToIdle(session.sessionId);
       if (!agent.isZombie && this.isNearTombstone(pos.x, pos.y)) {
         agent.moveTo(pos.x + 30, pos.y);
       } else {
@@ -341,6 +325,14 @@ export class AgentManager {
     }
   }
 
+  private bucketForActivity(activity: AgentSession['activity']): ActivityBucket {
+    if (WORKING_STATES.includes(activity)) return 'working';
+    if (activity === 'thinking') return 'thinking';
+    if (activity === 'waiting') return 'waiting';
+    if (activity === 'stopped') return 'stopped';
+    return 'idle';
+  }
+
   /** Check if a position is within proximity of any active tombstone. */
   private isNearTombstone(x: number, y: number, threshold = 40): boolean {
     for (const tomb of this.tombstones.values()) {
@@ -363,7 +355,7 @@ export class AgentManager {
       this.deactivateMachineFor(sessionId);
       // Reserve the workstation slot for the tombstone (changes occupant to __tomb__ prefix)
       this.layout.reserveForTombstone(sessionId);
-      // Release any non-arcade slots (counter/lounge) the agent may hold
+      // Release any non-work slots the agent may hold.
       this.layout.release(sessionId);
 
       agent.die(() => {
@@ -434,7 +426,7 @@ export class AgentManager {
   }
 
   private activateMachineFor(sessionId: string) {
-    const slot = this.layout.getArcadeSlotFor(sessionId);
+    const slot = this.layout.getWorkSlotFor(sessionId);
     if (slot) {
       const machine = this.machines.find(
         m => Math.abs(m.x - slot.pos.x) < 15 && Math.abs(m.y - (slot.pos.y - 24)) < 15,
@@ -444,7 +436,7 @@ export class AgentManager {
   }
 
   private deactivateMachineFor(sessionId: string) {
-    const slot = this.layout.getArcadeSlotFor(sessionId);
+    const slot = this.layout.getWorkSlotFor(sessionId);
     if (slot) {
       const machine = this.machines.find(
         m => Math.abs(m.x - slot.pos.x) < 15 && Math.abs(m.y - (slot.pos.y - 24)) < 15,
@@ -1096,9 +1088,9 @@ export class AgentManager {
         this.flowerVisitors.delete(agentId);
         const agent = this.agents.get(agentId);
         if (agent) {
-          // Restore normal speed and send them back to lounge
+          // Restore normal speed and send them back to the idle zone.
           agent.setMoveSpeed(80);
-          const pos = this.layout.assignToLounge(agentId);
+          const pos = this.layout.assignToIdle(agentId);
           agent.moveTo(pos.x, pos.y);
         }
       }

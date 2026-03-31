@@ -18,10 +18,14 @@ import type { ServerConfig, EmoteType } from '../shared/types.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function loadServerConfig(): ServerConfig {
-  const configPath = resolve(__dirname, '../server-config.json');
   let config = { ...DEFAULT_SERVER_CONFIG };
   try {
-    if (existsSync(configPath)) {
+    const configCandidates = [
+      resolve(__dirname, '../../../server-config.json'),
+      resolve(__dirname, '../server-config.json'),
+    ];
+    const configPath = configCandidates.find((p) => existsSync(p));
+    if (configPath) {
       const raw = JSON.parse(readFileSync(configPath, 'utf-8'));
       config = { ...config, ...raw };
     }
@@ -34,7 +38,7 @@ function loadServerConfig(): ServerConfig {
     config.graphicDeath = process.env.GRAPHIC_DEATH === 'true' || process.env.GRAPHIC_DEATH === '1';
   }
 
-  // Env var override: ENVIRONMENT=farm|office|arcade
+  // Env var override: ENVIRONMENT=arcade|farm|office|mining
   if (process.env.ENVIRONMENT) {
     config.environment = process.env.ENVIRONMENT as import('../shared/types.js').EnvironmentType;
   }
@@ -51,9 +55,15 @@ async function main() {
   await app.register(cors, { origin: true });
   await app.register(websocket);
 
-  // Serve built client in production
-  const clientDist = resolve(__dirname, '../dist/client');
-  if (existsSync(clientDist)) {
+  // Serve built client in production.
+  // Supports both source runtime (`server/index.ts`) and transpiled runtime (`dist/server/server/index.js`).
+  const clientDistCandidates = [
+    resolve(__dirname, '../dist/client'),
+    resolve(__dirname, '../../client'),
+    resolve(__dirname, '../client'),
+  ];
+  const clientDist = clientDistCandidates.find((p) => existsSync(p));
+  if (clientDist) {
     await app.register(fastifyStatic, {
       root: clientDist,
       prefix: '/',

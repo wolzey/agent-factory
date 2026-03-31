@@ -134,7 +134,7 @@ export interface UserConfig {
 }
 
 // === Environment Types ===
-export type EnvironmentType = 'arcade' | 'farm' | 'office';
+export type EnvironmentType = 'arcade' | 'farm' | 'office' | 'mining';
 
 // === Server Config ===
 export interface ServerConfig {
