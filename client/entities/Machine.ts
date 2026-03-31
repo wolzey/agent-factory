@@ -107,6 +107,7 @@ export class Machine extends Phaser.GameObjects.Container {
       duration: 80,
       yoyo: true,
       repeat: 3,
+      onComplete: () => { this.cabinet.setAlpha(1); },
     });
 
     // Orange/red spark particles from cabinet top
