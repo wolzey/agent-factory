@@ -34,6 +34,11 @@ function loadServerConfig(): ServerConfig {
     console.warn('Failed to load server-config.json, using defaults:', err);
   }
 
+  // Env var override: TITLE
+  if (process.env.TITLE) {
+    config.title = process.env.TITLE;
+  }
+
   // Env var override: GRAPHIC_DEATH=true
   if (process.env.GRAPHIC_DEATH !== undefined) {
     config.graphicDeath = process.env.GRAPHIC_DEATH === 'true' || process.env.GRAPHIC_DEATH === '1';
