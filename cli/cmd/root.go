@@ -28,4 +28,5 @@ func init() {
 	rootCmd.AddCommand(emoteCmd)
 	rootCmd.AddCommand(chatCmd)
 	rootCmd.AddCommand(tokenCmd)
+	rootCmd.AddCommand(configCmd)
 }
