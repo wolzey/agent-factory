@@ -38,6 +38,16 @@ export class SessionRegistryWatcher {
     return this.cache.get(sessionId);
   }
 
+  /** Returns true if the session still has a file in ~/.claude/sessions/ */
+  isSessionAlive(sessionId: string): boolean {
+    return this.cache.has(sessionId);
+  }
+
+  /** Returns all session IDs currently in the registry */
+  getAliveSessionIds(): Set<string> {
+    return new Set(this.cache.keys());
+  }
+
   private async poll(): Promise<void> {
     let files: string[];
     try {
