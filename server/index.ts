@@ -142,12 +142,13 @@ async function main() {
     });
   });
 
-  // Watch Claude session registry for name changes
+  // Watch Claude session registry for name changes and liveness
   const registry = new SessionRegistryWatcher((sessionId, name) => {
     state.updateSessionName(sessionId, name);
   });
   registry.start();
   state.setSessionNameLookup((id) => registry.getSessionName(id));
+  state.setSessionAliveCheck((id) => registry.isSessionAlive(id));
 
   // Start stale session reaper
   startStaleReaper(state);
