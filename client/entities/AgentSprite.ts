@@ -1318,6 +1318,33 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     });
   }
 
+  /** Recoil backward and flash red (on tool failure) */
+  recoil() {
+    // Flash red tint
+    this.sprite.setTint(0xff0000);
+    this.scene.time.delayedCall(300, () => {
+      if (this.isZombie) {
+        this.sprite.setTint(0x448833);
+      } else {
+        this.sprite.clearTint();
+      }
+    });
+
+    // Jump back and up
+    this.scene.tweens.add({
+      targets: this.sprite,
+      x: this.sprite.x - 8,
+      y: this.sprite.y - 4,
+      duration: 150,
+      ease: 'Power2',
+      yoyo: true,
+      onComplete: () => {
+        this.sprite.x = 0;
+        this.sprite.y = 0;
+      },
+    });
+  }
+
   private emoteDance() {
     this.showEmoteLabel('\u266b dance \u266b');
 

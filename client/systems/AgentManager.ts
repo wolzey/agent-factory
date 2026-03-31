@@ -84,6 +84,7 @@ export class AgentManager {
     switch (effect) {
       case 'tool_start':
         this.emitSparks(agent.x, agent.y, 0xff00ff);
+        this.animateCoin(sessionId, agent);
         break;
       case 'tool_complete':
         this.emitSparks(agent.x, agent.y, 0x00ff66);
@@ -102,6 +103,8 @@ export class AgentManager {
         break;
       case 'error':
         this.emitSparks(agent.x, agent.y, 0xff0000, 8);
+        agent.recoil();
+        this.triggerMachineError(sessionId);
         break;
       case 'prompt_received':
         this.emitSparks(agent.x, agent.y, 0x00ffff, 10);
@@ -160,6 +163,16 @@ export class AgentManager {
             }
           }
         }
+        break;
+      case 'commit':
+        this.emitConfetti(agent.x, agent.y, 35);
+        agent.showFloatingLabel('COMMIT!', '#ffcc00');
+        break;
+      case 'pr_merge':
+        this.emitConfetti(agent.x, agent.y, 60);
+        this.showTrophy(agent);
+        agent.showFloatingLabel('MERGED!', '#ffcc00');
+        agent.playEmote('dance');
         break;
     }
   }
@@ -273,8 +286,10 @@ export class AgentManager {
         agent.moveTo(target.x, target.y);
       }
       this.activateMachineFor(session.sessionId);
+      this.updateHeatFor(session.sessionId, session.toolUseCount ?? 0);
     } else if (session.activity === 'waiting') {
       // Waiting for user prompt -> front counter
+      this.resetHeatFor(session.sessionId);
       this.deactivateMachineFor(session.sessionId);
       this.layout.release(session.sessionId);
       const pos = this.layout.assignToCounter(session.sessionId);
@@ -287,6 +302,7 @@ export class AgentManager {
     } else {
       // idle / fallback -> lounge
       this.layout.release(session.sessionId);
+      this.resetHeatFor(session.sessionId);
       this.deactivateMachineFor(session.sessionId);
       const pos = this.layout.assignToLounge(session.sessionId);
       // If position overlaps a tombstone, offset away
@@ -408,6 +424,174 @@ export class AgentManager {
       );
       machine?.setActive(false);
     }
+  }
+
+  // ── Deeper Claude Integrations ──────────────────────────────────
+
+  /** Find the machine an agent is assigned to */
+  private getMachineFor(sessionId: string): Machine | undefined {
+    const slot = this.layout.getArcadeSlotFor(sessionId);
+    if (!slot) return undefined;
+    return this.machines.find(
+      m => Math.abs(m.x - slot.pos.x) < 15 && Math.abs(m.y - (slot.pos.y - 24)) < 15,
+    );
+  }
+
+  /** Trigger sparkAndSmoke on the agent's machine */
+  private triggerMachineError(sessionId: string) {
+    this.getMachineFor(sessionId)?.sparkAndSmoke();
+  }
+
+  /** Animate a coin arcing from agent into their machine */
+  private animateCoin(sessionId: string, agent: AgentSprite) {
+    const machine = this.getMachineFor(sessionId);
+    if (!machine) return;
+
+    const coin = this.scene.add.image(agent.x, agent.y - 20, 'coin')
+      .setScale(1.2).setDepth(11);
+
+    const targetX = machine.x;
+    const targetY = machine.y - 15;
+    const midY = Math.min(agent.y - 20, targetY) - 25;
+
+    // Arc upward
+    this.scene.tweens.add({
+      targets: coin,
+      x: (agent.x + targetX) / 2,
+      y: midY,
+      angle: 180,
+      duration: 300,
+      ease: 'Sine.easeOut',
+      onComplete: () => {
+        // Arc downward into machine
+        this.scene.tweens.add({
+          targets: coin,
+          x: targetX,
+          y: targetY,
+          angle: 360,
+          scaleX: 0.6,
+          scaleY: 0.6,
+          duration: 300,
+          ease: 'Sine.easeIn',
+          onComplete: () => {
+            coin.destroy();
+            // Small yellow flash at machine
+            const flash = this.scene.add.circle(targetX, targetY, 6, 0xffcc00, 0.6).setDepth(10);
+            this.scene.tweens.add({
+              targets: flash,
+              alpha: 0, scaleX: 2.5, scaleY: 2.5,
+              duration: 250, onComplete: () => flash.destroy(),
+            });
+          },
+        });
+      },
+    });
+  }
+
+  /** Burst confetti particles from a position */
+  private emitConfetti(x: number, y: number, count: number) {
+    const colors = [0xffcc00, 0x00ff66, 0x4488ff, 0xff00ff, 0x00ffff, 0xffffff, 0xff4444, 0xffaa00];
+
+    for (let i = 0; i < count; i++) {
+      const piece = this.scene.add.image(
+        x + Phaser.Math.Between(-8, 8),
+        y - 10,
+        'confetti',
+      ).setTint(colors[Phaser.Math.Between(0, colors.length - 1)])
+        .setScale(Phaser.Math.FloatBetween(0.8, 1.5))
+        .setAngle(Phaser.Math.Between(0, 360))
+        .setDepth(11);
+
+      const targetX = x + Phaser.Math.Between(-60, 60);
+      const peakY = y - Phaser.Math.Between(40, 80);
+      const landY = y + Phaser.Math.Between(10, 40);
+
+      // Rise
+      this.scene.tweens.add({
+        targets: piece,
+        x: (x + targetX) / 2 + Phaser.Math.Between(-15, 15),
+        y: peakY,
+        angle: piece.angle + Phaser.Math.Between(-180, 180),
+        duration: Phaser.Math.Between(300, 500),
+        ease: 'Sine.easeOut',
+        onComplete: () => {
+          // Fall with gravity
+          this.scene.tweens.add({
+            targets: piece,
+            x: targetX,
+            y: landY,
+            angle: piece.angle + Phaser.Math.Between(-360, 360),
+            alpha: 0,
+            duration: Phaser.Math.Between(800, 1400),
+            ease: 'Sine.easeIn',
+            onComplete: () => piece.destroy(),
+          });
+        },
+      });
+    }
+  }
+
+  /** Show a trophy above agent that bobs and fades */
+  private showTrophy(agent: AgentSprite) {
+    const trophy = this.scene.add.image(agent.x, agent.y - 40, 'trophy')
+      .setScale(1.8).setAlpha(0).setDepth(11);
+
+    // Golden glow under agent
+    const glow = this.scene.add.circle(agent.x, agent.y + 5, 20, 0xffcc00, 0)
+      .setDepth(7);
+    this.scene.tweens.add({
+      targets: glow,
+      alpha: { from: 0, to: 0.3 },
+      scaleX: { from: 0.5, to: 1.5 },
+      scaleY: { from: 0.5, to: 0.8 },
+      duration: 600,
+      yoyo: true,
+      hold: 1500,
+      onComplete: () => glow.destroy(),
+    });
+
+    // Trophy appears and bobs
+    this.scene.tweens.add({
+      targets: trophy,
+      alpha: 1,
+      y: agent.y - 50,
+      duration: 400,
+      ease: 'Back.easeOut',
+      onComplete: () => {
+        // Bob up and down
+        this.scene.tweens.add({
+          targets: trophy,
+          y: trophy.y - 5,
+          duration: 400,
+          yoyo: true,
+          repeat: 3,
+          ease: 'Sine.easeInOut',
+          onComplete: () => {
+            // Fade out
+            this.scene.tweens.add({
+              targets: trophy,
+              alpha: 0, y: trophy.y - 15,
+              duration: 500,
+              onComplete: () => trophy.destroy(),
+            });
+          },
+        });
+      },
+    });
+  }
+
+  /** Update heat overlay on the machine for a given session */
+  private updateHeatFor(sessionId: string, toolUseCount: number) {
+    const machine = this.getMachineFor(sessionId);
+    if (!machine) return;
+    const intensity = Math.min(toolUseCount / 20, 1.0);
+    machine.setHeat(intensity);
+  }
+
+  /** Reset heat overlay when agent leaves machine */
+  private resetHeatFor(sessionId: string) {
+    const machine = this.getMachineFor(sessionId);
+    if (machine) machine.setHeat(0);
   }
 
   // ── Vortex ──────────────────────────────────────────────────────

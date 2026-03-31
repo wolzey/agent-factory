@@ -15,6 +15,7 @@ export class StateManager {
   private sessions = new Map<string, AgentSession>();
   private onChange: StateChangeCallback | null = null;
   private sessionNameLookup: ((id: string) => string | undefined) | null = null;
+  private pendingRemovals = new Map<string, ReturnType<typeof setTimeout>>();
 
   setSessionNameLookup(fn: (id: string) => string | undefined) {
     this.sessionNameLookup = fn;
@@ -288,6 +289,7 @@ export class StateManager {
     session.currentTool = toolName;
     session.currentToolInput = payload.tool_input || null;
     session.lastEventAt = Date.now();
+    session.toolUseCount = (session.toolUseCount ?? 0) + 1;
 
     if (toolName === 'EnterPlanMode') {
       session.sessionName = 'Planning';
@@ -324,6 +326,16 @@ export class StateManager {
       effect: 'tool_complete',
       effectData: { tool: payload.tool_name },
     });
+
+    // Detect git commit / PR merge from Bash commands
+    if (toolName === 'Bash') {
+      const cmd = String(payload.tool_input?.command ?? '');
+      if (/git\s+commit\b/.test(cmd)) {
+        this.emit('effect', { sessionId: payload.session_id, effect: 'commit' });
+      } else if (/gh\s+pr\s+merge\b|git\s+merge\b/.test(cmd)) {
+        this.emit('effect', { sessionId: payload.session_id, effect: 'pr_merge' });
+      }
+    }
   }
 
   private handleSubagentStart(payload: HookPayload): void {
