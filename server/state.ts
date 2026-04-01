@@ -398,7 +398,8 @@ export class StateManager {
     const timer = setTimeout(() => {
       this.pendingRemovals.delete(payload.session_id);
       this.sessions.delete(payload.session_id);
-      this.knownSessions.delete(payload.session_id);
+      // Don't clear knownSessions — allow the session to be re-created
+      // by ensureSession() if the user resumes work later
       console.log(`[state] SESSION_REMOVED: id=${payload.session_id} (after ${STOPPED_REMOVAL_DELAY_MS}ms delay)`);
       this.emit('remove', { sessionId: payload.session_id });
     }, STOPPED_REMOVAL_DELAY_MS);
