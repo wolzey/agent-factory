@@ -55,6 +55,7 @@ export interface AgentSession {
   lastEventAt: number;
   lastPrompt?: string;
   taskDescription?: string;
+  toolUseCount?: number;
 }
 
 // === Hook Payload (from Claude Code hooks via HTTP POST) ===
@@ -124,7 +125,9 @@ export type EffectType =
   | 'compact'
   | 'worktree_create'
   | 'worktree_remove'
-  | 'elicitation';
+  | 'elicitation'
+  | 'commit'
+  | 'pr_merge';
 
 // === User Config File Format ===
 export interface UserConfig {

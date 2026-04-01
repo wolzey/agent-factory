@@ -1052,6 +1052,58 @@ export class BootScene extends Phaser.Scene {
     sctx.fillStyle = '#ffffff';
     sctx.fillRect(2, 2, 2, 2);
     spark.refresh();
+
+    // ── Coin (8×8 gold circle with shine) ──
+    const coin = this.textures.createCanvas('coin', 8, 8)!;
+    const coinCtx = coin.getContext();
+    coinCtx.fillStyle = '#cc8800';
+    coinCtx.fillRect(2, 0, 4, 8);
+    coinCtx.fillRect(0, 2, 8, 4);
+    coinCtx.fillRect(1, 1, 6, 6);
+    coinCtx.fillStyle = '#ffcc00';
+    coinCtx.fillRect(2, 1, 4, 6);
+    coinCtx.fillRect(1, 2, 6, 4);
+    coinCtx.fillStyle = '#ffee88';
+    coinCtx.fillRect(2, 2, 2, 2);
+    coinCtx.fillStyle = '#aa6600';
+    coinCtx.fillRect(5, 5, 2, 2);
+    coin.refresh();
+
+    // ── Confetti (4×3 colored rectangle) ──
+    const confetti = this.textures.createCanvas('confetti', 4, 3)!;
+    const confCtx = confetti.getContext();
+    confCtx.fillStyle = '#ffffff';
+    confCtx.fillRect(0, 0, 4, 3);
+    confetti.refresh();
+
+    // ── Trophy (12×14 gold cup) ──
+    const trophy = this.textures.createCanvas('trophy', 12, 14)!;
+    const tCtx = trophy.getContext();
+    // Cup body
+    tCtx.fillStyle = '#ffcc00';
+    tCtx.fillRect(2, 0, 8, 2);   // rim
+    tCtx.fillRect(1, 2, 10, 4);  // bowl
+    tCtx.fillRect(2, 6, 8, 2);   // taper
+    tCtx.fillRect(3, 8, 6, 1);
+    // Handles
+    tCtx.fillStyle = '#cc8800';
+    tCtx.fillRect(0, 2, 1, 4);
+    tCtx.fillRect(11, 2, 1, 4);
+    // Stem
+    tCtx.fillStyle = '#ffcc00';
+    tCtx.fillRect(5, 9, 2, 2);
+    // Base
+    tCtx.fillRect(3, 11, 6, 1);
+    tCtx.fillRect(2, 12, 8, 2);
+    // Shine
+    tCtx.fillStyle = '#ffee88';
+    tCtx.fillRect(3, 1, 2, 2);
+    tCtx.fillRect(2, 3, 2, 1);
+    // Shadow
+    tCtx.fillStyle = '#aa6600';
+    tCtx.fillRect(8, 4, 2, 2);
+    tCtx.fillRect(7, 6, 2, 1);
+    trophy.refresh();
   }
 
   // ── Tool icons ────────────────────────────────────────────────────
