@@ -62,8 +62,8 @@ export class SocketClient {
           for (const handler of this.handlers) {
             handler(msg);
           }
-        } catch {
-          console.warn('[socket] Failed to parse message:', event.data);
+        } catch (err) {
+          console.error('[socket] Error processing message:', err);
         }
       };
 

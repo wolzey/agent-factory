@@ -465,7 +465,7 @@ export class AgentManager {
 
   /** Find the machine an agent is assigned to */
   private getMachineFor(sessionId: string): Machine | undefined {
-    const slot = this.layout.getArcadeSlotFor(sessionId);
+    const slot = this.layout.getWorkSlotFor(sessionId);
     if (!slot) return undefined;
     return this.machines.find(
       m => Math.abs(m.x - slot.pos.x) < 15 && Math.abs(m.y - (slot.pos.y - 24)) < 15,
