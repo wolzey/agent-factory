@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type AvatarConfig struct {
@@ -46,6 +47,7 @@ func Exists() bool {
 }
 
 func Write(cfg UserConfig) error {
+	cfg.ServerURL = strings.TrimRight(cfg.ServerURL, "/")
 	dir := ConfigDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err

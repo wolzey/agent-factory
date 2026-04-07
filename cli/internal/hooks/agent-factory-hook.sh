@@ -12,6 +12,9 @@ else
   AVATAR='{}'
 fi
 
+# Strip trailing slash to avoid double-slash in URLs
+SERVER_URL="${SERVER_URL%/}"
+
 INPUT=$(cat)
 
 PAYLOAD=$(echo "$INPUT" | jq -c \

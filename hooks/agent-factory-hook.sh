@@ -16,6 +16,9 @@ else
   AVATAR='{}'
 fi
 
+# Strip trailing slash to avoid double-slash in URLs
+SERVER_URL="${SERVER_URL%/}"
+
 # Read hook input from stdin
 INPUT=$(cat)
 

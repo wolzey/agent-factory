@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -48,7 +49,7 @@ func runToken(cmd *cobra.Command, args []string) error {
 }
 
 func fetchToken(serverURL, username string) (string, error) {
-	tokenURL := fmt.Sprintf("%s/api/auth/token?username=%s", serverURL, url.QueryEscape(username))
+	tokenURL := fmt.Sprintf("%s/api/auth/token?username=%s", strings.TrimRight(serverURL, "/"), url.QueryEscape(username))
 
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(tokenURL)
