@@ -305,6 +305,12 @@ export class StateManager {
           session.lastEventAt = now;
           continue;
         }
+        // Cancel any pending removal timer so it can't fire later and emit a duplicate remove
+        const pendingTimer = this.pendingRemovals.get(id);
+        if (pendingTimer) {
+          clearTimeout(pendingTimer);
+          this.pendingRemovals.delete(id);
+        }
         this.sessions.delete(id);
         // Don't clear knownSessions — allow the session to be re-created
         // by ensureSession() if it sends hooks later (e.g. user resumes work)
