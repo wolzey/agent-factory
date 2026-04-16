@@ -335,25 +335,15 @@ export class StateManager {
     this.knownSessions.add(payload.session_id);
     const existing = this.sessions.get(payload.session_id);
 
-    if (existing && existing.activity === 'stopped') {
-      // Session is resuming after a SessionEnd — remove first so the client
-      // goes through the tombstone → zombie resurrection path.
+    if (existing) {
+      // Any resume (stopped or still-live) — remove first so the client
+      // always goes through the fresh-spawn / zombie-resurrection path.
+      // Prevents resumed sessions from staying invisible if the client
+      // lost the sprite or never received it.
+      console.log(`[state] SESSION_RESUME: id=${payload.session_id} user=${existing.username} was=${existing.activity} — removing for respawn`);
       this.sessions.delete(payload.session_id);
       this.emit('remove', { sessionId: payload.session_id });
       // Fall through to create a fresh session below
-    } else if (existing) {
-      // Session resumed (wasn't stopped) — update in place
-      const prevActivity = existing.activity;
-      existing.username = payload.username || existing.username;
-      existing.avatar = payload.avatar || existing.avatar;
-      existing.cwd = payload.cwd || existing.cwd;
-      existing.activity = 'idle';
-      existing.currentTool = null;
-      existing.currentToolInput = null;
-      existing.lastEventAt = now;
-      console.log(`[state] SESSION_RESUME: id=${payload.session_id} user=${existing.username} activity=idle (was=${prevActivity})`);
-      this.emit('update', { agent: existing });
-      return;
     }
 
     {
