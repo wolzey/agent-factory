@@ -1,6 +1,7 @@
 import type { AgentSession, HookPayload, SubagentInfo, EffectType } from '../shared/types.js';
 import {
   DEFAULT_AVATAR,
+  RESUME_RESPAWN_THRESHOLD_MS,
   STALE_SESSION_TIMEOUT_MS,
   STOPPED_REMOVAL_DELAY_MS,
   toolToActivity,
@@ -335,15 +336,30 @@ export class StateManager {
     this.knownSessions.add(payload.session_id);
     const existing = this.sessions.get(payload.session_id);
 
-    if (existing) {
-      // Any resume (stopped or still-live) — remove first so the client
-      // always goes through the fresh-spawn / zombie-resurrection path.
-      // Prevents resumed sessions from staying invisible if the client
-      // lost the sprite or never received it.
-      console.log(`[state] SESSION_RESUME: id=${payload.session_id} user=${existing.username} was=${existing.activity} — removing for respawn`);
+    // Force respawn only when the client plausibly lost the sprite:
+    // session was ended, had a pending removal, or has been idle long
+    // enough that a disconnect/reconnect could have dropped it.
+    // A quick resume (brief pause) just updates in place — no flicker.
+    const hadPendingRemoval = !!pendingTimer;
+    const wasStopped = existing?.activity === 'stopped';
+    const longIdle = !!existing && now - existing.lastEventAt > RESUME_RESPAWN_THRESHOLD_MS;
+
+    if (existing && (wasStopped || hadPendingRemoval || longIdle)) {
+      console.log(`[state] SESSION_RESUME: id=${payload.session_id} user=${existing.username} was=${existing.activity} idle=${now - existing.lastEventAt}ms — removing for respawn`);
       this.sessions.delete(payload.session_id);
       this.emit('remove', { sessionId: payload.session_id });
       // Fall through to create a fresh session below
+    } else if (existing) {
+      // Quick resume — update in place, no client-visible flicker
+      existing.username = payload.username || existing.username;
+      existing.avatar = payload.avatar || existing.avatar;
+      existing.cwd = payload.cwd || existing.cwd;
+      existing.activity = 'idle';
+      existing.currentTool = null;
+      existing.currentToolInput = null;
+      existing.lastEventAt = now;
+      this.emit('update', { agent: existing });
+      return;
     }
 
     {
