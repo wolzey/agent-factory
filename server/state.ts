@@ -1,6 +1,7 @@
 import type { AgentSession, HookPayload, SubagentInfo, EffectType } from '../shared/types.js';
 import {
   DEFAULT_AVATAR,
+  RESUME_RESPAWN_THRESHOLD_MS,
   STALE_SESSION_TIMEOUT_MS,
   STOPPED_REMOVAL_DELAY_MS,
   toolToActivity,
@@ -305,6 +306,12 @@ export class StateManager {
           session.lastEventAt = now;
           continue;
         }
+        // Cancel any pending removal timer so it can't fire later and emit a duplicate remove
+        const pendingTimer = this.pendingRemovals.get(id);
+        if (pendingTimer) {
+          clearTimeout(pendingTimer);
+          this.pendingRemovals.delete(id);
+        }
         this.sessions.delete(id);
         // Don't clear knownSessions — allow the session to be re-created
         // by ensureSession() if it sends hooks later (e.g. user resumes work)
@@ -329,15 +336,21 @@ export class StateManager {
     this.knownSessions.add(payload.session_id);
     const existing = this.sessions.get(payload.session_id);
 
-    if (existing && existing.activity === 'stopped') {
-      // Session is resuming after a SessionEnd — remove first so the client
-      // goes through the tombstone → zombie resurrection path.
+    // Force respawn only when the client plausibly lost the sprite:
+    // session was ended, had a pending removal, or has been idle long
+    // enough that a disconnect/reconnect could have dropped it.
+    // A quick resume (brief pause) just updates in place — no flicker.
+    const hadPendingRemoval = !!pendingTimer;
+    const wasStopped = existing?.activity === 'stopped';
+    const longIdle = !!existing && now - existing.lastEventAt > RESUME_RESPAWN_THRESHOLD_MS;
+
+    if (existing && (wasStopped || hadPendingRemoval || longIdle)) {
+      console.log(`[state] SESSION_RESUME: id=${payload.session_id} user=${existing.username} was=${existing.activity} idle=${now - existing.lastEventAt}ms — removing for respawn`);
       this.sessions.delete(payload.session_id);
       this.emit('remove', { sessionId: payload.session_id });
       // Fall through to create a fresh session below
     } else if (existing) {
-      // Session resumed (wasn't stopped) — update in place
-      const prevActivity = existing.activity;
+      // Quick resume — update in place, no client-visible flicker
       existing.username = payload.username || existing.username;
       existing.avatar = payload.avatar || existing.avatar;
       existing.cwd = payload.cwd || existing.cwd;
@@ -345,7 +358,6 @@ export class StateManager {
       existing.currentTool = null;
       existing.currentToolInput = null;
       existing.lastEventAt = now;
-      console.log(`[state] SESSION_RESUME: id=${payload.session_id} user=${existing.username} activity=idle (was=${prevActivity})`);
       this.emit('update', { agent: existing });
       return;
     }
