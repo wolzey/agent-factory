@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "description": "2D pixel art visualization of Claude Code agent sessions",
   "type": "module",
+  "pi": {
+    "extensions": [
+      "./extensions/agent-factory"
+    ]
+  },
   "scripts": {
     "dev": "concurrently -n server,client -c blue,green \"tsx watch server/index.ts\" \"vite dev\"",
     "dev:server": "tsx watch server/index.ts",
@@ -15,11 +20,15 @@
     "claude-code",
     "visualization",
     "pixel-art",
-    "agents"
+    "agents",
+    "pi-package"
   ],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.30.3",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
   "dependencies": {
     "@fastify/cors": "^11.2.0",
     "@fastify/static": "^9.0.0",
