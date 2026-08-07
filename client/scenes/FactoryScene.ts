@@ -9,6 +9,7 @@ import type { WSMessageToClient, EnvironmentType } from '@shared/types';
 import { getTheme } from '../environments';
 import type { EnvironmentTheme } from '../environments';
 import { SoundBank } from '../audio/SoundBank';
+import { ControlManager } from '../control/ControlManager';
 
 export class FactoryScene extends Phaser.Scene {
   private socket!: SocketClient;
@@ -17,6 +18,7 @@ export class FactoryScene extends Phaser.Scene {
   private authManager!: AuthManager;
   private loginOverlay!: LoginOverlay;
   private commandInput!: CommandInput;
+  private controlManager!: ControlManager;
   private titleShadow!: Phaser.GameObjects.Text;
   private titleText!: Phaser.GameObjects.Text;
   private theme!: EnvironmentTheme;
@@ -53,12 +55,21 @@ export class FactoryScene extends Phaser.Scene {
 
     // Auth
     this.authManager = new AuthManager();
+    this.controlManager = new ControlManager(this, this.authManager, this.socket, this.agentManager);
+
+    const logout = () => {
+      this.socket.send({ type: 'logout' });
+      this.authManager.logout();
+      this.controlManager.handleLoggedOut();
+      this.commandInput.hide();
+      this.loginOverlay.showLoggedOut();
+    };
 
     this.commandInput = new CommandInput(
-      this.authManager,
       this.socket,
       (chat) => this.chatOverlay.addMessage(chat),
-      () => this.loginOverlay.showLoggedOut(),
+      logout,
+      () => this.controlManager.selectedSessionId,
     );
     this.commandInput.attachTo(this.chatOverlay.getContainer());
 
@@ -66,13 +77,14 @@ export class FactoryScene extends Phaser.Scene {
       this.authManager,
       this.socket,
       () => this.commandInput.show(),
-      () => this.commandInput.hide(),
+      logout,
     );
 
     // Re-authenticate on reconnect
     this.socket.onConnect(() => {
-      if (this.authManager.isLoggedIn && this.authManager.token) {
-        this.socket.send({ type: 'auth', token: this.authManager.token });
+      const token = this.authManager.authenticationToken;
+      if (token) {
+        this.socket.send({ type: 'auth', token });
       }
     });
 
@@ -118,21 +130,38 @@ export class FactoryScene extends Phaser.Scene {
 
   private handleMessage(msg: WSMessageToClient) {
     switch (msg.type) {
-      case 'full_state': this.agentManager.handleFullState(msg.agents); break;
-      case 'agent_update': this.agentManager.handleAgentUpdate(msg.agent); break;
-      case 'agent_remove': this.agentManager.handleAgentRemove(msg.sessionId); break;
+      case 'full_state':
+        this.agentManager.handleFullState(msg.agents);
+        this.controlManager.handleStateChanged();
+        break;
+      case 'agent_update':
+        this.agentManager.handleAgentUpdate(msg.agent);
+        this.controlManager.handleStateChanged();
+        break;
+      case 'agent_remove':
+        this.agentManager.handleAgentRemove(msg.sessionId);
+        this.controlManager.handleStateChanged();
+        break;
       case 'effect': this.agentManager.handleEffect(msg.sessionId, msg.effect, msg.data); break;
       case 'global_effect':
         if (msg.effect === 'vortex') this.agentManager.triggerVortex();
         break;
       case 'chat_message': this.chatOverlay.addMessage(msg.chat); break;
       case 'auth_result':
-        if (msg.success && msg.username) {
-          this.authManager.login(this.authManager.token!, msg.username);
+        if (msg.success && msg.username && this.authManager.completeLogin(msg.username)) {
           this.loginOverlay.showLoggedIn(msg.username);
+          this.controlManager.handleAuthenticated(msg.username);
         } else {
+          this.authManager.logout();
+          this.controlManager.handleLoggedOut();
+          this.commandInput.hide();
+          this.loginOverlay.showLoggedOut();
           this.loginOverlay.showError(msg.error || 'Invalid token');
         }
+        break;
+      case 'control_result':
+      case 'control_revoked':
+        this.controlManager.handleMessage(msg);
         break;
     }
   }

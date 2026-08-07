@@ -5,6 +5,11 @@ export const STOPPED_REMOVAL_DELAY_MS = 3000; // 3 seconds after session end
 export const TOMBSTONE_DURATION_MS = 30_000; // 30 seconds tombstone lingers
 export const RESUME_RESPAWN_THRESHOLD_MS = 60_000; // Idle longer than this → force respawn on resume
 export const MAX_BROADCAST_RATE_MS = 100; // Max 10 updates/sec per session
+export const CONTROL_TICK_INTERVAL_MS = 50;
+export const CONTROL_INPUT_TIMEOUT_MS = 1_500;
+export const CONTROL_SHOOT_COOLDOWN_MS = 300;
+export const CONTROL_MOVE_SPEED = 80; // pixels per second
+export const CONTROL_WORLD_BOUNDS = { minX: 18, maxX: 782, minY: 58, maxY: 462 } as const;
 export const CHAT_MESSAGE_MAX_LENGTH = 200;
 export const CHAT_FADE_TIMEOUT_MS = 15_000; // 15 seconds before chat fades
 

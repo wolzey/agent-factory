@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import type { AgentSession, EffectType, EnvironmentType } from '@shared/types';
+import type { AgentSession, EffectType, EnvironmentType, FacingDirection } from '@shared/types';
 import { TOMBSTONE_DURATION_MS } from '@shared/constants';
 import { AgentSprite } from '../entities/AgentSprite';
 import { SubagentSprite } from '../entities/SubagentSprite';
@@ -8,6 +8,7 @@ import { LayoutManager } from './LayoutManager';
 import { getTheme } from '../environments';
 import type { ActivityBucket, EnvironmentTheme } from '../environments';
 import type { SoundBank } from '../audio/SoundBank';
+import { isInShotCorridor } from '../control/geometry';
 
 const WORKING_STATES = ['reading', 'writing', 'running', 'searching', 'chatting', 'planning', 'compacting'];
 
@@ -15,7 +16,9 @@ export class AgentManager {
   private scene: Phaser.Scene;
   private soundBank: SoundBank | null = null;
   private agents = new Map<string, AgentSprite>();
+  private sessions = new Map<string, AgentSession>();
   private subagents = new Map<string, SubagentSprite>();
+  private locallyControlledSessionId: string | null = null;
   private machines: Machine[] = [];
   private layout: LayoutManager;
   private serverGraphicDeath = false;
@@ -56,9 +59,10 @@ export class AgentManager {
   }
 
   handleFullState(agents: AgentSession[]) {
+    this.sessions = new Map(agents.map(agent => [agent.sessionId, agent]));
     // Remove agents not in new state
     const newIds = new Set(agents.map(a => a.sessionId));
-    for (const [id, sprite] of this.agents) {
+    for (const [id] of this.agents) {
       if (!newIds.has(id)) {
         this.removeAgent(id);
       }
@@ -73,11 +77,13 @@ export class AgentManager {
   }
 
   handleAgentUpdate(session: AgentSession) {
+    this.sessions.set(session.sessionId, session);
     this.upsertAgent(session);
     this.updateHud();
   }
 
   handleAgentRemove(sessionId: string) {
+    this.sessions.delete(sessionId);
     this.removeAgent(sessionId);
     this.updateHud();
   }
@@ -155,19 +161,12 @@ export class AgentManager {
       case 'emote':
         if (data?.emote) {
           const emote = data.emote as string;
-          agent.playEmote(emote);
+          const facing = (data.facing as FacingDirection | undefined) ?? agent.sessionData.manualControl?.facing ?? 'right';
+          agent.playEmote(emote, facing);
           // Play emote sound if we have one
           this.soundBank?.play(`emote_${emote}`);
           if (emote === 'gun') {
-            for (const [otherId, other] of this.agents) {
-              if (otherId === sessionId) continue;
-              if (other.x > agent.x && other.x - agent.x < 200) {
-                this.scene.time.delayedCall(300, () => {
-                  other.playGunDeath();
-                  this.soundBank?.play('gun_victim');
-                });
-              }
-            }
+            this.reactToShot(sessionId, agent, facing, 300);
           }
           if (emote === 'fart') {
             for (const [otherId, other] of this.agents) {
@@ -191,6 +190,45 @@ export class AgentManager {
         agent.showFloatingLabel('MERGED!', '#ffcc00');
         agent.playEmote('dance');
         break;
+      case 'shoot': {
+        const facing = (data?.facing as FacingDirection | undefined) ?? agent.sessionData.manualControl?.facing ?? 'right';
+        agent.playShot(facing);
+        this.soundBank?.play('emote_gun');
+        this.reactToShot(sessionId, agent, facing, 180);
+        break;
+      }
+    }
+  }
+
+  private reactToShot(
+    shooterId: string,
+    shooter: AgentSprite,
+    facing: FacingDirection,
+    delay: number,
+  ): void {
+    for (const [otherId, other] of this.agents) {
+      if (otherId === shooterId) continue;
+      if (!isInShotCorridor(shooter, other, facing)) continue;
+      this.scene.time.delayedCall(delay, () => {
+        other.playGunDeath();
+        this.soundBank?.play('gun_victim');
+      });
+    }
+  }
+
+  getSessions(): AgentSession[] {
+    return Array.from(this.sessions.values());
+  }
+
+  getAgentPosition(sessionId: string): { x: number; y: number } | null {
+    const agent = this.agents.get(sessionId);
+    return agent ? { x: agent.x, y: agent.y } : null;
+  }
+
+  setLocallyControlledSession(sessionId: string | null): void {
+    this.locallyControlledSessionId = sessionId;
+    for (const [id, agent] of this.agents) {
+      agent.setControlHighlight(id === sessionId);
     }
   }
 
@@ -238,6 +276,7 @@ export class AgentManager {
 
     let agent = this.agents.get(session.sessionId);
     const prevActivity = agent?.sessionData.activity;
+    const wasManuallyControlled = !!agent?.sessionData.manualControl;
     let isNewAgent = false;
 
     if (!agent) {
@@ -262,6 +301,8 @@ export class AgentManager {
         });
 
         this.soundBank?.play('zombie_rise');
+      } else if (session.manualControl) {
+        agent.setPosition(session.manualControl.x, session.manualControl.y);
       } else {
         // New agent - spawn at entrance with a random animation
         const entrance = this.layout.entrance;
@@ -269,6 +310,7 @@ export class AgentManager {
         agent.playSpawnAnimation();
       }
       this.agents.set(session.sessionId, agent);
+      agent.setControlHighlight(session.sessionId === this.locallyControlledSessionId);
     }
 
     agent.updateSession(session);
@@ -277,6 +319,17 @@ export class AgentManager {
     if (this.zombieRising.has(session.sessionId)) {
       this.syncSubagents(session);
       return;
+    }
+
+    if (session.manualControl) {
+      this.deactivateMachineFor(session.sessionId);
+      this.layout.release(session.sessionId);
+      agent.setManualControl(session.manualControl);
+      this.syncSubagents(session);
+      return;
+    }
+    if (wasManuallyControlled) {
+      agent.clearManualControl();
     }
 
     const activityBucket = this.bucketForActivity(session.activity);
@@ -295,9 +348,9 @@ export class AgentManager {
         // Release and reassign to a different work slot.
         this.layout.release(session.sessionId);
         const altPos = this.layout.assignToWork(session.sessionId);
-        agent.moveTo(altPos.x, altPos.y + 24);
+        agent.routeTo(altPos.x, altPos.y + 24);
       } else {
-        agent.moveTo(target.x, target.y);
+        agent.routeTo(target.x, target.y);
       }
       this.activateMachineFor(session.sessionId);
       this.updateHeatFor(session.sessionId, session.toolUseCount ?? 0);
@@ -306,18 +359,18 @@ export class AgentManager {
       this.deactivateMachineFor(session.sessionId);
       const pos = this.layout.assignToWaiting(session.sessionId);
       if (!agent.isZombie && this.isNearTombstone(pos.x, pos.y)) {
-        agent.moveTo(pos.x + 30, pos.y);
+        agent.routeTo(pos.x + 30, pos.y);
       } else {
-        agent.moveTo(pos.x, pos.y);
+        agent.routeTo(pos.x, pos.y);
       }
     } else {
       this.resetHeatFor(session.sessionId);
       this.deactivateMachineFor(session.sessionId);
       const pos = this.layout.assignToIdle(session.sessionId);
       if (!agent.isZombie && this.isNearTombstone(pos.x, pos.y)) {
-        agent.moveTo(pos.x + 30, pos.y);
+        agent.routeTo(pos.x + 30, pos.y);
       } else {
-        agent.moveTo(pos.x, pos.y);
+        agent.routeTo(pos.x, pos.y);
       }
     }
 
@@ -1090,7 +1143,7 @@ export class AgentManager {
       );
 
       this.scene.time.delayedCall(Phaser.Math.Between(800, 1500), () => {
-        agent.moveTo(saved.x, saved.y);
+        agent.routeTo(saved.x, saved.y);
       });
     }
     this.preVortexPositions.clear();
@@ -1194,7 +1247,7 @@ export class AgentManager {
     const offsetX = Phaser.Math.Between(-16, 16);
     const destX = tomb.x + offsetX;
     const destY = tomb.y + 14;
-    agent.moveTo(destX, destY);
+    agent.routeTo(destX, destY);
 
     // Calculate walk time based on boosted speed + buffer
     const boostedSpeed = originalSpeed * 2;
@@ -1215,7 +1268,7 @@ export class AgentManager {
         if (!agentGone) {
           const a = this.agents.get(agentId)!;
           a.setMoveSpeed(originalSpeed);
-          a.moveTo(returnX, returnY);
+          a.routeTo(returnX, returnY);
         }
         return;
       }
@@ -1257,7 +1310,7 @@ export class AgentManager {
         if (this.agents.has(agentId)) {
           const a = this.agents.get(agentId)!;
           a.setMoveSpeed(originalSpeed);
-          a.moveTo(returnX, returnY);
+          a.routeTo(returnX, returnY);
         }
       });
     });
@@ -1275,7 +1328,7 @@ export class AgentManager {
           // Restore normal speed and send them back to the idle zone.
           agent.setMoveSpeed(80);
           const pos = this.layout.assignToIdle(agentId);
-          agent.moveTo(pos.x, pos.y);
+          agent.routeTo(pos.x, pos.y);
         }
       }
     }

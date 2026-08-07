@@ -40,6 +40,23 @@ export interface SubagentInfo {
   startedAt: number;
 }
 
+// === Manual Avatar Control ===
+export type FacingDirection = 'up' | 'down' | 'left' | 'right';
+
+export interface ManualControlState {
+  x: number;
+  y: number;
+  facing: FacingDirection;
+  moving: boolean;
+}
+
+export interface ControlInputState {
+  up: boolean;
+  down: boolean;
+  left: boolean;
+  right: boolean;
+}
+
 // === Agent Session (Server State) ===
 export interface AgentSession {
   sessionId: string;
@@ -56,6 +73,7 @@ export interface AgentSession {
   lastPrompt?: string;
   taskDescription?: string;
   toolUseCount?: number;
+  manualControl?: ManualControlState;
 }
 
 // === Hook Payload (from Claude Code hooks via HTTP POST) ===
@@ -92,6 +110,8 @@ export type WSMessageToClient =
   | { type: 'effect'; sessionId: string; effect: EffectType; data?: Record<string, unknown> }
   | { type: 'chat_message'; chat: ChatMessage }
   | { type: 'auth_result'; success: boolean; username?: string; error?: string }
+  | { type: 'control_result'; success: boolean; sessionId?: string; action: 'claim' | 'release'; error?: string }
+  | { type: 'control_revoked'; sessionId: string; reason: string }
   | { type: 'global_effect'; effect: GlobalEffectType; data?: Record<string, unknown> };
 
 // === Global Effect Types ===
@@ -102,7 +122,12 @@ export type WSMessageToServer =
   | { type: 'identify'; username: string; avatar: AvatarConfig }
   | { type: 'request_state' }
   | { type: 'auth'; token: string }
-  | { type: 'emote'; emote: string }
+  | { type: 'logout' }
+  | { type: 'control_claim'; sessionId: string; x: number; y: number }
+  | { type: 'control_input'; sessionId: string; input: ControlInputState }
+  | { type: 'control_release'; sessionId: string }
+  | { type: 'shoot'; sessionId: string }
+  | { type: 'emote'; emote: string; sessionId?: string }
   | { type: 'chat'; message: string };
 
 // === Emote Types ===
@@ -118,6 +143,7 @@ export type EffectType =
   | 'session_start'
   | 'session_end'
   | 'emote'
+  | 'shoot'
   | 'prompt_received'
   | 'task_completed'
   | 'notification'

@@ -1,4 +1,4 @@
-import type { AgentSession, HookPayload, SubagentInfo, EffectType } from '../shared/types.js';
+import type { AgentSession, HookPayload, SubagentInfo, EffectType, ManualControlState, FacingDirection } from '../shared/types.js';
 import {
   DEFAULT_AVATAR,
   RESUME_RESPAWN_THRESHOLD_MS,
@@ -192,6 +192,12 @@ export class StateManager {
     }
   }
 
+  findSessionsByUsername(username: string): AgentSession[] {
+    return Array.from(this.sessions.values())
+      .filter(session => session.username === username && session.activity !== 'stopped')
+      .sort((a, b) => b.lastEventAt - a.lastEventAt);
+  }
+
   findSessionByUsername(username: string): AgentSession | undefined {
     let best: AgentSession | undefined;
     for (const session of this.sessions.values()) {
@@ -272,6 +278,7 @@ export class StateManager {
       session.currentToolInput = null;
       session.activity = 'idle';
       session.subagents = [];
+      delete session.manualControl;
 
       this.knownSessions.add(session.sessionId);
       this.sessions.set(session.sessionId, session);
@@ -286,13 +293,41 @@ export class StateManager {
     this.emit('update', { agent: session });
   }
 
-  emitEmote(sessionId: string, emote: string): void {
+  setManualControl(sessionId: string, control: ManualControlState): AgentSession | undefined {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.activity === 'stopped') return undefined;
+    session.manualControl = { ...control };
+    this.emit('update', { agent: session });
+    return session;
+  }
+
+  updateManualControl(sessionId: string, control: ManualControlState): AgentSession | undefined {
+    const session = this.sessions.get(sessionId);
+    if (!session?.manualControl || session.activity === 'stopped') return undefined;
+    session.manualControl = { ...control };
+    this.emit('update', { agent: session });
+    return session;
+  }
+
+  clearManualControl(sessionId: string): AgentSession | undefined {
+    const session = this.sessions.get(sessionId);
+    if (!session?.manualControl) return session;
+    delete session.manualControl;
+    this.emit('update', { agent: session });
+    return session;
+  }
+
+  emitEmote(sessionId: string, emote: string, facing?: FacingDirection): void {
     console.log(`[state] EMOTE: sessionId=${sessionId} emote=${emote}`);
     this.emit('effect', {
       sessionId,
       effect: 'emote' as EffectType,
-      effectData: { emote },
+      effectData: { emote, ...(facing ? { facing } : {}) },
     });
+  }
+
+  emitEffect(sessionId: string, effect: EffectType, effectData?: Record<string, unknown>): void {
+    this.emit('effect', { sessionId, effect, effectData });
   }
 
   reapStale(): string[] {

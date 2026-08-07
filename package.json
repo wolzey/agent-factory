@@ -12,6 +12,7 @@
     "dev": "concurrently -n server,client -c blue,green \"tsx watch server/index.ts\" \"vite dev\"",
     "dev:server": "tsx watch server/index.ts",
     "dev:client": "vite dev",
+    "test": "vitest run --config vitest.config.ts",
     "build": "vite build && tsc -p tsconfig.server.json",
     "start": "node dist/server/server/index.js",
     "install-hooks": "bash hooks/install.sh"
@@ -42,6 +43,7 @@
     "phaser": "^3.90.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2",
-    "vite": "^8.0.2"
+    "vite": "^8.0.2",
+    "vitest": "^4.1.10"
   }
 }

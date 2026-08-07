@@ -12,6 +12,7 @@ import { registerHookRoutes } from './routes/hooks.js';
 import { startStaleReaper } from './cleanup.js';
 import { SessionRegistryWatcher } from './session-registry.js';
 import { TokenAuth, loadOrCreateSecret } from './auth.js';
+import { ControlManager } from './control-manager.js';
 import { DEFAULT_PORT, DEFAULT_SERVER_CONFIG, VALID_EMOTES, CHAT_MESSAGE_MAX_LENGTH } from '../shared/constants.js';
 import { loadSessions, createDebouncedSave } from './session-store.js';
 import type { ServerConfig, EmoteType } from '../shared/types.js';
@@ -86,6 +87,7 @@ async function main() {
   // State & broadcast
   const state = new StateManager();
   const broadcast = new BroadcastManager();
+  const controls = new ControlManager(state, broadcast);
 
   // HTTP routes
   registerHookRoutes(app, state, broadcast, serverConfig, auth);
@@ -96,6 +98,9 @@ async function main() {
     // Send current state on connect
     broadcast.sendFullState(socket, state.getAll());
 
+    socket.on('close', () => controls.releaseSocket(socket, 'Browser disconnected'));
+    socket.on('error', () => controls.releaseSocket(socket, 'Browser disconnected'));
+
     socket.on('message', (raw: string | Buffer) => {
       try {
         const msg = JSON.parse(String(raw));
@@ -105,22 +110,68 @@ async function main() {
             break;
 
           case 'auth': {
-            const username = auth.validateToken(msg.token);
+            const username = auth.validateToken(String(msg.token || ''));
             if (username) {
+              controls.releaseSocket(socket, 'Browser re-authenticated');
               broadcast.authenticateSocket(socket, username);
               broadcast.sendTo(socket, { type: 'auth_result', success: true, username });
             } else {
+              controls.releaseSocket(socket, 'Authentication failed');
+              broadcast.deauthenticateSocket(socket);
               broadcast.sendTo(socket, { type: 'auth_result', success: false, error: 'Invalid token' });
             }
             break;
           }
 
+          case 'logout':
+            controls.releaseSocket(socket, 'Logged out');
+            broadcast.deauthenticateSocket(socket);
+            break;
+
+          case 'control_claim':
+            controls.claim(
+              socket,
+              broadcast.getSocketUsername(socket),
+              String(msg.sessionId || ''),
+              Number(msg.x),
+              Number(msg.y),
+            );
+            break;
+
+          case 'control_input':
+            controls.updateInput(
+              socket,
+              broadcast.getSocketUsername(socket),
+              String(msg.sessionId || ''),
+              msg.input,
+            );
+            break;
+
+          case 'control_release':
+            controls.release(
+              socket,
+              broadcast.getSocketUsername(socket),
+              String(msg.sessionId || ''),
+            );
+            break;
+
+          case 'shoot':
+            controls.shoot(
+              socket,
+              broadcast.getSocketUsername(socket),
+              String(msg.sessionId || ''),
+            );
+            break;
+
           case 'emote': {
             const wsUser = broadcast.getSocketUsername(socket);
-            if (!wsUser) break;
-            const session = state.findSessionByUsername(wsUser);
-            if (session && VALID_EMOTES.includes(msg.emote as EmoteType)) {
-              state.emitEmote(session.sessionId, msg.emote);
+            if (!wsUser || !VALID_EMOTES.includes(msg.emote as EmoteType)) break;
+            const requested = msg.sessionId ? state.get(String(msg.sessionId)) : undefined;
+            const session = requested && requested.username === wsUser
+              ? requested
+              : (!msg.sessionId ? state.findSessionByUsername(wsUser) : undefined);
+            if (session) {
+              state.emitEmote(session.sessionId, msg.emote, session.manualControl?.facing);
             }
             break;
           }
@@ -164,16 +215,23 @@ async function main() {
     }
   }
 
-  // Persist sessions to disk on state changes (debounced)
+  // Broadcast and persist state changes while enforcing control lifecycle.
   const debouncedSave = createDebouncedSave();
   state.onStateChange((type, data) => {
-    // Forward to broadcast manager
     switch (type) {
       case 'update':
-        if (data.agent) broadcast.broadcastAgentUpdate(data.agent);
+        if (data.agent) {
+          if (data.agent.activity === 'stopped' && data.agent.manualControl) {
+            controls.releaseSession(data.agent.sessionId, 'Agent session ended');
+          }
+          broadcast.broadcastAgentUpdate(data.agent);
+        }
         break;
       case 'remove':
-        if (data.sessionId) broadcast.broadcastAgentRemove(data.sessionId);
+        if (data.sessionId) {
+          controls.releaseSession(data.sessionId, 'Agent session ended');
+          broadcast.broadcastAgentRemove(data.sessionId);
+        }
         break;
       case 'effect':
         if (data.sessionId && data.effect) {
@@ -181,12 +239,12 @@ async function main() {
         }
         break;
     }
-    // Persist after every state change (debounced)
     debouncedSave(state.getAll());
   });
 
-  // Start stale session reaper
+  // Start stale session reaper and manual-control simulation
   startStaleReaper(state);
+  controls.start();
 
   await app.listen({ port, host });
   console.log(`\n  Agent Factory server running on http://${host}:${port}`);

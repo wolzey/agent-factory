@@ -27,6 +27,11 @@ export class BroadcastManager {
     return this.clients.get(ws)?.username;
   }
 
+  deauthenticateSocket(ws: WebSocket): void {
+    const meta = this.clients.get(ws);
+    if (meta) delete meta.username;
+  }
+
   sendTo(ws: WebSocket, msg: WSMessageToClient) {
     if (ws.readyState === 1) {
       ws.send(JSON.stringify(msg));

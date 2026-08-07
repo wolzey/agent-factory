@@ -45,7 +45,7 @@ export function registerHookRoutes(
       return reply.status(404).send({ error: 'No active session for username' });
     }
 
-    state.emitEmote(session.sessionId, emote);
+    state.emitEmote(session.sessionId, emote, session.manualControl?.facing);
     return reply.status(200).send({ ok: true, sessionId: session.sessionId });
   });
 
