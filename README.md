@@ -147,7 +147,22 @@ This prints a token like `d29semV5.a1b2c3d4...`. Copy it, then:
 2. Click **Login** (top-left corner)
 3. Paste your token and click **Login**
 
-Once logged in, a terminal-style command bar appears at the bottom. Available commands:
+Once logged in, an **Avatar Uplink** panel appears in the top-left. It lists every active top-level agent session attributed to your authenticated username. Choose a session and click **Take Control**; the server validates ownership before enabling controls.
+
+### Web Avatar Controls
+
+| Key | Action |
+|-----|--------|
+| `W` `A` `S` `D` | Move the selected avatar around the factory |
+| `B` | Open the radial emote wheel |
+| `Left` / `Right` | Rotate the wheel selection |
+| `Enter` / `Space` | Confirm the selected wheel emote |
+| `Space` | Fire in the avatar's current facing direction while the wheel is closed |
+| `Escape` | Close the wheel, or release avatar control |
+
+Manual control affects only the visual avatar. The underlying Claude/Codex session keeps running, its activity indicators continue to update, and automatic workstation/lounge routing resumes when control is released. Control is also released on logout, disconnect, or session end. A newer browser authenticated as the same owner can take over an existing control lease.
+
+A terminal-style command bar also appears at the bottom. Available commands:
 
 | Command | Description |
 |---------|-------------|
@@ -284,9 +299,9 @@ agent-factory/
 
 ### WebSocket (`ws://host:4242/ws`)
 
-**Server -> Client:** `full_state`, `agent_update`, `agent_remove`, `effect`, `chat_message`, `auth_result`
+**Server -> Client:** `full_state`, `agent_update`, `agent_remove`, `effect`, `chat_message`, `auth_result`, `control_result`, `control_revoked`
 
-**Client -> Server:** `request_state`, `auth` (token login), `emote`, `chat`
+**Client -> Server:** `request_state`, `auth` (token login), `logout`, `control_claim`, `control_input`, `control_release`, `shoot`, `emote`, `chat`
 
 ## License
 

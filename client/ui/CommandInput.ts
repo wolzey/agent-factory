@@ -1,4 +1,3 @@
-import type { AuthManager } from '../auth/AuthManager';
 import type { SocketClient } from '../network/socket';
 import type { ChatMessage } from '@shared/types';
 import { VALID_EMOTES } from '@shared/constants';
@@ -46,10 +45,10 @@ export class CommandInput {
   private loggedIn = false;
 
   constructor(
-    private auth: AuthManager,
     private socket: SocketClient,
     private onChat: (chat: ChatMessage) => void,
     private onLogout: () => void,
+    private getTargetSessionId: () => string | null = () => null,
   ) {
     this.inputRow = this.createInputRow();
     this.loginHint = this.createLoginHint();
@@ -252,7 +251,8 @@ export class CommandInput {
     if (value.startsWith('/emote ')) {
       const emote = value.slice(7).trim();
       if (VALID_EMOTES.includes(emote as never)) {
-        this.socket.send({ type: 'emote', emote });
+        const sessionId = this.getTargetSessionId();
+        this.socket.send({ type: 'emote', emote, ...(sessionId ? { sessionId } : {}) });
       } else {
         this.showLocalMessage(`Unknown emote. Valid: ${VALID_EMOTES.join(', ')}`);
       }
@@ -267,8 +267,6 @@ export class CommandInput {
     } else if (value === '/help') {
       this.showLocalMessage(HELP_TEXT);
     } else if (value === '/logout') {
-      this.auth.logout();
-      this.hide();
       this.onLogout();
     } else if (value.startsWith('/')) {
       this.showLocalMessage(`Unknown command. Type /help for available commands.`);

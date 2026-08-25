@@ -7,7 +7,7 @@ export class Machine extends Phaser.GameObjects.Container {
   private floorGlow: Phaser.GameObjects.Rectangle;
   private heatOverlay: Phaser.GameObjects.Rectangle;
   private heatTween: Phaser.Tweens.Tween | null = null;
-  private active = false;
+  private machineActive = false;
   private workstation: WorkstationConfig;
 
   public slotId: number;
@@ -40,9 +40,9 @@ export class Machine extends Phaser.GameObjects.Container {
     scene.add.existing(this);
   }
 
-  setActive(active: boolean) {
-    if (this.active === active) return;
-    this.active = active;
+  setActive(active: boolean): this {
+    if (this.machineActive === active) return this;
+    this.machineActive = active;
 
     if (active) {
       this.cabinet.play(this.workstation.activeAnim);
@@ -81,6 +81,7 @@ export class Machine extends Phaser.GameObjects.Container {
       this.scene.tweens.add({ targets: this.glow, alpha: 0, duration: 500 });
       this.scene.tweens.add({ targets: this.floorGlow, alpha: 0, duration: 500 });
     }
+    return this;
   }
 
   /** Error explosion: flash red, shake, emit sparks and smoke from cabinet */

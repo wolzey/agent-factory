@@ -428,6 +428,103 @@
       color: #ff4444;
     }
 
+    /* Authenticated avatar-control uplink */
+    #agent-control-panel {
+      position: fixed;
+      top: 52px;
+      left: 12px;
+      width: 318px;
+      padding: 11px;
+      color: #c8d0e6;
+      background:
+        linear-gradient(135deg, rgba(0, 255, 255, 0.07), transparent 38%),
+        rgba(6, 8, 24, 0.94);
+      border: 1px solid #30405a;
+      border-left: 3px solid #00ffff;
+      border-radius: 3px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.42), inset 0 0 20px rgba(0, 255, 255, 0.025);
+      font-family: monospace;
+      z-index: 998;
+    }
+    #agent-control-panel.is-controlling {
+      border-color: #00ffff;
+      box-shadow: 0 0 20px rgba(0, 255, 255, 0.18), 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+    #agent-control-panel .control-kicker {
+      color: #00ffff;
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 2px;
+      text-shadow: 0 0 8px rgba(0, 255, 255, 0.6);
+    }
+    #agent-control-panel .control-owner {
+      margin: 2px 0 8px;
+      color: #58647c;
+      font-size: 9px;
+      text-transform: uppercase;
+    }
+    #agent-control-panel .control-picker-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 6px;
+    }
+    #agent-control-panel select,
+    #agent-control-panel button {
+      min-width: 0;
+      border: 1px solid #34415b;
+      border-radius: 2px;
+      color: #dce5f5;
+      background: #0b1022;
+      font-family: monospace;
+      font-size: 9px;
+      outline: none;
+    }
+    #agent-control-panel select { padding: 7px; }
+    #agent-control-panel button {
+      padding: 7px 9px;
+      color: #00ffff;
+      cursor: pointer;
+      font-weight: bold;
+      letter-spacing: 0.5px;
+    }
+    #agent-control-panel button:hover:not(:disabled) {
+      border-color: #00ffff;
+      background: rgba(0, 255, 255, 0.1);
+    }
+    #agent-control-panel button:disabled { opacity: 0.45; cursor: default; }
+    #agent-control-panel .control-status {
+      margin-top: 8px;
+      color: #66ff99;
+      font-size: 10px;
+      font-weight: bold;
+      letter-spacing: 0.4px;
+    }
+    #agent-control-panel .control-keys {
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px dashed #263148;
+      color: #667189;
+      font-size: 8px;
+      line-height: 1.6;
+    }
+    #agent-control-panel .control-keys b { color: #ffcc55; }
+    #agent-control-panel .control-keys span { color: #303b51; }
+    #agent-control-panel .control-release {
+      width: 100%;
+      margin-top: 7px;
+      color: #ff6688;
+      border-color: #663348;
+    }
+    #agent-control-panel .control-error {
+      min-height: 11px;
+      margin-top: 5px;
+      color: #ff6688;
+      font-size: 9px;
+    }
+    @media (max-width: 900px) {
+      #agent-control-panel { width: min(300px, calc(100vw - 24px)); }
+    }
+
     /* Command suggestions — floats above the chat panel */
     #command-suggestions {
       display: none;

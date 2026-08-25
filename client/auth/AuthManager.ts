@@ -4,6 +4,7 @@ const STORAGE_KEY_USERNAME = 'af_username';
 export class AuthManager {
   private _token: string | null = null;
   private _username: string | null = null;
+  private _pendingToken: string | null = null;
 
   constructor() {
     this.loadFromStorage();
@@ -21,16 +22,34 @@ export class AuthManager {
     return this._token;
   }
 
-  login(token: string, username: string): void {
+  get authenticationToken(): string | null {
+    return this._pendingToken ?? this._token;
+  }
+
+  beginLogin(token: string): void {
+    this._pendingToken = token;
+  }
+
+  completeLogin(username: string): boolean {
+    const token = this._pendingToken ?? this._token;
+    if (!token) return false;
     this._token = token;
     this._username = username;
+    this._pendingToken = null;
     localStorage.setItem(STORAGE_KEY_TOKEN, token);
     localStorage.setItem(STORAGE_KEY_USERNAME, username);
+    return true;
+  }
+
+  login(token: string, username: string): void {
+    this.beginLogin(token);
+    this.completeLogin(username);
   }
 
   logout(): void {
     this._token = null;
     this._username = null;
+    this._pendingToken = null;
     localStorage.removeItem(STORAGE_KEY_TOKEN);
     localStorage.removeItem(STORAGE_KEY_USERNAME);
   }

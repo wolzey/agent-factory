@@ -1,5 +1,11 @@
 import Phaser from 'phaser';
-import type { AgentSession, AgentActivity, EnvironmentType } from '@shared/types';
+import type {
+  AgentSession,
+  AgentActivity,
+  EnvironmentType,
+  FacingDirection,
+  ManualControlState,
+} from '@shared/types';
 import { TOMBSTONE_DURATION_MS } from '@shared/constants';
 import { BootScene } from '../scenes/BootScene';
 import type { ActionSpec } from '../environments';
@@ -30,13 +36,14 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   private nametag: Phaser.GameObjects.Text;
   private statusIcon: Phaser.GameObjects.Sprite | null = null;
   private neonGlow: Phaser.GameObjects.Rectangle;
+  private controlMarker: Phaser.GameObjects.Ellipse;
   private thoughtBubble: Phaser.GameObjects.Container | null = null;
   private questionBubble: Phaser.GameObjects.Container | null = null;
   private planningClipboard: Phaser.GameObjects.Container | null = null;
   private actionUnderlay: Phaser.GameObjects.Container;
   private actionOverlay: Phaser.GameObjects.Container;
   private actionTimers: Phaser.Time.TimerEvent[] = [];
-  private actionTweenTargets: Phaser.Types.Tweens.TweenTarget[] = [];
+  private actionTweenTargets: Phaser.GameObjects.GameObject[] = [];
   private currentActionKey = '';
   private currentActionPose: 'work' | 'sit' = 'sit';
 
@@ -49,6 +56,9 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   private isMoving = false;
   private isEmoting = false;
   private moveSpeed = 80; // pixels per second
+  private manualMode = false;
+  private manualMoving = false;
+  private manualFacing: FacingDirection = 'down';
   private zombieStaggerTimer: Phaser.Time.TimerEvent | null = null;
 
   constructor(scene: Phaser.Scene, session: AgentSession) {
@@ -65,7 +75,12 @@ export class AgentSprite extends Phaser.GameObjects.Container {
       this.spriteKey = `agent_${spriteIdx % 8}`;
     }
 
-    // Neon glow under feet
+    // Local-controller marker and neon glow under feet
+    this.controlMarker = scene.add.ellipse(0, 7, 30, 13, 0x00ffff, 0.08)
+      .setStrokeStyle(2, 0x00ffff, 0.95)
+      .setVisible(false);
+    this.add(this.controlMarker);
+
     this.neonGlow = scene.add.rectangle(0, 6, 20, 6, 0xff00ff, 0.15);
     this.add(this.neonGlow);
 
@@ -152,10 +167,39 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.moveSpeed = speed;
   }
 
-  moveTo(x: number, y: number) {
+  routeTo(x: number, y: number) {
     this.targetX = x;
     this.targetY = y;
     this.isMoving = true;
+  }
+
+  setManualControl(control: ManualControlState) {
+    if (!this.manualMode) {
+      this.clearBackgroundActionLoop();
+      this.currentActionKey = '';
+    }
+    this.manualMode = true;
+    this.manualMoving = control.moving;
+    this.manualFacing = control.facing;
+    const distance = Phaser.Math.Distance.Between(this.x, this.y, control.x, control.y);
+    if (distance > 80) {
+      this.setPosition(control.x, control.y);
+      this.targetX = control.x;
+      this.targetY = control.y;
+      this.isMoving = false;
+      this.onArrived();
+    } else {
+      this.routeTo(control.x, control.y);
+    }
+  }
+
+  clearManualControl() {
+    this.manualMode = false;
+    this.manualMoving = false;
+  }
+
+  setControlHighlight(active: boolean) {
+    this.controlMarker.setVisible(active);
   }
 
   updateSession(session: AgentSession) {
@@ -1212,7 +1256,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
 
   // ── Emotes ───────────────────────────────────────────────────────
 
-  playEmote(emote: string) {
+  playEmote(emote: string, facing: FacingDirection = 'right') {
     if (this.isEmoting) return;
     this.isEmoting = true;
 
@@ -1220,7 +1264,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
       case 'dance':  this.emoteDance(); break;
       case 'jump':   this.emoteJump(); break;
       case 'guitar': this.emoteGuitar(); break;
-      case 'gun':    this.emoteGun(); break;
+      case 'gun':    this.emoteGun(facing); break;
       case 'laugh':   this.emoteLaugh(); break;
       case 'wave':    this.emoteWave(); break;
       case 'sleep':   this.emoteSleep(); break;
@@ -1605,98 +1649,97 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.scene.time.delayedCall(2200, () => this.finishEmote());
   }
 
-  private emoteGun() {
+  private emoteGun(facing: FacingDirection = 'right') {
     this.showEmoteLabel('pew pew!');
-
-    const fireShot = (delay: number) => {
-      this.scene.time.delayedCall(delay, () => {
-        if (!this.scene) return;
-
-        // Recoil
-        this.scene.tweens.add({
-          targets: this.sprite,
-          x: this.sprite.x - 3,
-          duration: 60,
-          yoyo: true,
-          ease: 'Power2',
-        });
-
-        // Muzzle flash
-        const flash = this.scene.add.circle(
-          this.x + 22, this.y - 4,
-          6, 0xffff00, 0.9,
-        ).setDepth(this.depth + 1);
-
-        this.scene.tweens.add({
-          targets: flash,
-          scaleX: 2.5,
-          scaleY: 2.5,
-          alpha: 0,
-          duration: 150,
-          ease: 'Power3',
-          onComplete: () => flash.destroy(),
-        });
-
-        // White core flash
-        const core = this.scene.add.circle(
-          this.x + 22, this.y - 4,
-          3, 0xffffff, 1,
-        ).setDepth(this.depth + 2);
-
-        this.scene.tweens.add({
-          targets: core,
-          alpha: 0,
-          scaleX: 1.5,
-          scaleY: 1.5,
-          duration: 80,
-          onComplete: () => core.destroy(),
-        });
-
-        // Bullet trails
-        for (let i = 0; i < 3; i++) {
-          const bullet = this.scene.add.rectangle(
-            this.x + 24, this.y - 4 + Phaser.Math.Between(-3, 3),
-            4, 1, 0xffff00, 0.8,
-          ).setDepth(this.depth + 1);
-
-          this.scene.tweens.add({
-            targets: bullet,
-            x: bullet.x + 80,
-            alpha: 0,
-            scaleX: 0.3,
-            duration: Phaser.Math.Between(200, 350),
-            ease: 'Power1',
-            onComplete: () => bullet.destroy(),
-          });
-        }
-
-        // Smoke
-        for (let i = 0; i < 4; i++) {
-          const smoke = this.scene.add.circle(
-            this.x + 20 + Phaser.Math.Between(-3, 3),
-            this.y - 4,
-            Phaser.Math.Between(2, 4), 0x888888, 0.3,
-          ).setDepth(this.depth + 1);
-
-          this.scene.tweens.add({
-            targets: smoke,
-            y: smoke.y - Phaser.Math.Between(10, 25),
-            x: smoke.x + Phaser.Math.Between(-5, 5),
-            alpha: 0,
-            scaleX: 2,
-            scaleY: 2,
-            duration: Phaser.Math.Between(400, 700),
-            ease: 'Power1',
-            onComplete: () => smoke.destroy(),
-          });
-        }
-      });
-    };
-
-    fireShot(100);
-    fireShot(500);
-
+    this.scene.time.delayedCall(100, () => this.playShot(facing));
+    this.scene.time.delayedCall(500, () => this.playShot(facing));
     this.scene.time.delayedCall(1500, () => this.finishEmote());
+  }
+
+  playShot(facing: FacingDirection) {
+    const direction = {
+      up: { x: 0, y: -1 },
+      down: { x: 0, y: 1 },
+      left: { x: -1, y: 0 },
+      right: { x: 1, y: 0 },
+    }[facing];
+    const originX = this.x + direction.x * 22;
+    const originY = this.y + direction.y * 22 - (direction.x !== 0 ? 4 : 0);
+
+    this.scene.tweens.add({
+      targets: this.sprite,
+      x: this.sprite.x - direction.x * 3,
+      y: this.sprite.y - direction.y * 3,
+      duration: 60,
+      yoyo: true,
+      ease: 'Power2',
+    });
+
+    const flash = this.scene.add.circle(originX, originY, 6, 0xffff00, 0.9).setDepth(this.depth + 1);
+    this.scene.tweens.add({
+      targets: flash,
+      scaleX: 2.5,
+      scaleY: 2.5,
+      alpha: 0,
+      duration: 150,
+      ease: 'Power3',
+      onComplete: () => flash.destroy(),
+    });
+
+    const core = this.scene.add.circle(originX, originY, 3, 0xffffff, 1).setDepth(this.depth + 2);
+    this.scene.tweens.add({
+      targets: core,
+      alpha: 0,
+      scaleX: 1.5,
+      scaleY: 1.5,
+      duration: 80,
+      onComplete: () => core.destroy(),
+    });
+
+    for (let i = 0; i < 3; i++) {
+      const spread = Phaser.Math.Between(-3, 3);
+      const bullet = this.scene.add.rectangle(
+        originX + (direction.y !== 0 ? spread : 0),
+        originY + (direction.x !== 0 ? spread : 0),
+        direction.x !== 0 ? 4 : 1,
+        direction.y !== 0 ? 4 : 1,
+        0xffff00,
+        0.8,
+      ).setDepth(this.depth + 1);
+
+      this.scene.tweens.add({
+        targets: bullet,
+        x: bullet.x + direction.x * 80,
+        y: bullet.y + direction.y * 80,
+        alpha: 0,
+        scaleX: 0.3,
+        scaleY: 0.3,
+        duration: Phaser.Math.Between(200, 350),
+        ease: 'Power1',
+        onComplete: () => bullet.destroy(),
+      });
+    }
+
+    for (let i = 0; i < 4; i++) {
+      const smoke = this.scene.add.circle(
+        originX + Phaser.Math.Between(-3, 3),
+        originY + Phaser.Math.Between(-3, 3),
+        Phaser.Math.Between(2, 4),
+        0x888888,
+        0.3,
+      ).setDepth(this.depth + 1);
+      this.scene.tweens.add({
+        targets: smoke,
+        x: smoke.x + direction.x * Phaser.Math.Between(6, 14) + Phaser.Math.Between(-5, 5),
+        y: smoke.y + direction.y * Phaser.Math.Between(6, 14) - Phaser.Math.Between(8, 20),
+        alpha: 0,
+        scaleX: 2,
+        scaleY: 2,
+        duration: Phaser.Math.Between(400, 700),
+        ease: 'Power1',
+        onComplete: () => smoke.destroy(),
+      });
+    }
   }
 
   private emoteLaugh() {
@@ -2748,6 +2791,15 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   private onArrived() {
+    if (this.manualMode) {
+      if (this.manualMoving) {
+        this.playAnimation(`walk_${this.manualFacing}`);
+      } else {
+        this.playAnimation('idle');
+      }
+      return;
+    }
+
     this.applyPose(this.currentActionPose);
   }
 
@@ -2784,7 +2836,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.sprite.setPosition(0, 0);
   }
 
-  private trackActionTweenTarget(...targets: Phaser.Types.Tweens.TweenTarget[]) {
+  private trackActionTweenTarget(...targets: Phaser.GameObjects.GameObject[]) {
     for (const target of targets) {
       this.actionTweenTargets.push(target);
     }
@@ -3096,7 +3148,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
 
     // Three checklist rows: small dot + line
     const rows = [0, 4, 8];
-    const checkDots: Phaser.GameObjects.Circle[] = [];
+    const checkDots: Phaser.GameObjects.Arc[] = [];
     const lines: Phaser.GameObjects.Rectangle[] = [];
 
     for (const rowY of rows) {
@@ -3230,9 +3282,11 @@ export class AgentSprite extends Phaser.GameObjects.Container {
 
   private moveTooltip(pointer: Phaser.Input.Pointer) {
     const tooltip = document.getElementById('tooltip');
-    if (tooltip) {
-      tooltip.style.left = `${pointer.event.clientX + 12}px`;
-      tooltip.style.top = `${pointer.event.clientY - 12}px`;
-    }
+    if (!tooltip) return;
+    const event = pointer.event;
+    const point = 'clientX' in event ? event : event.touches[0];
+    if (!point) return;
+    tooltip.style.left = `${point.clientX + 12}px`;
+    tooltip.style.top = `${point.clientY - 12}px`;
   }
 }

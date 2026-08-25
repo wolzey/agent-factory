@@ -43,11 +43,14 @@ export class LoginOverlay {
     this.loginBtn.style.display = 'block';
     this.modal.style.display = 'none';
     this.badge.style.display = 'none';
-    this.onLogout();
   }
 
   showError(msg: string): void {
+    this.loginBtn.style.display = 'none';
+    this.badge.style.display = 'none';
+    this.modal.style.display = 'flex';
     this.errorEl.textContent = msg;
+    this.tokenInput.focus();
   }
 
   private createLoginButton(): HTMLButtonElement {
@@ -83,6 +86,7 @@ export class LoginOverlay {
       const token = this.tokenInput.value.trim();
       if (!token) return;
       this.errorEl.textContent = '';
+      this.auth.beginLogin(token);
       this.socket.send({ type: 'auth', token });
     };
 
@@ -116,8 +120,7 @@ export class LoginOverlay {
     `;
 
     badge.querySelector('.badge-logout')!.addEventListener('click', () => {
-      this.auth.logout();
-      this.showLoggedOut();
+      this.onLogout();
     });
 
     return badge;
