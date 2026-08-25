@@ -11,3 +11,7 @@ services:
         generateValue: true
       - key: HOST
         value: 0.0.0.0
+      - key: TITLE
+        value: AGENT FACTORY
+      - key: ENVIRONMENT
+        value: arcade

@@ -82,6 +82,21 @@ pnpm start  # serves on port 4242 (both API and static client)
 Set `PORT` and `HOST` environment variables to customize.
 Set `ENVIRONMENT` to choose a background: `arcade`, `farm`, `office`, or `mining`.
 
+### Deploying to Render
+
+The included [`render.yaml`](render.yaml) creates a Docker web service named `agent-factory`. Create a new Render Blueprint from this repository; the blueprint generates the token secret and supplies deployment-safe defaults.
+
+| Variable | Required on Render | Purpose |
+|----------|--------------------|---------|
+| `AF_TOKEN_SECRET` | Yes | Secret used to sign login tokens. The blueprint generates this value; do not expose or reuse it elsewhere. |
+| `HOST` | Yes | Must be `0.0.0.0` so Render can reach the server. Preconfigured by the blueprint. |
+| `PORT` | No | HTTP port. Render supplies this automatically; the Docker image defaults to `4242` elsewhere. |
+| `TITLE` | No | Display name shown in the app. Defaults to `AGENT FACTORY`. |
+| `ENVIRONMENT` | No | Background theme: `arcade`, `farm`, `office`, or `mining`. Defaults to `arcade`. |
+| `GRAPHIC_DEATH` | No | Set to `true` or `1` to enable graphic death effects. |
+
+`NODE_ENV=production` is set by the Docker image and does not need to be configured in Render.
+
 ## How It Works
 
 ```

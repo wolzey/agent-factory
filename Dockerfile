@@ -45,10 +45,6 @@ RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=build /app/dist ./dist
 
-# Copy optional server-config.json to the location the compiled server expects.
-# Glob pattern avoids failure if the file is absent from the build context.
-COPY server-config.jso[n] ./dist/server/server-config.json
-
 RUN chown -R appuser:appgroup /app
 
 ENV NODE_ENV=production

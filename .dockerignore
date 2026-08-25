@@ -22,6 +22,7 @@ Thumbs.db
 # Environment and secrets
 .env
 .env.*
+server-config.json
 
 # Local-only scripts
 install.sh
