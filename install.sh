@@ -212,11 +212,46 @@ install_hook_script() {
 # Agent Factory hook - sends Claude Code events to the visualization server
 CONFIG_FILE="${HOME}/.config/agent-factory/config.json"
 SERVER_URL="http://localhost:4242"
+INPUT=$(cat)
+WORKING_DIR=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+if [ -z "$WORKING_DIR" ]; then
+  WORKING_DIR="$PWD"
+fi
 
 if [ -f "$CONFIG_FILE" ]; then
-  SERVER_URL=$(jq -r '.serverUrl // "http://localhost:4242"' "$CONFIG_FILE" 2>/dev/null || echo "http://localhost:4242")
-  USERNAME=$(jq -r '.username // "anonymous"' "$CONFIG_FILE" 2>/dev/null || echo "anonymous")
-  AVATAR=$(jq -c '.avatar // {}' "$CONFIG_FILE" 2>/dev/null || echo '{}')
+  RESOLVED_CONFIG=$(jq -c --arg cwd "$WORKING_DIR" --arg home "$HOME" '
+    def expand_path:
+      if . == "~" then $home
+      elif startswith("~/") then $home + .[1:]
+      else .
+      end
+      | if . == "/" then . else rtrimstr("/") end;
+
+    ($cwd | if . == "/" then . else rtrimstr("/") end) as $workingDir
+    | . as $base
+    | [
+        ($base.repositories // {} | to_entries[]?)
+        | select(.value | type == "object")
+        | . + {resolvedPath: (.key | expand_path)}
+        | .resolvedPath as $repositoryPath
+        | select(
+            $repositoryPath != "" and (
+              $workingDir == $repositoryPath
+              or ($repositoryPath == "/" and ($workingDir | startswith("/")))
+              or ($workingDir | startswith($repositoryPath + "/"))
+            )
+          )
+      ]
+    | sort_by(.resolvedPath | length)
+    | reduce .[] as $entry ($base; . + $entry.value)
+  ' "$CONFIG_FILE" 2>/dev/null)
+  if [ -z "$RESOLVED_CONFIG" ]; then
+    RESOLVED_CONFIG='{}'
+  fi
+
+  SERVER_URL=$(echo "$RESOLVED_CONFIG" | jq -r '.serverUrl // "http://localhost:4242"' 2>/dev/null || echo "http://localhost:4242")
+  USERNAME=$(echo "$RESOLVED_CONFIG" | jq -r '.username // "anonymous"' 2>/dev/null || echo "anonymous")
+  AVATAR=$(echo "$RESOLVED_CONFIG" | jq -c '.avatar // {}' 2>/dev/null || echo '{}')
 else
   USERNAME=$(whoami)
   AVATAR='{}'
@@ -224,8 +259,6 @@ fi
 
 # Strip trailing slash to avoid double-slash in URLs
 SERVER_URL="${SERVER_URL%/}"
-
-INPUT=$(cat)
 
 PAYLOAD=$(echo "$INPUT" | jq -c \
   --arg username "$USERNAME" \

@@ -25,7 +25,7 @@ func runVortex(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("config not found")
 	}
 
-	cfg, err := config.Read()
+	cfg, err := config.ReadForCurrentPath()
 	if err != nil {
 		ui.Error("Failed to read config: " + err.Error())
 		return err

@@ -25,7 +25,7 @@ func runToken(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("not installed")
 	}
 
-	cfg, err := config.Read()
+	cfg, err := config.ReadForCurrentPath()
 	if err != nil {
 		ui.Error("Failed to read config: " + err.Error())
 		return err
@@ -39,7 +39,7 @@ func runToken(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		cfg.Token = token
-		if writeErr := config.Write(cfg); writeErr != nil {
+		if writeErr := config.WriteToken(token); writeErr != nil {
 			ui.Warn("Could not save token to config: " + writeErr.Error())
 		}
 	}

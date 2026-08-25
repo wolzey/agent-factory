@@ -200,6 +200,37 @@ Your config lives at `~/.config/agent-factory/config.json`:
 | `avatar.color` | Hex color for your avatar tint |
 | `avatar.hat` | Hat accessory (future feature) |
 | `avatar.trail` | Trail effect (future feature) |
+| `repositories` | Optional directory-prefix overrides keyed by absolute or `~/` paths |
+
+### Repository-aware overrides
+
+Use `repositories` to change config for sessions opened inside a directory tree. Every matching prefix is applied from broadest to most specific, so a nested entry can refine a broader organization-level config while inheriting fields it omits:
+
+```json
+{
+  "username": "default-user",
+  "serverUrl": "http://localhost:4242",
+  "avatar": {
+    "spriteIndex": 0,
+    "color": "#4a90d9",
+    "hat": null,
+    "trail": null
+  },
+  "repositories": {
+    "~/work/github.com/wolzey": {
+      "username": "wolzey-user",
+      "serverUrl": "https://team.example.com"
+    },
+    "~/work/github.com/wolzey/agent-factory": {
+      "username": "agent-factory-user"
+    }
+  }
+}
+```
+
+For a session under `~/work/github.com/wolzey/agent-factory`, the effective username is `agent-factory-user` and the inherited server is `https://team.example.com`. A sibling such as `~/work/github.com/wolzey-other` does not match. Use the existing `serverUrl` field name inside overrides.
+
+Hooks resolve against the event's `cwd` (falling back to the hook process directory), while CLI commands resolve against the current working directory. Generated auth tokens are saved to the most specific active prefix so repo identities do not overwrite the global token.
 
 ## Uninstall
 

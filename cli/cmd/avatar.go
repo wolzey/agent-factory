@@ -23,7 +23,7 @@ func runAvatar(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("config not found")
 	}
 
-	cfg, err := config.Read()
+	cfg, err := config.ReadBase()
 	if err != nil {
 		ui.Error("Failed to read config: " + err.Error())
 		return err
