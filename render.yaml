@@ -11,6 +11,10 @@ services:
         generateValue: true
       - key: HOST
         value: 0.0.0.0
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
       - key: TITLE
         value: AGENT FACTORY
       - key: ENVIRONMENT
