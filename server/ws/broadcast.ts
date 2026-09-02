@@ -41,8 +41,12 @@ export class BroadcastManager {
   }
 
   sendTo(ws: WebSocket, msg: WSMessageToClient) {
-    if (ws.readyState === 1) {
+    if (ws.readyState !== 1) return;
+    try {
       ws.send(JSON.stringify(msg));
+    } catch {
+      console.warn('[broadcast] Failed to send WebSocket message');
+      this.clients.delete(ws);
     }
   }
 
@@ -81,8 +85,12 @@ export class BroadcastManager {
   private broadcast(msg: WSMessageToClient) {
     const raw = JSON.stringify(msg);
     for (const [client] of this.clients) {
-      if (client.readyState === 1) {
+      if (client.readyState !== 1) continue;
+      try {
         client.send(raw);
+      } catch {
+        console.warn('[broadcast] Failed to broadcast WebSocket message');
+        this.clients.delete(client);
       }
     }
   }

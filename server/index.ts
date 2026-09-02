@@ -230,6 +230,10 @@ async function main() {
       return;
     }
 
+    // Publish and checkpoint this revision before lifecycle callbacks can synchronously
+    // create a later revision (for example, clearing a stopped control lease).
+    persistence.schedule(state.getSnapshot(), notification.immediatePersistence);
+    broadcast.broadcastWorldDelta(notification.delta);
     for (const change of notification.delta.changes) {
       if (change.kind === 'agent_remove') {
         controls.releaseSession(change.sessionId, 'Agent session ended');
@@ -239,8 +243,6 @@ async function main() {
         controls.releaseSession(change.agent.sessionId, 'Agent session ended');
       }
     }
-    broadcast.broadcastWorldDelta(notification.delta);
-    persistence.schedule(state.getSnapshot(), notification.immediatePersistence);
   });
 
   // Persist startup reconciliation and one-time legacy imports even when no hooks fire afterward.

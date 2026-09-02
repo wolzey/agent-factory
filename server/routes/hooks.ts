@@ -119,7 +119,10 @@ export function registerHookRoutes(
       agents: state.getAll().length,
       clients: broadcast.clientCount,
       revision: state.getSnapshot().revision,
-      persistence,
+      persistence: {
+        healthy: persistence.healthy,
+        lastSavedRevision: persistence.lastSavedRevision,
+      },
       uptime: process.uptime(),
     });
   });
