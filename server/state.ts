@@ -198,19 +198,14 @@ export class StateManager {
         if (!s) break;
         s.activity = 'thinking';
         s.currentTool = null;
-        s.currentToolInput = null;
 
-        const userPrompt = (payload.user_prompt ?? payload.prompt) as string | undefined;
-        if (userPrompt) {
-          const renameMatch = userPrompt.match(/^\/rename\s+(.+)/);
-          if (renameMatch) {
-            s.sessionName = renameMatch[1].trim();
-          } else if (!userPrompt.startsWith('/')) {
-            s.lastPrompt = userPrompt.slice(0, 200);
-          }
+        // The hook sends only the name from `/rename <name>`; prompt text never
+        // reaches the server, so there is nothing here to parse or log.
+        if (payload.session_name) {
+          s.sessionName = payload.session_name;
         }
 
-        console.log(`[state] PROMPT_RECEIVED: id=${payload.session_id} user=${s.username} prompt="${(userPrompt || '').slice(0, 50)}"`);
+        console.log(`[state] PROMPT_RECEIVED: id=${payload.session_id} user=${s.username}`);
         this.touchAndEmit(payload, 'prompt_received');
         break;
       }
@@ -219,7 +214,6 @@ export class StateManager {
         if (!s) break;
         s.activity = 'thinking';
         s.currentTool = null;
-        s.currentToolInput = null;
         console.log(`[state] TOOL_FAILURE: id=${payload.session_id} tool=${payload.tool_name} reason=${payload.reason}`);
         this.touchAndEmit(payload, 'error', { tool: payload.tool_name, reason: payload.reason });
         break;
@@ -229,7 +223,6 @@ export class StateManager {
         if (!s) break;
         s.activity = 'idle';
         s.currentTool = null;
-        s.currentToolInput = null;
         console.log(`[state] STOP_FAILURE: id=${payload.session_id} reason=${payload.reason || 'API error'}`);
         this.touchAndEmit(payload, 'error', { reason: payload.reason || 'API error' });
         break;
@@ -259,7 +252,7 @@ export class StateManager {
       case 'WorktreeCreate': {
         const s = this.ensureSession(payload);
         if (!s) break;
-        s.sessionName = (payload.tool_input?.name as string) || (payload as Record<string, unknown>).name as string || 'worktree';
+        s.sessionName = payload.session_name || ((payload as Record<string, unknown>).name as string) || 'worktree';
         this.touchAndEmit(payload, 'worktree_create');
         break;
       }
@@ -294,7 +287,6 @@ export class StateManager {
         if (!s) break;
         s.activity = 'waiting';
         s.currentTool = null;
-        s.currentToolInput = null;
         console.log(`[state] ELICITATION: id=${payload.session_id} user=${s.username} activity=waiting`);
         this.touchAndEmit(payload, 'elicitation', { type: 'mcp_input' });
         break;
@@ -375,7 +367,6 @@ export class StateManager {
       cwd,
       activity: 'idle',
       currentTool: null,
-      currentToolInput: null,
       subagents: [],
       startedAt: now,
       lastEventAt: now,
@@ -399,7 +390,6 @@ export class StateManager {
       const session: WorldAgent = {
         ...clone(stored),
         currentTool: null,
-        currentToolInput: null,
         subagents: [],
         lastEventAt: timestamp,
         world: this.initialWorld(stored.sessionId, timestamp),
@@ -529,7 +519,6 @@ export class StateManager {
       existing.cwd = payload.cwd || existing.cwd;
       existing.activity = 'idle';
       existing.currentTool = null;
-      existing.currentToolInput = null;
       existing.lastEventAt = now;
       this.emit('update', { agent: existing });
       return;
@@ -543,7 +532,6 @@ export class StateManager {
         cwd: payload.cwd || '',
         activity: 'idle',
         currentTool: null,
-        currentToolInput: null,
         subagents: [],
         startedAt: now,
         lastEventAt: now,
@@ -575,7 +563,6 @@ export class StateManager {
 
     session.activity = 'stopped';
     session.currentTool = null;
-    session.currentToolInput = null;
     session.lastEventAt = this.now();
     this.emit('update', { agent: session });
     this.emit('effect', { sessionId: payload.session_id, effect: 'session_end' });
@@ -599,7 +586,6 @@ export class StateManager {
 
     session.activity = toolToActivity(toolName);
     session.currentTool = toolName;
-    session.currentToolInput = payload.tool_input || null;
     session.lastEventAt = this.now();
     session.toolUseCount = (session.toolUseCount ?? 0) + 1;
     console.log(`[state] TOOL_START: id=${payload.session_id} user=${session.username} tool=${toolName} activity=${session.activity}`);
@@ -623,13 +609,11 @@ export class StateManager {
 
     session.activity = 'thinking';
     session.currentTool = null;
-    session.currentToolInput = null;
     session.lastEventAt = this.now();
     console.log(`[state] TOOL_COMPLETE: id=${payload.session_id} user=${session.username} tool=${payload.tool_name} activity=${session.activity}`);
 
     if (toolName === 'EnterWorktree') {
-      const name = payload.tool_input?.name;
-      if (typeof name === 'string') session.sessionName = name;
+      if (payload.session_name) session.sessionName = payload.session_name;
     } else if (toolName === 'ExitPlanMode') {
       session.sessionName = undefined;
       session.activity = 'waiting';
@@ -642,14 +626,12 @@ export class StateManager {
       effectData: { tool: payload.tool_name },
     });
 
-    // Detect git commit / PR merge from Bash commands
-    if (toolName === 'Bash') {
-      const cmd = String(payload.tool_input?.command ?? '');
-      if (/git\s+commit\b/.test(cmd)) {
-        this.emit('effect', { sessionId: payload.session_id, effect: 'commit' });
-      } else if (/gh\s+pr\s+merge\b|git\s+merge\b/.test(cmd)) {
-        this.emit('effect', { sessionId: payload.session_id, effect: 'pr_merge' });
-      }
+    // The hook classifies the Bash command and sends only the verdict, so the
+    // command line itself never leaves the machine that ran it.
+    if (payload.git_action === 'commit') {
+      this.emit('effect', { sessionId: payload.session_id, effect: 'commit' });
+    } else if (payload.git_action === 'pr_merge') {
+      this.emit('effect', { sessionId: payload.session_id, effect: 'pr_merge' });
     }
   }
 
@@ -704,7 +686,6 @@ export class StateManager {
     const prevActivity = session.activity;
     session.activity = 'waiting';
     session.currentTool = null;
-    session.currentToolInput = null;
     session.lastEventAt = this.now();
     console.log(`[state] PERMISSION_REQUEST: id=${payload.session_id} user=${session.username} was=${prevActivity}`);
     this.emit('update', { agent: session });
@@ -719,7 +700,6 @@ export class StateManager {
       session.activity = 'idle';
     }
     session.currentTool = null;
-    session.currentToolInput = null;
     session.lastEventAt = this.now();
     console.log(`[state] STOP: id=${payload.session_id} user=${session.username} activity=${session.activity} preserved=${session.activity === 'waiting'}`);
     this.emit('update', { agent: session });
@@ -756,7 +736,6 @@ export class StateManager {
         cwd: payload.cwd || '',
         activity: 'idle',
         currentTool: null,
-        currentToolInput: null,
         subagents: [],
         startedAt: this.now(),
         lastEventAt: this.now(),

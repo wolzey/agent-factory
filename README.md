@@ -135,10 +135,28 @@ Claude/Codex Hooks  ──curl POST──>  Fastify Server  ──WebSocket─�
 
 1. **Hooks** fire on Claude Code/Codex events (session start/end, tool use, subagent spawn/stop)
 2. The hook script reads `~/.config/agent-factory/config.json` for your identity
-3. It `curl`s the event data to the server (fire-and-forget, never blocks Claude)
+3. It `curl`s an allowlisted subset of the event to the server (fire-and-forget, never blocks Claude)
 4. The server updates one authoritative, revisioned world and checkpoints it to libSQL
 5. The server broadcasts ordered deltas; reconnecting browsers receive a complete snapshot
 6. Browsers interpolate server-timestamped movement and render cosmetic animation locally
+
+### What Gets Sent
+
+Claude and Codex hand the hook far more than an avatar needs: `UserPromptSubmit` carries your entire prompt, `PreToolUse` carries the entire `tool_input` (whole Bash command lines, the file contents passed to Write/Edit), and `PostToolUse` adds `tool_response`, which is tool output. The hook sends an explicit allowlist instead, so none of that leaves your machine.
+
+| Sent | Not sent |
+|------|----------|
+| `session_id`, `hook_event_name`, `cwd` | Prompt text |
+| `tool_name` (e.g. `Bash`), `username`, `avatar` | `tool_input` — commands, file paths, file contents |
+| `reason`, `agent_id`, `agent_type` | `tool_response` — tool output |
+| `session_name`, `git_action` (derived, see below) | `transcript_path` |
+
+Two features used to read the sensitive fields, so the hook derives them locally and sends only the result:
+
+- **`session_name`** — the name from `/rename <name>`, or a worktree's name. The rest of the prompt is discarded without being inspected further.
+- **`git_action`** — `commit` or `pr_merge`, so the celebration effects still fire. The command line itself never leaves the machine.
+
+`cwd` is still sent in full, and it is shown on hover, so anyone viewing the factory can see your directory paths. If a path is itself sensitive, point that repo at a different server with the `repositories` overrides documented under [Configuration](#configuration).
 
 ### Hook Events Tracked
 

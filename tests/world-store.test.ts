@@ -10,7 +10,6 @@ function agent(sessionId: string): WorldAgent {
     cwd: '/work',
     activity: 'idle',
     currentTool: null,
-    currentToolInput: null,
     subagents: [],
     startedAt: 1,
     lastEventAt: 1,

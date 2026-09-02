@@ -1,5 +1,18 @@
 #!/bin/bash
 # Agent Factory hook - sends Claude/Codex events to the visualization server
+#
+# Privacy boundary. Claude and Codex put a lot more on stdin than an avatar needs:
+# UserPromptSubmit carries the entire prompt, PreToolUse carries the entire
+# tool_input (whole Bash command lines, the file contents handed to Write/Edit),
+# and PostToolUse adds tool_response, which is tool output. This script therefore
+# sends an explicit allowlist -- never the raw payload -- so a session working in
+# a private repo or against production does not stream its contents to the server.
+#
+# The allowlist is exactly the set of fields server/state.ts reads. The two
+# features that used to read prompt text and tool_input are derived here instead,
+# at the boundary, and sent as small fields:
+#   session_name -- from `/rename <name>`, or a worktree's tool_input.name
+#   git_action   -- "commit" or "pr_merge", derived from a Bash command
 CONFIG_FILE="${HOME}/.config/agent-factory/config.json"
 SERVER_URL="http://localhost:4242"
 INPUT=$(cat)
@@ -53,10 +66,47 @@ SERVER_URL="${SERVER_URL%/}"
 PAYLOAD=$(echo "$INPUT" | jq -c \
   --arg username "$USERNAME" \
   --argjson avatar "$AVATAR" \
-  '. + {username: $username, avatar: $avatar}' 2>/dev/null)
+  '
+  . as $in
+  | ($in.tool_input | if type == "object" then . else {} end) as $ti
+  | {
+      session_id: $in.session_id,
+      hook_event_name: $in.hook_event_name,
+      cwd: $in.cwd,
+      tool_name: $in.tool_name,
+      reason: $in.reason,
+      agent_id: $in.agent_id,
+      agent_type: $in.agent_type,
+      username: $username,
+      avatar: $avatar
+    }
+  # `/rename <name>` is the one prompt-derived feature. Match it here and send the
+  # name alone; every other prompt is dropped without ever being inspected further.
+  + (
+      ((($in.user_prompt // $in.prompt) | if type == "string" then . else "" end)
+       | (capture("^/rename\\s+(?<n>.+)$") // null)
+       | if . == null then {} else {session_name: (.n | gsub("^\\s+|\\s+$"; ""))} end)
+    )
+  # Worktree events name the worktree in tool_input.name. That single string is
+  # the only member of tool_input anything reads.
+  + (if ($ti.name | type) == "string" then {session_name: $ti.name} else {} end)
+  # The commit / merge celebration effects. The regexes run here so the command
+  # itself never leaves the machine -- only which of the two effects to play.
+  + (
+      if $in.tool_name == "Bash"
+      then (($ti.command // "") | if type == "string" then . else "" end) as $cmd
+        | if ($cmd | test("git\\s+commit\\b")) then {git_action: "commit"}
+          elif ($cmd | test("gh\\s+pr\\s+merge\\b|git\\s+merge\\b")) then {git_action: "pr_merge"}
+          else {} end
+      else {} end
+    )
+  | with_entries(select(.value != null))
+  ' 2>/dev/null)
 
+# No silent fallback to the raw input. If the filter fails the event is dropped,
+# because sending an unfiltered payload is the exact outcome this guards against.
 if [ -z "$PAYLOAD" ]; then
-  PAYLOAD="$INPUT"
+  exit 0
 fi
 
 curl -s -X POST \
