@@ -2,11 +2,13 @@ import Phaser from 'phaser';
 import type {
   AgentSession,
   AgentActivity,
+  AgentWorldState,
   EnvironmentType,
   FacingDirection,
   ManualControlState,
 } from '@shared/types';
 import { TOMBSTONE_DURATION_MS } from '@shared/constants';
+import { positionAt } from '@shared/world-layouts';
 import { BootScene } from '../scenes/BootScene';
 import type { ActionSpec } from '../environments';
 
@@ -60,6 +62,8 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   private manualMoving = false;
   private manualFacing: FacingDirection = 'down';
   private zombieStaggerTimer: Phaser.Time.TimerEvent | null = null;
+  private authoritativeWorld: AgentWorldState | null = null;
+  private serverNow: (() => number) | null = null;
 
   constructor(scene: Phaser.Scene, session: AgentSession) {
     super(scene, 0, 0);
@@ -133,6 +137,29 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   update(_time: number, delta: number) {
+    if (this.authoritativeWorld && this.serverNow) {
+      const timestamp = this.serverNow();
+      const movement = this.authoritativeWorld.movement;
+      const position = movement
+        ? positionAt(movement, timestamp)
+        : this.authoritativeWorld.position;
+      this.setPosition(position.x, position.y);
+      const moving = !!movement && timestamp < movement.arrivesAt;
+      this.isMoving = moving;
+      if (moving && movement) {
+        const dx = movement.to.x - position.x;
+        const dy = movement.to.y - position.y;
+        if (Math.abs(dx) > Math.abs(dy)) {
+          this.playAnimation(dx > 0 ? 'walk_right' : 'walk_left');
+        } else {
+          this.playAnimation(dy > 0 ? 'walk_down' : 'walk_up');
+        }
+      } else if (!this.isEmoting) {
+        this.applyPose(this.currentActionPose);
+      }
+      return;
+    }
+
     if (this.isMoving) {
       const dx = this.targetX - this.x;
       const dy = this.targetY - this.y;
@@ -173,6 +200,16 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.isMoving = true;
   }
 
+  setAuthoritativeWorld(world: AgentWorldState, serverNow: () => number) {
+    this.authoritativeWorld = structuredClone(world);
+    this.serverNow = serverNow;
+    const position = world.movement ? positionAt(world.movement, serverNow()) : world.position;
+    this.setPosition(position.x, position.y);
+    this.manualMode = world.zone === 'manual';
+    this.manualMoving = this.manualMode && !!world.movement;
+    this.manualFacing = world.facing;
+  }
+
   setManualControl(control: ManualControlState) {
     if (!this.manualMode) {
       this.clearBackgroundActionLoop();
@@ -194,6 +231,8 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   clearManualControl() {
+    this.authoritativeWorld = null;
+    this.serverNow = null;
     this.manualMode = false;
     this.manualMoving = false;
   }

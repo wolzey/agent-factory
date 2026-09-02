@@ -1,3 +1,4 @@
+import { WORLD_LAYOUTS } from '@shared/world-layouts';
 import type { EnvironmentTheme } from './EnvironmentTheme';
 
 function generateFloors(textures: Phaser.Textures.TextureManager) {
@@ -408,23 +409,7 @@ export const FARM_THEME: EnvironmentTheme = {
   type: 'farm',
   backgroundColor: '#1a2a10',
   behavior: {
-    layout: {
-      entrance: { x: 400, y: 470 },
-      workSlots: Array.from({ length: 12 }, (_, idx) => ({
-        x: 80 + (idx % 6) * 120,
-        y: 110 + Math.floor(idx / 6) * 110,
-      })),
-      waitingSlots: Array.from({ length: 4 }, (_, idx) => ({
-        x: 60 + idx * 90,
-        y: 390,
-      })),
-      idleSlots: [
-        { x: 550, y: 424 },
-        { x: 570, y: 424 },
-        { x: 690, y: 424 },
-        { x: 710, y: 424 },
-      ],
-    },
+    layout: WORLD_LAYOUTS.farm,
     actionsByBucket: {
       working: { zone: 'work', pose: 'work', loop: 'default_work' },
       thinking: { zone: 'work', pose: 'work', loop: 'default_work' },

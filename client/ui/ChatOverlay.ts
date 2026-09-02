@@ -7,8 +7,6 @@ export class ChatOverlay {
   private container: HTMLDivElement;
   private messageList: HTMLDivElement;
   private emptyEl: HTMLDivElement;
-  private userColorMap = new Map<string, number>();
-  private nextColorIndex = 0;
   private visible = false;
   private toggleBtn: HTMLButtonElement;
 
@@ -63,6 +61,14 @@ export class ChatOverlay {
     return this.container;
   }
 
+  replaceMessages(messages: ChatMessage[]): void {
+    for (const message of Array.from(this.messageList.querySelectorAll('.chat-msg'))) {
+      message.remove();
+    }
+    this.emptyEl.style.display = messages.length === 0 ? '' : 'none';
+    for (const message of messages) this.addMessage(message);
+  }
+
   addMessage(chat: ChatMessage) {
     // Hide empty placeholder
     this.emptyEl.style.display = 'none';
@@ -112,11 +118,11 @@ export class ChatOverlay {
   }
 
   private getUserColor(username: string): number {
-    if (!this.userColorMap.has(username)) {
-      this.userColorMap.set(username, this.nextColorIndex % USER_COLORS);
-      this.nextColorIndex++;
+    let hash = 0;
+    for (let index = 0; index < username.length; index++) {
+      hash = ((hash << 5) - hash + username.charCodeAt(index)) | 0;
     }
-    return this.userColorMap.get(username)!;
+    return Math.abs(hash) % USER_COLORS;
   }
 
   private highlightMessage(text: string): string {

@@ -43,7 +43,7 @@ function session(state: StateManager, sessionId: string, username: string): void
 
 function setup() {
   let now = 10_000;
-  const state = new StateManager();
+  const state = new StateManager('arcade', () => now);
   const broadcast = new BroadcastManager();
   const controls = new ControlManager(state, broadcast, () => now);
   return {
@@ -64,8 +64,8 @@ describe('ControlManager authorization and leases', () => {
     session(state, 'alice-1', 'alice');
     const ws = socket();
 
-    expect(controls.claim(ws, undefined, 'alice-1', 100, 100)).toBe(false);
-    expect(controls.claim(ws, 'bob', 'alice-1', 100, 100)).toBe(false);
+    expect(controls.claim(ws, undefined, 'alice-1')).toBe(false);
+    expect(controls.claim(ws, 'bob', 'alice-1')).toBe(false);
     expect(state.get('alice-1')?.manualControl).toBeUndefined();
     expect(ws.sent.filter((message: WSMessageToClient) => message.type === 'control_result')).toHaveLength(2);
   });
@@ -76,11 +76,11 @@ describe('ControlManager authorization and leases', () => {
     session(state, 'alice-2', 'alice');
     const ws = socket();
 
-    expect(controls.claim(ws, 'alice', 'alice-1', 100, 100)).toBe(true);
-    expect(controls.claim(ws, 'alice', 'alice-2', 200, 200)).toBe(true);
+    expect(controls.claim(ws, 'alice', 'alice-1')).toBe(true);
+    expect(controls.claim(ws, 'alice', 'alice-2')).toBe(true);
 
     expect(state.get('alice-1')?.manualControl).toBeUndefined();
-    expect(state.get('alice-2')?.manualControl).toMatchObject({ x: 200, y: 200 });
+    expect(state.get('alice-2')?.manualControl).toMatchObject({ x: 400, y: CONTROL_WORLD_BOUNDS.maxY });
   });
 
   it('revokes an older browser when the same owner takes over', () => {
@@ -89,14 +89,14 @@ describe('ControlManager authorization and leases', () => {
     const first = socket();
     const second = socket();
 
-    controls.claim(first, 'alice', 'alice-1', 100, 100);
-    controls.claim(second, 'alice', 'alice-1', 200, 200);
+    controls.claim(first, 'alice', 'alice-1');
+    controls.claim(second, 'alice', 'alice-1');
 
     expect(first.sent).toContainEqual(expect.objectContaining({
       type: 'control_revoked',
       sessionId: 'alice-1',
     }));
-    expect(state.get('alice-1')?.manualControl).toMatchObject({ x: 200, y: 200 });
+    expect(state.get('alice-1')?.manualControl).toMatchObject({ x: 400, y: CONTROL_WORLD_BOUNDS.maxY });
     expect(controls.updateInput(first, 'alice', 'alice-1', {
       up: true, down: false, left: false, right: false,
     })).toBe(false);
@@ -106,7 +106,7 @@ describe('ControlManager authorization and leases', () => {
     const { state, controls } = setup();
     session(state, 'alice-1', 'alice');
     const ws = socket();
-    controls.claim(ws, 'alice', 'alice-1', 100, 100);
+    controls.claim(ws, 'alice', 'alice-1');
 
     state.handleHookEvent({
       hook_event_name: 'PreToolUse',
@@ -119,7 +119,7 @@ describe('ControlManager authorization and leases', () => {
 
     expect(state.get('alice-1')).toMatchObject({
       activity: 'reading',
-      manualControl: { x: 100, y: 100 },
+      manualControl: { x: 400, y: CONTROL_WORLD_BOUNDS.maxY },
     });
     controls.release(ws, 'alice', 'alice-1');
     expect(state.get('alice-1')).toMatchObject({ activity: 'reading' });
@@ -130,7 +130,7 @@ describe('ControlManager authorization and leases', () => {
     const { state, controls } = setup();
     session(state, 'alice-1', 'alice');
     const ws = socket();
-    controls.claim(ws, 'alice', 'alice-1', 100, 100);
+    controls.claim(ws, 'alice', 'alice-1');
 
     state.handleHookEvent({
       hook_event_name: 'SessionStart',
@@ -155,11 +155,11 @@ describe('ControlManager authorization and leases', () => {
     session(state, 'alice-1', 'alice');
     const ws = socket();
 
-    controls.claim(ws, 'alice', 'alice-1', 100, 100);
+    controls.claim(ws, 'alice', 'alice-1');
     controls.releaseSocket(ws, 'disconnect');
     expect(state.get('alice-1')?.manualControl).toBeUndefined();
 
-    controls.claim(ws, 'alice', 'alice-1', 100, 100);
+    controls.claim(ws, 'alice', 'alice-1');
     controls.releaseSession('alice-1', 'ended');
     expect(state.get('alice-1')?.manualControl).toBeUndefined();
   });
@@ -170,15 +170,15 @@ describe('ControlManager movement and actions', () => {
     const { state, controls, advance } = setup();
     session(state, 'alice-1', 'alice');
     const ws = socket();
-    controls.claim(ws, 'alice', 'alice-1', CONTROL_WORLD_BOUNDS.maxX - 1, 200);
+    controls.claim(ws, 'alice', 'alice-1');
     controls.updateInput(ws, 'alice', 'alice-1', {
       up: true, down: false, left: false, right: true,
     });
 
     advance(MAX_BROADCAST_RATE_MS);
     const controlled = state.get('alice-1')?.manualControl;
-    expect(controlled?.x).toBe(CONTROL_WORLD_BOUNDS.maxX);
-    expect(controlled?.y).toBeCloseTo(200 - CONTROL_MOVE_SPEED * 0.1 / Math.sqrt(2), 4);
+    expect(controlled?.x).toBeCloseTo(400 + CONTROL_MOVE_SPEED * 0.1 / Math.sqrt(2), 4);
+    expect(controlled?.y).toBeCloseTo(CONTROL_WORLD_BOUNDS.maxY - CONTROL_MOVE_SPEED * 0.1 / Math.sqrt(2), 4);
     expect(controlled?.facing).toBe('up');
     expect(controlled?.moving).toBe(true);
   });
@@ -187,7 +187,7 @@ describe('ControlManager movement and actions', () => {
     const { state, controls, advance } = setup();
     session(state, 'alice-1', 'alice');
     const ws = socket();
-    controls.claim(ws, 'alice', 'alice-1', 100, 100);
+    controls.claim(ws, 'alice', 'alice-1');
     controls.updateInput(ws, 'alice', 'alice-1', {
       up: false, down: true, left: false, right: false,
     });
@@ -203,11 +203,11 @@ describe('ControlManager movement and actions', () => {
     session(state, 'alice-1', 'alice');
     const ws = socket();
     const effects = vi.fn();
-    state.onStateChange((type, data) => {
-      if (type === 'effect') effects(data);
+    state.onStateChange((notification) => {
+      if (notification.type === 'effect') effects(notification);
     });
 
-    controls.claim(ws, 'alice', 'alice-1', 100, 100);
+    controls.claim(ws, 'alice', 'alice-1');
     controls.updateInput(ws, 'alice', 'alice-1', {
       up: false, down: false, left: true, right: false,
     });
@@ -220,7 +220,7 @@ describe('ControlManager movement and actions', () => {
 
     expect(effects).toHaveBeenCalledWith(expect.objectContaining({
       effect: 'shoot',
-      effectData: { facing: 'left' },
+      effectData: expect.objectContaining({ facing: 'left', targetSessionIds: [] }),
     }));
   });
 });

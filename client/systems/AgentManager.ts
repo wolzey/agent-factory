@@ -1,5 +1,14 @@
 import Phaser from 'phaser';
-import type { AgentSession, EffectType, EnvironmentType, FacingDirection } from '@shared/types';
+import type {
+  AgentSession,
+  EffectType,
+  EnvironmentType,
+  FacingDirection,
+  TombstoneState,
+  WorldAgent,
+  WorldSnapshot,
+} from '@shared/types';
+import { positionAt } from '@shared/world-layouts';
 import { TOMBSTONE_DURATION_MS } from '@shared/constants';
 import { AgentSprite } from '../entities/AgentSprite';
 import { SubagentSprite } from '../entities/SubagentSprite';
@@ -34,6 +43,8 @@ export class AgentManager {
   private vortexDuration = 15000;
   private vortexVisuals: Phaser.GameObjects.GameObject[] = [];
   private preVortexPositions = new Map<string, { x: number; y: number }>();
+  private authoritativeWorld = false;
+  private serverClockOffset = 0;
 
   constructor(scene: Phaser.Scene, envType: EnvironmentType = 'arcade') {
     this.scene = scene;
@@ -56,6 +67,22 @@ export class AgentManager {
 
   setSoundBank(sb: SoundBank) {
     this.soundBank = sb;
+  }
+
+  handleWorldSnapshot(snapshot: WorldSnapshot) {
+    this.authoritativeWorld = true;
+    this.serverClockOffset = snapshot.serverTime - Date.now();
+    const activeIds = new Set(snapshot.agents.map(agent => agent.sessionId));
+    for (const sessionId of activeIds) {
+      const tombstone = this.tombstones.get(sessionId);
+      if (tombstone) {
+        tombstone.container.destroy();
+        this.tombstones.delete(sessionId);
+      }
+    }
+    this.handleFullState(snapshot.agents);
+    this.reconcileAuthoritativeTombstones(snapshot.tombstones);
+    this.syncAuthoritativeMachines();
   }
 
   handleFullState(agents: AgentSession[]) {
@@ -166,7 +193,13 @@ export class AgentManager {
           // Play emote sound if we have one
           this.soundBank?.play(`emote_${emote}`);
           if (emote === 'gun') {
-            this.reactToShot(sessionId, agent, facing, 300);
+            this.reactToShot(
+              sessionId,
+              agent,
+              facing,
+              300,
+              this.effectTargets(data),
+            );
           }
           if (emote === 'fart') {
             for (const [otherId, other] of this.agents) {
@@ -194,10 +227,15 @@ export class AgentManager {
         const facing = (data?.facing as FacingDirection | undefined) ?? agent.sessionData.manualControl?.facing ?? 'right';
         agent.playShot(facing);
         this.soundBank?.play('emote_gun');
-        this.reactToShot(sessionId, agent, facing, 180);
+        this.reactToShot(sessionId, agent, facing, 180, this.effectTargets(data));
         break;
       }
     }
+  }
+
+  private effectTargets(data?: Record<string, unknown>): Set<string> | undefined {
+    if (!Array.isArray(data?.targetSessionIds)) return undefined;
+    return new Set(data.targetSessionIds.filter((value): value is string => typeof value === 'string'));
   }
 
   private reactToShot(
@@ -205,10 +243,13 @@ export class AgentManager {
     shooter: AgentSprite,
     facing: FacingDirection,
     delay: number,
+    authoritativeTargets?: Set<string>,
   ): void {
     for (const [otherId, other] of this.agents) {
       if (otherId === shooterId) continue;
-      if (!isInShotCorridor(shooter, other, facing)) continue;
+      if (authoritativeTargets
+        ? !authoritativeTargets.has(otherId)
+        : !isInShotCorridor(shooter, other, facing)) continue;
       this.scene.time.delayedCall(delay, () => {
         other.playGunDeath();
         this.soundBank?.play('gun_victim');
@@ -264,7 +305,7 @@ export class AgentManager {
     }
 
     // Periodically check if idle agents should visit tombstones (every 8s)
-    if (this.tombstones.size > 0 && time - this.lastFlowerCheck > 8000) {
+    if (!this.authoritativeWorld && this.tombstones.size > 0 && time - this.lastFlowerCheck > 8000) {
       this.lastFlowerCheck = time;
       this.checkFlowerVisits();
     }
@@ -301,6 +342,11 @@ export class AgentManager {
         });
 
         this.soundBank?.play('zombie_rise');
+      } else if (this.authoritativeWorld && this.isWorldAgent(session)) {
+        const position = session.world.movement
+          ? positionAt(session.world.movement, this.serverNow())
+          : session.world.position;
+        agent.setPosition(position.x, position.y);
       } else if (session.manualControl) {
         agent.setPosition(session.manualControl.x, session.manualControl.y);
       } else {
@@ -314,6 +360,18 @@ export class AgentManager {
     }
 
     agent.updateSession(session);
+
+    if (this.authoritativeWorld && this.isWorldAgent(session)) {
+      const activityBucket = this.bucketForActivity(session.activity);
+      const action = this.theme.behavior.actionsByBucket[activityBucket];
+      agent.setBackgroundAction(action, this.theme.type);
+      agent.setAuthoritativeWorld(session.world, () => this.serverNow());
+      this.syncSubagents(session);
+      if (!isNewAgent && prevActivity !== session.activity) {
+        this.playStateSound(session);
+      }
+      return;
+    }
 
     // Skip routing while zombie is rising from grave
     if (this.zombieRising.has(session.sessionId)) {
@@ -380,17 +438,77 @@ export class AgentManager {
     // Sound is LAST — after all routing, movement, and subagent sync.
     // Fire-and-forget, no return value used, no side effects on agent state.
     if (!isNewAgent && prevActivity !== session.activity) {
-      if (session.activity === 'waiting') {
-        this.soundBank?.play('state_waiting', session.sessionId);
-      } else if (session.activity === 'stopped') {
-        this.soundBank?.play('state_stopped', session.sessionId);
-      } else if (session.activity === 'idle') {
-        this.soundBank?.play('state_idle', session.sessionId);
-      } else if (session.activity === 'thinking') {
-        this.soundBank?.play('state_thinking', session.sessionId);
-      } else if (WORKING_STATES.includes(session.activity)) {
-        this.soundBank?.play('state_working', session.sessionId);
+      this.playStateSound(session);
+    }
+  }
+
+  private serverNow(): number {
+    return Date.now() + this.serverClockOffset;
+  }
+
+  private isWorldAgent(session: AgentSession): session is WorldAgent {
+    return 'world' in session && !!(session as Partial<WorldAgent>).world;
+  }
+
+  private playStateSound(session: AgentSession): void {
+    if (session.activity === 'waiting') {
+      this.soundBank?.play('state_waiting', session.sessionId);
+    } else if (session.activity === 'stopped') {
+      this.soundBank?.play('state_stopped', session.sessionId);
+    } else if (session.activity === 'idle') {
+      this.soundBank?.play('state_idle', session.sessionId);
+    } else if (session.activity === 'thinking') {
+      this.soundBank?.play('state_thinking', session.sessionId);
+    } else if (WORKING_STATES.includes(session.activity)) {
+      this.soundBank?.play('state_working', session.sessionId);
+    }
+  }
+
+  private reconcileAuthoritativeTombstones(states: TombstoneState[]): void {
+    const currentIds = new Set(states.map(state => state.sessionId));
+    for (const [sessionId, tombstone] of this.tombstones) {
+      if (!currentIds.has(sessionId)) {
+        tombstone.container.destroy();
+        this.tombstones.delete(sessionId);
       }
+    }
+
+    for (const state of states) {
+      const existing = this.tombstones.get(state.sessionId);
+      if (existing) {
+        existing.container.setPosition(state.position.x, state.position.y - 4);
+        existing.x = state.position.x;
+        existing.y = state.position.y;
+        continue;
+      }
+
+      const container = this.scene.add.container(state.position.x, state.position.y - 4);
+      container.setDepth(7 + state.position.y * 0.001);
+      const stone = this.scene.add.image(0, 0, 'tombstone').setScale(2);
+      const name = this.scene.add.text(0, -26, state.username, {
+        fontFamily: 'monospace',
+        fontSize: '7px',
+        color: '#aaaacc',
+        backgroundColor: 'rgba(10, 10, 26, 0.7)',
+        padding: { x: 2, y: 1 },
+      }).setOrigin(0.5, 1);
+      container.add([stone, name]);
+      this.tombstones.set(state.sessionId, {
+        container,
+        x: state.position.x,
+        y: state.position.y,
+      });
+    }
+  }
+
+  private syncAuthoritativeMachines(): void {
+    for (const machine of this.machines) machine.setActive(false);
+    for (const session of this.sessions.values()) {
+      if (!this.isWorldAgent(session) || session.activity === 'stopped') continue;
+      if (session.world.zone !== 'work' || session.world.slotIndex === undefined) continue;
+      const machine = this.machines[session.world.slotIndex];
+      machine?.setActive(true);
+      machine?.setHeat(Math.min((session.toolUseCount ?? 0) / 20, 1));
     }
   }
 
@@ -416,7 +534,12 @@ export class AgentManager {
 
   private removeAgent(sessionId: string) {
     const agent = this.agents.get(sessionId);
-    if (agent) {
+    if (agent && this.authoritativeWorld) {
+      agent.destroy();
+      this.agents.delete(sessionId);
+      this.layout.release(sessionId);
+      this.deactivateMachineFor(sessionId);
+    } else if (agent) {
       const graphic = !!(this.serverGraphicDeath || agent.sessionData.avatar?.graphicDeath);
       this.soundBank?.play(graphic ? 'death_graphic' : 'death_standard');
 
@@ -518,10 +641,17 @@ export class AgentManager {
 
   /** Find the machine an agent is assigned to */
   private getMachineFor(sessionId: string): Machine | undefined {
+    const session = this.sessions.get(sessionId);
+    if (session && this.isWorldAgent(session)
+      && session.world.zone === 'work'
+      && session.world.slotIndex !== undefined) {
+      return this.machines[session.world.slotIndex];
+    }
     const slot = this.layout.getWorkSlotFor(sessionId);
     if (!slot) return undefined;
     return this.machines.find(
-      m => Math.abs(m.x - slot.pos.x) < 15 && Math.abs(m.y - (slot.pos.y - 24)) < 15,
+      machine => Math.abs(machine.x - slot.pos.x) < 15
+        && Math.abs(machine.y - (slot.pos.y - 24)) < 15,
     );
   }
 
@@ -684,10 +814,14 @@ export class AgentManager {
 
   // ── Vortex ──────────────────────────────────────────────────────
 
-  triggerVortex() {
+  triggerVortex(startedAt?: number, expiresAt?: number, serverTime = Date.now()) {
     if (this.vortexActive) return;
     this.vortexActive = true;
-    this.vortexStartTime = this.scene.time.now;
+    const elapsed = startedAt === undefined ? 0 : Math.max(0, serverTime - startedAt);
+    this.vortexDuration = startedAt !== undefined && expiresAt !== undefined
+      ? Math.max(1, expiresAt - startedAt)
+      : 15_000;
+    this.vortexStartTime = this.scene.time.now - elapsed;
     this.vortexCenter = { x: 400, y: 240 };
 
     for (const [id, agent] of this.agents) {

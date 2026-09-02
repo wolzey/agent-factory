@@ -14,7 +14,9 @@ import { SessionRegistryWatcher } from './session-registry.js';
 import { TokenAuth, loadOrCreateSecret } from './auth.js';
 import { ControlManager } from './control-manager.js';
 import { DEFAULT_PORT, DEFAULT_SERVER_CONFIG, VALID_EMOTES, CHAT_MESSAGE_MAX_LENGTH } from '../shared/constants.js';
-import { loadSessions, createDebouncedSave } from './session-store.js';
+import { loadSessions } from './session-store.js';
+import { LibSqlWorldRepository } from './persistence/libsql-world-repository.js';
+import { WorldPersistence } from './persistence/world-persistence.js';
 import type { ServerConfig, EmoteType } from '../shared/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -84,19 +86,33 @@ async function main() {
   const tokenSecret = loadOrCreateSecret();
   const auth = new TokenAuth(tokenSecret);
 
-  // State & broadcast
-  const state = new StateManager();
+  // Authoritative world state and durable persistence
+  const state = new StateManager(serverConfig.environment ?? 'arcade');
+  const repository = new LibSqlWorldRepository();
+  await repository.initialize();
+  const storedWorld = await repository.load();
+  if (storedWorld) {
+    state.restoreWorld(storedWorld);
+    console.log(`[startup] Restored world revision ${storedWorld.revision} from durable storage`);
+  } else {
+    const legacySessions = loadSessions();
+    if (legacySessions.length > 0) {
+      state.restoreSessions(legacySessions);
+      console.log(`[startup] Imported ${legacySessions.length} session(s) from the legacy JSON store`);
+    }
+  }
+  const persistence = new WorldPersistence(repository);
   const broadcast = new BroadcastManager();
   const controls = new ControlManager(state, broadcast);
 
   // HTTP routes
-  registerHookRoutes(app, state, broadcast, serverConfig, auth);
+  registerHookRoutes(app, state, broadcast, serverConfig, auth, () => persistence.status());
 
   // WebSocket endpoint
   app.get('/ws', { websocket: true }, (socket) => {
     broadcast.add(socket);
-    // Send current state on connect
-    broadcast.sendFullState(socket, state.getAll());
+    // Send one complete, revisioned world on connect.
+    broadcast.sendWorldSnapshot(socket, state.getSnapshot());
 
     socket.on('close', () => controls.releaseSocket(socket, 'Browser disconnected'));
     socket.on('error', () => controls.releaseSocket(socket, 'Browser disconnected'));
@@ -106,7 +122,7 @@ async function main() {
         const msg = JSON.parse(String(raw));
         switch (msg.type) {
           case 'request_state':
-            broadcast.sendFullState(socket, state.getAll());
+            broadcast.sendWorldSnapshot(socket, state.getSnapshot());
             break;
 
           case 'auth': {
@@ -133,8 +149,6 @@ async function main() {
               socket,
               broadcast.getSocketUsername(socket),
               String(msg.sessionId || ''),
-              Number(msg.x),
-              Number(msg.y),
             );
             break;
 
@@ -181,7 +195,7 @@ async function main() {
             if (!chatUser) break;
             const message = String(msg.message || '').slice(0, CHAT_MESSAGE_MAX_LENGTH);
             if (message) {
-              broadcast.broadcastChatMessage({ username: chatUser, message, timestamp: Date.now() });
+              state.appendChat({ username: chatUser, message, timestamp: Date.now() });
             }
             break;
           }
@@ -205,46 +219,55 @@ async function main() {
   // Await first poll so the cache is populated before we restore sessions
   await registry.start();
 
-  // Restore persisted sessions that are still alive in the registry
-  const storedSessions = loadSessions();
-  if (storedSessions.length > 0) {
-    const alive = storedSessions.filter(s => registry.isSessionAlive(s.sessionId));
-    if (alive.length > 0) {
-      state.restoreSessions(alive);
-      console.log(`[startup] Restored ${alive.length}/${storedSessions.length} persisted session(s) (${storedSessions.length - alive.length} no longer in registry)`);
+  // Broadcast revisioned deltas and checkpoint the complete world.
+  state.onStateChange((notification) => {
+    if (notification.type === 'effect') {
+      broadcast.broadcastEffect(
+        notification.sessionId,
+        notification.effect,
+        notification.effectData,
+      );
+      return;
     }
-  }
 
-  // Broadcast and persist state changes while enforcing control lifecycle.
-  const debouncedSave = createDebouncedSave();
-  state.onStateChange((type, data) => {
-    switch (type) {
-      case 'update':
-        if (data.agent) {
-          if (data.agent.activity === 'stopped' && data.agent.manualControl) {
-            controls.releaseSession(data.agent.sessionId, 'Agent session ended');
-          }
-          broadcast.broadcastAgentUpdate(data.agent);
-        }
-        break;
-      case 'remove':
-        if (data.sessionId) {
-          controls.releaseSession(data.sessionId, 'Agent session ended');
-          broadcast.broadcastAgentRemove(data.sessionId);
-        }
-        break;
-      case 'effect':
-        if (data.sessionId && data.effect) {
-          broadcast.broadcastEffect(data.sessionId, data.effect, data.effectData);
-        }
-        break;
+    // Publish and checkpoint this revision before lifecycle callbacks can synchronously
+    // create a later revision (for example, clearing a stopped control lease).
+    persistence.schedule(state.getSnapshot(), notification.immediatePersistence);
+    broadcast.broadcastWorldDelta(notification.delta);
+    for (const change of notification.delta.changes) {
+      if (change.kind === 'agent_remove') {
+        controls.releaseSession(change.sessionId, 'Agent session ended');
+      } else if (change.kind === 'agent_upsert'
+        && change.agent.activity === 'stopped'
+        && change.agent.manualControl) {
+        controls.releaseSession(change.agent.sessionId, 'Agent session ended');
+      }
     }
-    debouncedSave(state.getAll());
   });
 
-  // Start stale session reaper and manual-control simulation
-  startStaleReaper(state);
+  // Persist startup reconciliation and one-time legacy imports even when no hooks fire afterward.
+  persistence.schedule(state.getSnapshot(), true);
+
+  // Start stale cleanup, lifecycle pruning, and manual-control simulation.
+  const staleTimer = startStaleReaper(state);
+  const worldTimer = setInterval(() => state.advanceWorld(), 1_000);
   controls.start();
+
+  let shuttingDown = false;
+  const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    await app.close();
+  };
+  process.once('SIGTERM', () => void shutdown());
+  process.once('SIGINT', () => void shutdown());
+  app.addHook('onClose', async () => {
+    clearInterval(staleTimer);
+    clearInterval(worldTimer);
+    registry.stop();
+    controls.stop();
+    await persistence.close();
+  });
 
   await app.listen({ port, host });
   console.log(`\n  Agent Factory server running on http://${host}:${port}`);

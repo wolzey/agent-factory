@@ -74,26 +74,55 @@ ngrok http 4242
 
 ### Production
 
+Production requires a durable [Turso](https://turso.tech/) libSQL database:
+
 ```bash
+export TURSO_DATABASE_URL='libsql://your-database.turso.io'
+export TURSO_AUTH_TOKEN='your-token'
 pnpm build
 pnpm start  # serves on port 4242 (both API and static client)
 ```
 
-Set `PORT` and `HOST` environment variables to customize.
-Set `ENVIRONMENT` to choose a background: `arcade`, `farm`, `office`, or `mining`.
+Never commit or print the auth token. Set `PORT` and `HOST` to customize the listener. Set `ENVIRONMENT` to choose `arcade`, `farm`, `office`, or `mining`.
+
+Local development uses `file:.data/agent-factory.db` automatically when `TURSO_DATABASE_URL` is absent. The directory is ignored by Git.
+
+> [!IMPORTANT]
+> **Existing production deployments must configure both `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` before upgrading to this release.** When `NODE_ENV=production`, the server intentionally exits during startup if either value is missing so it cannot silently run with non-durable state.
 
 ### Deploying to Render
 
-The included [`render.yaml`](render.yaml) creates a Docker web service named `agent-factory`. Create a new Render Blueprint from this repository; the blueprint generates the token secret and supplies deployment-safe defaults.
+The included [`render.yaml`](render.yaml) creates a free Docker web service named `agent-factory`. Its filesystem is ephemeral, so the authoritative world is stored in Turso instead of a local SQLite file.
+
+Create the database with the Turso dashboard or CLI:
+
+```bash
+turso db create agent-factory
+turso db show agent-factory --url
+turso db tokens create agent-factory
+```
+
+Use the URL and token returned by the final two commands for the Render Blueprint secret prompts. Do not paste the token into source files, logs, issues, or pull requests.
 
 | Variable | Required on Render | Purpose |
 |----------|--------------------|---------|
 | `AF_TOKEN_SECRET` | Yes | Secret used to sign login tokens. The blueprint generates this value; do not expose or reuse it elsewhere. |
+| `TURSO_DATABASE_URL` | Yes | Durable libSQL database URL. Entered securely during Blueprint setup. |
+| `TURSO_AUTH_TOKEN` | Yes | Database auth token. Entered securely during Blueprint setup. |
 | `HOST` | Yes | Must be `0.0.0.0` so Render can reach the server. Preconfigured by the blueprint. |
-| `PORT` | No | HTTP port. Render supplies this automatically; the Docker image defaults to `4242` elsewhere. |
+| `PORT` | No | Render supplies this automatically; the Docker image defaults to `4242` elsewhere. |
 | `TITLE` | No | Display name shown in the app. Defaults to `AGENT FACTORY`. |
 | `ENVIRONMENT` | No | Background theme: `arcade`, `farm`, `office`, or `mining`. Defaults to `arcade`. |
 | `GRAPHIC_DEATH` | No | Set to `true` or `1` to enable graphic death effects. |
+
+The server creates the `world_state` table automatically. Deploy the server and client together because the revisioned WebSocket protocol is versioned as one application artifact. After deployment, verify persistence without exposing configuration:
+
+```bash
+curl -fsS https://your-service.example.com/api/health \
+  | jq '{status, revision, persistence}'
+```
+
+The response should report `status: "ok"` and `persistence.healthy: true`. Restart the Render service, then confirm the revision, agents, chat, and placements are restored through `/api/state` or the browser. Production startup fails rather than serving an empty world when durable storage cannot be loaded.
 
 `NODE_ENV=production` is set by the Docker image and does not need to be configured in Render.
 
@@ -107,8 +136,9 @@ Claude/Codex Hooks  ──curl POST──>  Fastify Server  ──WebSocket─�
 1. **Hooks** fire on Claude Code/Codex events (session start/end, tool use, subagent spawn/stop)
 2. The hook script reads `~/.config/agent-factory/config.json` for your identity
 3. It `curl`s the event data to the server (fire-and-forget, never blocks Claude)
-4. The server updates its in-memory state and broadcasts via WebSocket
-5. The browser renders the Phaser 3 scene with animated avatars
+4. The server updates one authoritative, revisioned world and checkpoints it to libSQL
+5. The server broadcasts ordered deltas; reconnecting browsers receive a complete snapshot
+6. Browsers interpolate server-timestamped movement and render cosmetic animation locally
 
 ### Hook Events Tracked
 
@@ -263,9 +293,11 @@ agent-factory/
 │   ├── index.ts      # Entrypoint (port 4242)
 │   ├── state.ts      # In-memory session state machine
 │   ├── auth.ts       # HMAC-SHA256 token auth
+│   ├── state.ts      # Authoritative revisioned world aggregate
+│   ├── persistence/ # Turso/libSQL snapshot repository and write queue
 │   ├── routes/       # POST /api/hooks, GET /api/health, GET /api/auth/token
 │   ├── ws/           # WebSocket broadcast manager (per-socket auth)
-│   └── cleanup.ts    # Stale session reaper (5 min timeout)
+│   └── cleanup.ts    # Stale session reaper
 ├── client/           # Phaser 3 browser app
 │   ├── scenes/       # BootScene, FactoryScene, UIScene
 │   ├── entities/     # AgentSprite, SubagentSprite, Machine
@@ -293,13 +325,13 @@ agent-factory/
 | `POST /api/chat` | Send a chat message (`{ username, message }`) |
 | `POST /api/context` | Update agent task description (`{ username, summary }`) |
 | `GET /api/auth/token?username=X` | Generate auth token (localhost-only) |
-| `GET /api/health` | Server status (`{ status, agents, clients, uptime }`) |
-| `GET /api/state` | All active agent sessions |
+| `GET /api/health` | Server, revision, and persistence status |
+| `GET /api/state` | Complete authoritative world snapshot |
 | `GET /api/config` | Server config (title, environment, graphicDeath) |
 
 ### WebSocket (`ws://host:4242/ws`)
 
-**Server -> Client:** `full_state`, `agent_update`, `agent_remove`, `effect`, `chat_message`, `auth_result`, `control_result`, `control_revoked`
+**Server -> Client:** `world_snapshot`, `world_delta`, `effect`, `auth_result`, `control_result`, `control_revoked`. Deltas carry consecutive revisions; clients request a fresh snapshot if a gap is detected.
 
 **Client -> Server:** `request_state`, `auth` (token login), `logout`, `control_claim`, `control_input`, `control_release`, `shoot`, `emote`, `chat`
 
