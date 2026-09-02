@@ -37,6 +37,10 @@ For non-interactive installs (CI, scripting):
 agent-factory install --non-interactive --server-url https://your-server.example.com --username alice
 ```
 
+### Codex hook trust
+
+Codex hooks are enabled by default. After installing or changing Agent Factory hooks, start a new Codex session and run `/hooks` to review and trust the Agent Factory definitions. Codex ties trust to the exact hook definition and skips changed hooks until they are trusted again.
+
 ## Running the Server
 
 ### Prerequisites
@@ -330,7 +334,6 @@ This removes all Agent Factory hook entries from `~/.claude/settings.json` and `
 agent-factory/
 ├── server/           # Fastify HTTP + WebSocket server
 │   ├── index.ts      # Entrypoint (port 4242)
-│   ├── state.ts      # In-memory session state machine
 │   ├── auth.ts       # HMAC-SHA256 token auth
 │   ├── state.ts      # Authoritative revisioned world aggregate
 │   ├── persistence/ # Turso/libSQL snapshot repository and write queue
