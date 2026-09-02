@@ -40,9 +40,31 @@ export interface SubagentInfo {
   startedAt: number;
 }
 
-// === Manual Avatar Control ===
-export type FacingDirection = 'up' | 'down' | 'left' | 'right';
+// === Shared World State ===
+export interface Position {
+  x: number;
+  y: number;
+}
 
+export type FacingDirection = 'up' | 'down' | 'left' | 'right';
+export type WorldZone = 'entrance' | 'work' | 'waiting' | 'idle' | 'manual';
+
+export interface WorldMovement {
+  from: Position;
+  to: Position;
+  startedAt: number;
+  arrivesAt: number;
+}
+
+export interface AgentWorldState {
+  zone: WorldZone;
+  slotIndex?: number;
+  position: Position;
+  movement?: WorldMovement;
+  facing: FacingDirection;
+}
+
+// === Manual Avatar Control ===
 export interface ManualControlState {
   x: number;
   y: number;
@@ -76,6 +98,56 @@ export interface AgentSession {
   manualControl?: ManualControlState;
 }
 
+export interface WorldAgent extends AgentSession {
+  world: AgentWorldState;
+}
+
+export interface TombstoneState {
+  sessionId: string;
+  username: string;
+  avatar: AvatarConfig;
+  position: Position;
+  slotIndex?: number;
+  createdAt: number;
+  expiresAt: number;
+}
+
+export interface TimedWorldEvent {
+  id: string;
+  effect: GlobalEffectType;
+  startedAt: number;
+  expiresAt: number;
+  seed: number;
+  data?: Record<string, unknown>;
+}
+
+export interface WorldSnapshot {
+  schemaVersion: number;
+  revision: number;
+  serverTime: number;
+  environment: EnvironmentType;
+  agents: WorldAgent[];
+  tombstones: TombstoneState[];
+  chat: ChatMessage[];
+  events: TimedWorldEvent[];
+}
+
+export type WorldChange =
+  | { kind: 'agent_upsert'; agent: WorldAgent }
+  | { kind: 'agent_remove'; sessionId: string }
+  | { kind: 'tombstone_upsert'; tombstone: TombstoneState }
+  | { kind: 'tombstone_remove'; sessionId: string }
+  | { kind: 'chat_append'; chat: ChatMessage }
+  | { kind: 'event_upsert'; event: TimedWorldEvent }
+  | { kind: 'event_remove'; eventId: string };
+
+export interface WorldDelta {
+  previousRevision: number;
+  revision: number;
+  serverTime: number;
+  changes: WorldChange[];
+}
+
 // === Hook Payload (from Claude Code hooks via HTTP POST) ===
 export interface HookPayload {
   hook_event_name: string;
@@ -104,6 +176,8 @@ export interface ChatMessage {
 
 // === WebSocket Messages: Server -> Browser ===
 export type WSMessageToClient =
+  | { type: 'world_snapshot'; snapshot: WorldSnapshot }
+  | { type: 'world_delta'; delta: WorldDelta }
   | { type: 'full_state'; agents: AgentSession[] }
   | { type: 'agent_update'; agent: AgentSession }
   | { type: 'agent_remove'; sessionId: string }
@@ -123,7 +197,7 @@ export type WSMessageToServer =
   | { type: 'request_state' }
   | { type: 'auth'; token: string }
   | { type: 'logout' }
-  | { type: 'control_claim'; sessionId: string; x: number; y: number }
+  | { type: 'control_claim'; sessionId: string }
   | { type: 'control_input'; sessionId: string; input: ControlInputState }
   | { type: 'control_release'; sessionId: string }
   | { type: 'shoot'; sessionId: string }

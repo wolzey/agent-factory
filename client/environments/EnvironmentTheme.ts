@@ -1,9 +1,7 @@
-import type { EnvironmentType } from '@shared/types';
+import type { EnvironmentType, Position } from '@shared/types';
+import type { WorldLayoutSpec } from '@shared/world-layouts';
 
-export interface Position {
-  x: number;
-  y: number;
-}
+export type { Position };
 
 export type ActivityBucket = 'working' | 'thinking' | 'waiting' | 'idle' | 'stopped';
 export type Zone = 'work' | 'waiting' | 'idle';
@@ -22,12 +20,7 @@ export interface ActionSpec {
   loop: ActionLoop;
 }
 
-export interface LayoutSpec {
-  entrance: Position;
-  workSlots: Position[];
-  waitingSlots: Position[];
-  idleSlots: Position[];
-}
+export type LayoutSpec = WorldLayoutSpec;
 
 export interface BehaviorConfig {
   layout: LayoutSpec;

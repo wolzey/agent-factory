@@ -1,3 +1,4 @@
+import { WORLD_LAYOUTS } from '@shared/world-layouts';
 import type { EnvironmentTheme } from './EnvironmentTheme';
 
 function generateFloors(textures: Phaser.Textures.TextureManager) {
@@ -181,23 +182,7 @@ export const MINING_THEME: EnvironmentTheme = {
   backgroundColor: '#171b22',
 
   behavior: {
-    layout: {
-      entrance: { x: 400, y: 470 },
-      workSlots: Array.from({ length: 12 }, (_, idx) => ({
-        x: 90 + (idx % 6) * 110,
-        y: 120 + Math.floor(idx / 6) * 95,
-      })),
-      waitingSlots: Array.from({ length: 4 }, (_, idx) => ({
-        x: 80 + idx * 95,
-        y: 390,
-      })),
-      idleSlots: [
-        { x: 540, y: 426 },
-        { x: 575, y: 426 },
-        { x: 675, y: 426 },
-        { x: 710, y: 426 },
-      ],
-    },
+    layout: WORLD_LAYOUTS.mining,
     actionsByBucket: {
       working: { zone: 'work', pose: 'work', loop: 'mining_work' },
       thinking: { zone: 'work', pose: 'work', loop: 'mining_work' },
