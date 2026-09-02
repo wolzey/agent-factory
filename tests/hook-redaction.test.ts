@@ -7,13 +7,43 @@ import { beforeAll, describe, expect, it } from 'vitest';
 const HOOK = resolve(__dirname, '../cli/internal/hooks/agent-factory-hook.sh');
 
 /**
+ * Four separate installers ship a copy of this hook, and they drifted: the CLI
+ * embeds one, `pnpm install-hooks` copies another, and install.sh and
+ * team-install.sh each inline their own inside a quoted heredoc. A fix applied
+ * to one of them is not a fix.
+ */
+const HOOK_SOURCES: Array<{ name: string; path: string; extract?: boolean }> = [
+  { name: 'cli (embedded)', path: '../cli/internal/hooks/agent-factory-hook.sh' },
+  { name: 'hooks/ (pnpm install-hooks)', path: '../hooks/agent-factory-hook.sh' },
+  { name: 'install.sh (inline)', path: '../install.sh', extract: true },
+  { name: 'hooks/team-install.sh (inline)', path: '../hooks/team-install.sh', extract: true },
+];
+
+/** Pull the hook out of an installer's quoted heredoc. */
+function hookScriptFrom(source: { path: string; extract?: boolean }): string {
+  const text = readFileSync(resolve(__dirname, source.path), 'utf8');
+  if (!source.extract) return text;
+  const match = text.match(/<< 'HOOKEOF'\n([\s\S]*?)\nHOOKEOF/);
+  if (!match) throw new Error(`no heredoc hook found in ${source.path}`);
+  return match[1];
+}
+
+/** The jq filter itself, which must not differ between copies. */
+function payloadFilter(script: string): string {
+  const start = script.indexOf('PAYLOAD=$(echo "$INPUT" | jq -c');
+  const end = script.indexOf('exit 0\nfi\n', start);
+  if (start < 0 || end < 0) throw new Error('no payload filter found');
+  return script.slice(start, end);
+}
+
+/**
  * The hook runs on every tool call in every session, including sessions working
  * in private repositories and against production databases. It must send an
  * allowlist and never the raw payload Claude/Codex put on stdin, because that
  * payload carries prompt text, whole Bash command lines, the file contents given
  * to Write/Edit, and tool output on PostToolUse.
  */
-function runHook(input: Record<string, unknown>): Record<string, unknown> {
+function runHook(input: Record<string, unknown>, hookPath: string = HOOK): Record<string, unknown> {
   const home = mkdtempSync(join(tmpdir(), 'af-hook-'));
   const binDir = join(home, 'bin');
   mkdirSync(binDir, { recursive: true });
@@ -36,7 +66,7 @@ exit 0
   writeFileSync(join(binDir, 'curl'), fakeCurl);
   chmodSync(join(binDir, 'curl'), 0o755);
 
-  execFileSync('bash', [HOOK], {
+  execFileSync('bash', [hookPath], {
     input: JSON.stringify(input),
     env: { ...process.env, HOME: home, PATH: `${binDir}:${process.env.PATH}` },
   });
@@ -62,6 +92,50 @@ function expectKeys(payload: Record<string, unknown>, expected: string[]): void 
 }
 
 const BASE_KEYS = ['session_id', 'hook_event_name', 'cwd', 'username', 'avatar'];
+
+describe('every installer ships the same redaction', () => {
+  const canonical = payloadFilter(hookScriptFrom(HOOK_SOURCES[0]));
+
+  it.each(HOOK_SOURCES.slice(1))('$name matches the CLI copy', source => {
+    expect(payloadFilter(hookScriptFrom(source))).toBe(canonical);
+  });
+
+  it.each(HOOK_SOURCES)('$name does not forward the raw payload', source => {
+    const script = hookScriptFrom(source);
+    // The shape this replaced, and the fallback that reinstated it on any jq error.
+    expect(script).not.toContain('. + {username: $username, avatar: $avatar}');
+    expect(script).not.toContain('PAYLOAD="$INPUT"');
+  });
+
+  it.each(HOOK_SOURCES)('$name redacts when actually run', source => {
+    const dir = mkdtempSync(join(tmpdir(), 'af-variant-'));
+    const scriptPath = join(dir, 'hook.sh');
+    writeFileSync(scriptPath, hookScriptFrom(source));
+    chmodSync(scriptPath, 0o755);
+
+    const payload = runHook(
+      {
+        session_id: 's1',
+        hook_event_name: 'PostToolUse',
+        cwd: '/work',
+        tool_name: 'Bash',
+        tool_input: { command: 'git commit -m "SELECT email FROM users"' },
+        tool_response: { output: 'DB_PASSWORD=hunter2' },
+        prompt: 'AKIAIOSFODNN7EXAMPLE',
+      },
+      scriptPath,
+    );
+
+    expect(payload).not.toHaveProperty('tool_input');
+    expect(payload).not.toHaveProperty('tool_response');
+    const serialized = JSON.stringify(payload);
+    expect(serialized).not.toContain('SELECT email');
+    expect(serialized).not.toContain('hunter2');
+    expect(serialized).not.toContain('AKIAIOSFODNN7EXAMPLE');
+    // and the feature that reads the command still works
+    expect(payload.git_action).toBe('commit');
+  });
+});
 
 describe('hook payload redaction', () => {
   beforeAll(() => {
