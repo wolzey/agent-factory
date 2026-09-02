@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"bytes"
 	_ "embed"
 	"os"
 	"path/filepath"
@@ -24,4 +25,39 @@ func WriteHookScript() error {
 		return err
 	}
 	return os.WriteFile(HookScriptPath(), hookScript, 0o755)
+}
+
+// HookScriptMatchesEmbedded reports whether the installed hook script is the one
+// embedded in this binary.
+func HookScriptMatchesEmbedded() bool {
+	onDisk, err := os.ReadFile(HookScriptPath())
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(onDisk, hookScript)
+}
+
+// SyncHookScript rewrites the installed hook script when it differs from the one
+// embedded here, and reports whether it rewrote anything.
+//
+// `update` replaces the binary from inside the *old* process, so the old code is
+// what finishes that run -- a fix to the hook script would not be written by the
+// upgrade that delivers it. Every command therefore repairs the script on the
+// next run of the new binary instead of relying on the upgrade itself.
+func SyncHookScript() (bool, error) {
+	if _, err := os.Stat(HookScriptPath()); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil // not installed; `install` is what puts it there
+		}
+		// A permission or I/O error is not "nothing to do": the old script may
+		// still be there, still forwarding raw payloads. Report it.
+		return false, err
+	}
+	if HookScriptMatchesEmbedded() {
+		return false, nil
+	}
+	if err := WriteHookScript(); err != nil {
+		return false, err
+	}
+	return true, nil
 }

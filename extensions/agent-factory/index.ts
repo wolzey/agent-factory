@@ -69,6 +69,40 @@ async function postJson(path: string, body: Record<string, unknown>) {
   }
 }
 
+
+/**
+ * The same redaction the shell hook applies, for the pi path.
+ *
+ * This extension posts to the same endpoint, so without it a pi session streams
+ * its prompts and tool arguments to the server even though the Claude/Codex hook
+ * no longer does. The server drops those fields at ingest, but by then they have
+ * already left the machine, which is the thing being prevented.
+ */
+const MAX_DERIVED_LENGTH = 200;
+const WORKTREE_TOOLS = new Set(["EnterWorktree", "ExitWorktree"]);
+
+function renameFrom(text: string): string | undefined {
+  const match = text.match(/^\/rename\s+(.+)/);
+  if (!match) return undefined;
+  const name = match[1].trim();
+  return name ? name.slice(0, MAX_DERIVED_LENGTH) : undefined;
+}
+
+function worktreeNameFrom(toolName: string, args: unknown): string | undefined {
+  if (!WORKTREE_TOOLS.has(toolName) || !args || typeof args !== "object") return undefined;
+  const name = (args as Record<string, unknown>).name;
+  return typeof name === "string" ? name.slice(0, MAX_DERIVED_LENGTH) : undefined;
+}
+
+function gitActionFrom(toolName: string, args: unknown): "commit" | "pr_merge" | undefined {
+  if (toolName !== "Bash" || !args || typeof args !== "object") return undefined;
+  const command = (args as Record<string, unknown>).command;
+  if (typeof command !== "string") return undefined;
+  if (/git\s+commit\b/.test(command)) return "commit";
+  if (/gh\s+pr\s+merge\b|git\s+merge\b/.test(command)) return "pr_merge";
+  return undefined;
+}
+
 async function postHook(event: Record<string, unknown>, ctx?: ExtensionContext) {
   const cfg = readConfig();
   await postJson("/api/hooks", {
@@ -167,27 +201,36 @@ export default function agentFactoryPiExtension(pi: ExtensionAPI) {
   });
 
   pi.on("input", async (event, ctx) => {
-    if (event.text.trim()) await postHook({ hook_event_name: "UserPromptSubmit", user_prompt: event.text }, ctx);
+    if (!event.text.trim()) return;
+    // Only the name from `/rename <name>`; the prompt itself is not sent.
+    const sessionName = renameFrom(event.text);
+    await postHook({ hook_event_name: "UserPromptSubmit", ...(sessionName ? { session_name: sessionName } : {}) }, ctx);
   });
 
   pi.on("tool_execution_start", async (event, ctx) => {
     toolUseCount += 1;
+    const sessionName = worktreeNameFrom(event.toolName, event.args);
     await postHook({
       hook_event_name: "PreToolUse",
       tool_name: event.toolName,
-      tool_input: event.args,
       activity: activityForTool(event.toolName),
       toolUseCount,
+      ...(sessionName ? { session_name: sessionName } : {}),
     }, ctx);
   });
 
   pi.on("tool_execution_end", async (event, ctx) => {
+    // Derived here for the same reason as in the shell hook: the server plays
+    // the effect, but the command line never needs to leave this machine.
+    const gitAction = gitActionFrom(event.toolName, event.args);
+    const sessionName = worktreeNameFrom(event.toolName, event.args);
     await postHook({
       hook_event_name: "PostToolUse",
       tool_name: event.toolName,
-      tool_input: event.args,
       error: event.isError,
       toolUseCount,
+      ...(gitAction ? { git_action: gitAction } : {}),
+      ...(sessionName ? { session_name: sessionName } : {}),
     }, ctx);
   });
 

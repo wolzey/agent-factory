@@ -88,11 +88,9 @@ export interface AgentSession {
   cwd: string;
   activity: AgentActivity;
   currentTool: string | null;
-  currentToolInput: Record<string, unknown> | null;
   subagents: SubagentInfo[];
   startedAt: number;
   lastEventAt: number;
-  lastPrompt?: string;
   taskDescription?: string;
   toolUseCount?: number;
   manualControl?: ManualControlState;
@@ -156,14 +154,17 @@ export interface HookPayload {
   username: string;
   avatar: AvatarConfig;
   tool_name?: string;
-  tool_input?: Record<string, unknown>;
   agent_id?: string;
   agent_type?: string;
   source?: string;
   reason?: string;
-  user_prompt?: string;
-  prompt?: string;
-  transcript_path?: string;
+  // Derived by the hook script rather than sent raw. `session_name` carries the
+  // name from `/rename <name>` or a worktree event; `git_action` says which
+  // celebration effect to play. Prompt text and tool_input are deliberately
+  // absent -- see cli/internal/hooks/agent-factory-hook.sh.
+  message?: string;
+  session_name?: string;
+  git_action?: 'commit' | 'pr_merge';
   [key: string]: unknown;
 }
 
