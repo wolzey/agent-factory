@@ -17,7 +17,14 @@ var rootCmd = &cobra.Command{
 	// delivering it. Repair it here instead, on the first run of the new binary,
 	// so a fix to what the hook sends cannot sit undeployed on someone's machine.
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		if updated, err := hooks.SyncHookScript(); err == nil && updated {
+		updated, err := hooks.SyncHookScript()
+		switch {
+		case err != nil:
+			// Failing quietly here would leave an older script in place, still
+			// forwarding raw payloads, with nothing to indicate it.
+			fmt.Fprintln(os.Stderr, "agent-factory: could not update the hook script: "+err.Error())
+			fmt.Fprintln(os.Stderr, "agent-factory: run 'agent-factory install' to reinstall it")
+		case updated:
 			fmt.Fprintln(os.Stderr, "agent-factory: hook script updated to match this version")
 		}
 	},

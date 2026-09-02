@@ -142,6 +142,8 @@ Claude/Codex Hooks  ──curl POST──>  Fastify Server  ──WebSocket─�
 
 ### What Gets Sent
 
+This applies to every sender: the shell hook used by Claude and Codex, and the pi extension, which posts to the same endpoint.
+
 Claude and Codex hand the hook far more than an avatar needs: `UserPromptSubmit` carries your entire prompt, `PreToolUse` carries the entire `tool_input` (whole Bash command lines, the file contents passed to Write/Edit), and `PostToolUse` adds `tool_response`, which is tool output. The hook sends an explicit allowlist instead, so none of that leaves your machine.
 
 | Sent | Not sent |

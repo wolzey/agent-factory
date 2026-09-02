@@ -46,7 +46,12 @@ func HookScriptMatchesEmbedded() bool {
 // next run of the new binary instead of relying on the upgrade itself.
 func SyncHookScript() (bool, error) {
 	if _, err := os.Stat(HookScriptPath()); err != nil {
-		return false, nil // not installed; `install` is what puts it there
+		if os.IsNotExist(err) {
+			return false, nil // not installed; `install` is what puts it there
+		}
+		// A permission or I/O error is not "nothing to do": the old script may
+		// still be there, still forwarding raw payloads. Report it.
+		return false, err
 	}
 	if HookScriptMatchesEmbedded() {
 		return false, nil
