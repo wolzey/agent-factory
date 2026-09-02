@@ -157,6 +157,8 @@ Two features used to read the sensitive fields, so the hook derives them locally
 - **`session_name`** — the name from `/rename <name>`, or a worktree's name. The rest of the prompt is discarded without being inspected further.
 - **`git_action`** — `commit` or `pr_merge`, so the celebration effects still fire. The command line itself never leaves the machine.
 
+Two intentional differences from the old behaviour: allowlisted strings are truncated (200 characters for derived names, 512 for paths and identifiers), and `/rename` followed by only whitespace is now ignored rather than blanking the session name.
+
 The server applies the same allowlist again at `/api/hooks`, so a payload from an older hook script is reduced at ingest and never reaches world state, libSQL, or a browser. Old hooks keep working: the server derives `session_name` and `git_action` from the raw shape when they are absent.
 
 `cwd` is still sent in full, and it is shown on hover, so anyone viewing the factory can see your directory paths. If a path is itself sensitive, point that repo at a different server with the `repositories` overrides documented under [Configuration](#configuration).

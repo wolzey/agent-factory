@@ -70,6 +70,8 @@ PAYLOAD=$(echo "$INPUT" | jq -c \
   # Derived strings are capped: they end up as a curl argument, and an enormous
   # one would blow the argument limit and silently lose the event.
   def cap: if type == "string" then .[0:200] else null end;
+  # Identity and paths are bounded too, for the same reason.
+  def cap_field: if type == "string" then .[0:512] else null end;
 
   . as $in
   | ($in.tool_input | if type == "object" then . else {} end) as $ti
@@ -107,17 +109,17 @@ PAYLOAD=$(echo "$INPUT" | jq -c \
      else null end) as $gitAction
 
   | {
-      session_id: $in.session_id,
-      hook_event_name: $in.hook_event_name,
-      cwd: $in.cwd,
-      tool_name: $in.tool_name,
+      session_id: ($in.session_id | cap_field),
+      hook_event_name: ($in.hook_event_name | cap_field),
+      cwd: ($in.cwd | cap_field),
+      tool_name: ($in.tool_name | cap_field),
       reason: ($in.reason | cap),
-      agent_id: $in.agent_id,
-      agent_type: $in.agent_type,
+      agent_id: ($in.agent_id | cap_field),
+      agent_type: ($in.agent_type | cap_field),
       message: ($in.message | cap),
       session_name: ($sessionName | cap),
       git_action: $gitAction,
-      username: $username,
+      username: ($username | cap_field),
       avatar: $avatar
     }
   | with_entries(select(.value != null))

@@ -105,6 +105,67 @@ describe('normalizeHookPayload', () => {
     expect(payload!.git_action).toBeUndefined();
   });
 
+  it('rejects a pre-derived git_action on the wrong event or tool', () => {
+    // The hook derives this correctly, but the server cannot assume the sender
+    // is the hook. Without the context check, any caller fires the effect.
+    const wrongTool = normalizeHookPayload({
+      ...BASE,
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Read',
+      git_action: 'commit',
+    });
+    expect(wrongTool!.git_action).toBeUndefined();
+
+    const wrongEvent = normalizeHookPayload({
+      ...BASE,
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Bash',
+      git_action: 'commit',
+    });
+    expect(wrongEvent!.git_action).toBeUndefined();
+  });
+
+  it('survives a command that throws on string coercion', () => {
+    // Valid JSON, but String() on it raises TypeError, which would turn a hook
+    // post into a 500.
+    expect(() =>
+      normalizeHookPayload({
+        ...BASE,
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: { toString: null, valueOf: null } },
+      }),
+    ).not.toThrow();
+  });
+
+  it('validates the avatar rather than storing whatever arrives', () => {
+    // avatar is the one nested object that survives, so it would otherwise be an
+    // open channel for persisting and broadcasting arbitrary data.
+    const payload = normalizeHookPayload({
+      ...BASE,
+      avatar: {
+        spriteIndex: 3,
+        color: '#fff',
+        hat: null,
+        exfiltrated: { prompt: 'the password is hunter2' },
+        hairStyle: 'not a number',
+      },
+    });
+
+    expect(payload!.avatar).toEqual({ spriteIndex: 3, color: '#fff', hat: null });
+    expect(JSON.stringify(payload)).not.toContain('hunter2');
+  });
+
+  it('caps identity fields, not just derived ones', () => {
+    const payload = normalizeHookPayload({
+      ...BASE,
+      session_id: 'x'.repeat(50_000),
+      cwd: '/'.repeat(50_000),
+    });
+    expect(payload!.session_id.length).toBe(512);
+    expect(payload!.cwd.length).toBe(512);
+  });
+
   it('caps long strings', () => {
     const payload = normalizeHookPayload({ ...BASE, reason: 'x'.repeat(50_000) });
     expect(payload!.reason!.length).toBe(200);
