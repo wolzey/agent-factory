@@ -140,6 +140,20 @@ Claude/Codex Hooks  ──curl POST──>  Fastify Server  ──WebSocket─�
 5. The server broadcasts ordered deltas; reconnecting browsers receive a complete snapshot
 6. Browsers interpolate server-timestamped movement and render cosmetic animation locally
 
+### Upgrading from an older install
+
+`agent-factory update` replaces the binary from inside the running process, so an
+upgrade is carried out by the *old* code. Upgrading from a version before the
+allowlist therefore leaves the previous hook script in place, still forwarding raw
+payloads, until the new binary runs once -- any command will do, and it repairs the
+script and says so. To close that window immediately:
+
+```bash
+agent-factory update && agent-factory install
+```
+
+Later upgrades do not need this; the current `update` rewrites the hook itself.
+
 ### What Gets Sent
 
 This applies to every sender: the shell hook used by Claude and Codex, and the pi extension, which posts to the same endpoint.
