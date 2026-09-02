@@ -146,6 +146,9 @@ func RegisterHooks(target HookTarget, hookScriptPath string) (registered, skippe
 	}
 
 	hooksMap := getOrCreateMap(settings, "hooks")
+	if target == TargetCodex {
+		normalizeCodexHookCommands(hooksMap)
+	}
 	events := eventsForTarget(target)
 
 	for _, event := range events {
@@ -280,7 +283,7 @@ func EnsureCodexHooksEnabled() error {
 	content, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return os.WriteFile(configPath, []byte("[features]\ncodex_hooks = true\n"), 0o644)
+			return os.WriteFile(configPath, []byte("[features]\nhooks = true\n"), 0o644)
 		}
 		return err
 	}
@@ -296,62 +299,44 @@ func EnsureCodexHooksEnabled() error {
 func enableCodexHooksInToml(input string) string {
 	lines := strings.Split(input, "\n")
 	sectionRegex := regexp.MustCompile(`^\s*\[([^\]]+)\]\s*$`)
-	flagRegex := regexp.MustCompile(`(?i)^\s*codex_hooks\s*=\s*(true|false)\s*(#.*)?$`)
+	flagRegex := regexp.MustCompile(`(?i)^\s*(hooks|codex_hooks)\s*=\s*(true|false)\s*(#.*)?$`)
 
 	featuresStart := -1
 	featuresEnd := len(lines)
-	currentSection := ""
-	flagLine := -1
-	flagValue := ""
-
 	for i, line := range lines {
-		if m := sectionRegex.FindStringSubmatch(line); m != nil {
-			if currentSection == "features" && featuresEnd == len(lines) {
-				featuresEnd = i
-			}
-			currentSection = strings.TrimSpace(m[1])
-			if currentSection == "features" && featuresStart == -1 {
-				featuresStart = i
-			}
+		match := sectionRegex.FindStringSubmatch(line)
+		if match == nil {
 			continue
 		}
-
-		if currentSection == "features" {
-			m := flagRegex.FindStringSubmatch(line)
-			if m == nil {
-				continue
-			}
-			flagLine = i
-			flagValue = strings.ToLower(m[1])
+		section := strings.TrimSpace(match[1])
+		if featuresStart >= 0 {
+			featuresEnd = i
+			break
+		}
+		if strings.EqualFold(section, "features") {
+			featuresStart = i
 		}
 	}
 
-	if currentSection == "features" && featuresEnd == len(lines) {
-		featuresEnd = len(lines)
-	}
-
-	if flagLine >= 0 {
-		if flagValue == "true" {
-			return input
+	if featuresStart < 0 {
+		out := strings.TrimRight(input, "\n")
+		if out != "" {
+			out += "\n\n"
 		}
-		lines[flagLine] = "codex_hooks = true"
-		return strings.Join(lines, "\n")
+		return out + "[features]\nhooks = true\n"
 	}
 
-	if featuresStart >= 0 {
-		newLines := make([]string, 0, len(lines)+1)
-		newLines = append(newLines, lines[:featuresEnd]...)
-		newLines = append(newLines, "codex_hooks = true")
-		newLines = append(newLines, lines[featuresEnd:]...)
-		return strings.Join(newLines, "\n")
+	newLines := make([]string, 0, len(lines)+1)
+	newLines = append(newLines, lines[:featuresStart+1]...)
+	newLines = append(newLines, "hooks = true")
+	for _, line := range lines[featuresStart+1 : featuresEnd] {
+		if flagRegex.MatchString(line) {
+			continue
+		}
+		newLines = append(newLines, line)
 	}
-
-	out := strings.TrimRight(input, "\n")
-	if out != "" {
-		out += "\n\n"
-	}
-	out += "[features]\ncodex_hooks = true\n"
-	return out
+	newLines = append(newLines, lines[featuresEnd:]...)
+	return strings.Join(newLines, "\n")
 }
 
 func eventsForTarget(target HookTarget) []string {
@@ -359,6 +344,39 @@ func eventsForTarget(target HookTarget) []string {
 		return hookEventsCodex
 	}
 	return hookEventsClaude
+}
+
+func normalizeCodexHookCommands(hooksMap map[string]interface{}) {
+	for _, eventValue := range hooksMap {
+		entries, ok := eventValue.([]interface{})
+		if !ok {
+			continue
+		}
+		for _, entryValue := range entries {
+			entry, ok := entryValue.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			hookValues, ok := entry["hooks"].([]interface{})
+			if !ok {
+				continue
+			}
+			for _, hookValue := range hookValues {
+				hook, ok := hookValue.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				command, ok := hook["command"].([]interface{})
+				if !ok || len(command) != 1 {
+					continue
+				}
+				path, ok := command[0].(string)
+				if ok && strings.Contains(path, "agent-factory-hook") {
+					hook["command"] = path
+				}
+			}
+		}
+	}
 }
 
 func makeHookEntry(target HookTarget, hookScriptPath string) map[string]interface{} {
@@ -374,12 +392,6 @@ func makeHookEntry(target HookTarget, hookScriptPath string) map[string]interfac
 
 	if target == TargetCodex {
 		entry["matcher"] = "*"
-		entry["hooks"] = []interface{}{
-			map[string]interface{}{
-				"type":    "command",
-				"command": []interface{}{hookScriptPath},
-			},
-		}
 	}
 
 	return entry
