@@ -87,6 +87,9 @@ Never commit or print the auth token. Set `PORT` and `HOST` to customize the lis
 
 Local development uses `file:.data/agent-factory.db` automatically when `TURSO_DATABASE_URL` is absent. The directory is ignored by Git.
 
+> [!IMPORTANT]
+> **Existing production deployments must configure both `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` before upgrading to this release.** When `NODE_ENV=production`, the server intentionally exits during startup if either value is missing so it cannot silently run with non-durable state.
+
 ### Deploying to Render
 
 The included [`render.yaml`](render.yaml) creates a free Docker web service named `agent-factory`. Its filesystem is ephemeral, so the authoritative world is stored in Turso instead of a local SQLite file.
