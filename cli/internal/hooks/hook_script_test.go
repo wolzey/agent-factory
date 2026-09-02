@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -118,4 +119,42 @@ func waitForFile(t *testing.T, path string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for %s", path)
+}
+
+func TestSyncHookScriptRepairsStaleScript(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// Not installed: nothing to repair, and `install` is what puts it there.
+	if updated, err := SyncHookScript(); err != nil || updated {
+		t.Fatalf("SyncHookScript on a clean machine = (%v, %v), want (false, nil)", updated, err)
+	}
+	if _, err := os.Stat(HookScriptPath()); !os.IsNotExist(err) {
+		t.Fatal("SyncHookScript created a hook script that was never installed")
+	}
+
+	if err := WriteHookScript(); err != nil {
+		t.Fatal(err)
+	}
+	if updated, err := SyncHookScript(); err != nil || updated {
+		t.Fatalf("SyncHookScript on a current script = (%v, %v), want (false, nil)", updated, err)
+	}
+
+	// The case this exists for: an old script left behind by an update that
+	// replaced only the binary.
+	stale := []byte("#!/bin/bash\n# an older hook that forwarded the raw payload\n")
+	if err := os.WriteFile(HookScriptPath(), stale, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := SyncHookScript()
+	if err != nil || !updated {
+		t.Fatalf("SyncHookScript on a stale script = (%v, %v), want (true, nil)", updated, err)
+	}
+	repaired, err := os.ReadFile(HookScriptPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(repaired, hookScript) {
+		t.Fatal("stale hook script was not replaced with the embedded one")
+	}
 }
