@@ -1,5 +1,13 @@
 import type { WebSocket } from '@fastify/websocket';
-import type { WSMessageToClient, AgentSession, EffectType, ChatMessage, GlobalEffectType } from '../../shared/types.js';
+import type {
+  AgentSession,
+  ChatMessage,
+  EffectType,
+  GlobalEffectType,
+  WorldDelta,
+  WorldSnapshot,
+  WSMessageToClient,
+} from '../../shared/types.js';
 
 interface SocketMeta {
   username?: string;
@@ -36,6 +44,14 @@ export class BroadcastManager {
     if (ws.readyState === 1) {
       ws.send(JSON.stringify(msg));
     }
+  }
+
+  sendWorldSnapshot(ws: WebSocket, snapshot: WorldSnapshot) {
+    this.sendTo(ws, { type: 'world_snapshot', snapshot });
+  }
+
+  broadcastWorldDelta(delta: WorldDelta) {
+    this.broadcast({ type: 'world_delta', delta });
   }
 
   sendFullState(ws: WebSocket, agents: AgentSession[]) {

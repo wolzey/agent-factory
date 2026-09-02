@@ -4,6 +4,7 @@ import { VALID_EMOTES, CHAT_MESSAGE_MAX_LENGTH } from '../../shared/constants.js
 import type { StateManager } from '../state.js';
 import type { BroadcastManager } from '../ws/broadcast.js';
 import type { TokenAuth } from '../auth.js';
+import type { PersistenceStatus } from '../persistence/world-repository.js';
 
 export function registerHookRoutes(
   app: FastifyInstance,
@@ -11,6 +12,7 @@ export function registerHookRoutes(
   broadcast: BroadcastManager,
   serverConfig: ServerConfig,
   auth: TokenAuth,
+  getPersistenceStatus: () => PersistenceStatus,
 ) {
   app.post<{ Body: HookPayload }>('/api/hooks', async (request, reply) => {
     const payload = request.body;
@@ -66,7 +68,7 @@ export function registerHookRoutes(
       timestamp: Date.now(),
     };
 
-    broadcast.broadcastChatMessage(chat);
+    state.appendChat(chat);
     return reply.status(200).send({ ok: true });
   });
 
@@ -86,10 +88,8 @@ export function registerHookRoutes(
       return reply.status(404).send({ error: 'No active session found' });
     }
 
-    session.taskDescription = summary.slice(0, 200);
-    session.lastEventAt = Date.now();
-    state.emitUpdate(session);
-    return reply.status(200).send({ ok: true, sessionId: session.sessionId });
+    const updated = state.updateContext(session.sessionId, summary);
+    return reply.status(200).send({ ok: true, sessionId: updated?.sessionId ?? session.sessionId });
   });
 
   app.get<{ Querystring: { username?: string } }>('/api/auth/token', async (request, reply) => {
@@ -113,20 +113,23 @@ export function registerHookRoutes(
   });
 
   app.get('/api/health', async (_request, reply) => {
+    const persistence = getPersistenceStatus();
     return reply.send({
-      status: 'ok',
+      status: persistence.healthy ? 'ok' : 'degraded',
       agents: state.getAll().length,
       clients: broadcast.clientCount,
+      revision: state.getSnapshot().revision,
+      persistence,
       uptime: process.uptime(),
     });
   });
 
   app.get('/api/state', async (_request, reply) => {
-    return reply.send({ agents: state.getAll() });
+    return reply.send(state.getSnapshot());
   });
 
   app.post('/api/vortex', async (_request, reply) => {
-    broadcast.broadcastGlobalEffect('vortex');
-    return reply.send({ ok: true });
+    const event = state.startGlobalEvent('vortex');
+    return reply.send({ ok: true, eventId: event.id });
   });
 }

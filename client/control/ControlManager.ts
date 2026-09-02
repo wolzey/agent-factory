@@ -143,11 +143,7 @@ export class ControlManager {
     if (!this.auth.isLoggedIn || !this.username) return;
     if (sessionId === this.activeSessionId) return;
     this.stopMovement();
-    const position = this.agents.getAgentPosition(sessionId);
-    const session = this.agents.getSessions().find(agent => agent.sessionId === sessionId);
-    const x = position?.x ?? session?.manualControl?.x ?? 400;
-    const y = position?.y ?? session?.manualControl?.y ?? 240;
-    this.socket.send({ type: 'control_claim', sessionId, x, y });
+    this.socket.send({ type: 'control_claim', sessionId });
   }
 
   private refreshOwnedAgents(): void {

@@ -10,6 +10,7 @@ import { getTheme } from '../environments';
 import type { EnvironmentTheme } from '../environments';
 import { SoundBank } from '../audio/SoundBank';
 import { ControlManager } from '../control/ControlManager';
+import { WorldStore } from '../state/WorldStore';
 
 export class FactoryScene extends Phaser.Scene {
   private socket!: SocketClient;
@@ -22,6 +23,9 @@ export class FactoryScene extends Phaser.Scene {
   private titleShadow!: Phaser.GameObjects.Text;
   private titleText!: Phaser.GameObjects.Text;
   private theme!: EnvironmentTheme;
+  private worldStore = new WorldStore();
+  private seenWorldEvents = new Set<string>();
+  private renderedChatSignature = '';
 
   constructor() {
     super({ key: 'FactoryScene' });
@@ -130,6 +134,19 @@ export class FactoryScene extends Phaser.Scene {
 
   private handleMessage(msg: WSMessageToClient) {
     switch (msg.type) {
+      case 'world_snapshot':
+        this.worldStore.replace(msg.snapshot);
+        this.renderWorld();
+        break;
+      case 'world_delta': {
+        const result = this.worldStore.apply(msg.delta);
+        if (result === 'gap') {
+          this.socket.send({ type: 'request_state' });
+        } else if (result === 'applied') {
+          this.renderWorld();
+        }
+        break;
+      }
       case 'full_state':
         this.agentManager.handleFullState(msg.agents);
         this.controlManager.handleStateChanged();
@@ -163,6 +180,27 @@ export class FactoryScene extends Phaser.Scene {
       case 'control_revoked':
         this.controlManager.handleMessage(msg);
         break;
+    }
+  }
+
+  private renderWorld(): void {
+    const snapshot = this.worldStore.snapshot;
+    if (!snapshot) return;
+    this.agentManager.handleWorldSnapshot(snapshot);
+    const lastChat = snapshot.chat.at(-1);
+    const chatSignature = `${snapshot.chat.length}:${lastChat?.timestamp ?? 0}:${lastChat?.username ?? ''}:${lastChat?.message ?? ''}`;
+    if (chatSignature !== this.renderedChatSignature) {
+      this.renderedChatSignature = chatSignature;
+      this.chatOverlay.replaceMessages(snapshot.chat);
+    }
+    this.controlManager.handleStateChanged();
+
+    for (const event of snapshot.events) {
+      if (event.expiresAt <= snapshot.serverTime || this.seenWorldEvents.has(event.id)) continue;
+      this.seenWorldEvents.add(event.id);
+      if (event.effect === 'vortex') {
+        this.agentManager.triggerVortex(event.startedAt, event.expiresAt, snapshot.serverTime);
+      }
     }
   }
 

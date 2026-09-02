@@ -67,7 +67,7 @@ export class ControlManager {
     }
   }
 
-  claim(socket: WebSocket, username: string | undefined, sessionId: string, x: number, y: number): boolean {
+  claim(socket: WebSocket, username: string | undefined, sessionId: string): boolean {
     if (!username) return this.reject(socket, 'claim', 'Authentication required');
 
     const session = this.state.get(sessionId);
@@ -98,13 +98,14 @@ export class ControlManager {
     }
 
     const timestamp = this.now();
+    const canonicalPosition = this.state.getCurrentPosition(sessionId, timestamp) ?? { x: 400, y: 240 };
     const lease: ControlLease = {
       socket,
       username,
       sessionId,
       input: { ...STOPPED_INPUT },
-      x: safeCoordinate(x, 400, CONTROL_WORLD_BOUNDS.minX, CONTROL_WORLD_BOUNDS.maxX),
-      y: safeCoordinate(y, 240, CONTROL_WORLD_BOUNDS.minY, CONTROL_WORLD_BOUNDS.maxY),
+      x: safeCoordinate(canonicalPosition.x, 400, CONTROL_WORLD_BOUNDS.minX, CONTROL_WORLD_BOUNDS.maxX),
+      y: safeCoordinate(canonicalPosition.y, 240, CONTROL_WORLD_BOUNDS.minY, CONTROL_WORLD_BOUNDS.maxY),
       facing: 'down',
       moving: false,
       lastInputAt: timestamp,
@@ -170,7 +171,10 @@ export class ControlManager {
     const timestamp = this.now();
     if (timestamp - lease.lastShotAt < CONTROL_SHOOT_COOLDOWN_MS) return false;
     lease.lastShotAt = timestamp;
-    this.state.emitEffect(sessionId, 'shoot', { facing: lease.facing });
+    this.state.emitEffect(sessionId, 'shoot', {
+      facing: lease.facing,
+      targetSessionIds: this.state.getShotTargets(sessionId, lease.facing),
+    });
     return true;
   }
 
