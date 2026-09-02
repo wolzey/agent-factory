@@ -28,6 +28,7 @@ import {
   TOMBSTONE_DURATION_MS,
   toolToActivity,
 } from '../shared/constants.js';
+import { scrubLegacyAgentFields } from './hook-payload.js';
 
 export type StateNotification =
   | { type: 'delta'; delta: WorldDelta; immediatePersistence: boolean }
@@ -127,7 +128,7 @@ export class StateManager {
 
     const timestamp = this.now();
     for (const stored of snapshot.agents) {
-      const session = clone(stored);
+      const session = scrubLegacyAgentFields(clone(stored));
       this.knownSessions.add(session.sessionId);
       delete session.manualControl;
       if (session.activity === 'stopped') {
@@ -388,7 +389,7 @@ export class StateManager {
     for (const stored of sessions) {
       if (stored.activity === 'stopped' || this.sessions.has(stored.sessionId)) continue;
       const session: WorldAgent = {
-        ...clone(stored),
+        ...scrubLegacyAgentFields(clone(stored)),
         currentTool: null,
         subagents: [],
         lastEventAt: timestamp,

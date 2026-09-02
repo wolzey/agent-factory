@@ -162,6 +162,7 @@ export interface HookPayload {
   // name from `/rename <name>` or a worktree event; `git_action` says which
   // celebration effect to play. Prompt text and tool_input are deliberately
   // absent -- see cli/internal/hooks/agent-factory-hook.sh.
+  message?: string;
   session_name?: string;
   git_action?: 'commit' | 'pr_merge';
   [key: string]: unknown;

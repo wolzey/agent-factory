@@ -5,6 +5,7 @@ import type { StateManager } from '../state.js';
 import type { BroadcastManager } from '../ws/broadcast.js';
 import type { TokenAuth } from '../auth.js';
 import type { PersistenceStatus } from '../persistence/world-repository.js';
+import { normalizeHookPayload } from '../hook-payload.js';
 
 export function registerHookRoutes(
   app: FastifyInstance,
@@ -15,15 +16,13 @@ export function registerHookRoutes(
   getPersistenceStatus: () => PersistenceStatus,
 ) {
   app.post<{ Body: HookPayload }>('/api/hooks', async (request, reply) => {
-    const payload = request.body;
+    // Reduced to the fields the server uses before anything else touches it, so
+    // a payload from an older hook cannot carry prompt text or tool input into
+    // the world state, the broadcast, or libSQL.
+    const payload = normalizeHookPayload(request.body);
 
-    if (!payload || !payload.session_id) {
-      return reply.status(400).send({ error: 'Missing session_id' });
-    }
-
-    // Default hook_event_name if missing
-    if (!payload.hook_event_name) {
-      return reply.status(400).send({ error: 'Missing hook_event_name' });
+    if (!payload) {
+      return reply.status(400).send({ error: 'Missing session_id or hook_event_name' });
     }
 
     console.log(`[hook] event=${payload.hook_event_name} session=${payload.session_id} user=${payload.username || 'unknown'}`);

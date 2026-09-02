@@ -53,6 +53,16 @@ exit 0
   }
 }
 
+/**
+ * The allowlist is asserted as an exact key set rather than a blacklist of known
+ * bad fields. A blacklist passes when a field nobody thought of starts arriving.
+ */
+function expectKeys(payload: Record<string, unknown>, expected: string[]): void {
+  expect(Object.keys(payload).sort()).toEqual([...expected].sort());
+}
+
+const BASE_KEYS = ['session_id', 'hook_event_name', 'cwd', 'username', 'avatar'];
+
 describe('hook payload redaction', () => {
   beforeAll(() => {
     // jq is a hard dependency of the hook itself, not just of this test.
@@ -69,8 +79,7 @@ describe('hook payload redaction', () => {
       transcript_path: '/home/tester/.claude/transcript.jsonl',
     });
 
-    expect(payload).not.toHaveProperty('tool_input');
-    expect(payload).not.toHaveProperty('transcript_path');
+    expectKeys(payload, [...BASE_KEYS, 'tool_name']);
     expect(JSON.stringify(payload)).not.toContain('SELECT email');
     // What the avatar actually needs still arrives.
     expect(payload.session_id).toBe('s1');
@@ -88,6 +97,7 @@ describe('hook payload redaction', () => {
       tool_input: { file_path: '/work/config.ts', content: 'export const TOKEN = "sk-live-secret"' },
     });
 
+    expectKeys(payload, [...BASE_KEYS, 'tool_name']);
     expect(JSON.stringify(payload)).not.toContain('sk-live-secret');
     expect(JSON.stringify(payload)).not.toContain('config.ts');
   });
@@ -101,7 +111,7 @@ describe('hook payload redaction', () => {
       tool_response: { output: 'DB_PASSWORD=hunter2' },
     });
 
-    expect(payload).not.toHaveProperty('tool_response');
+    expectKeys(payload, [...BASE_KEYS, 'tool_name']);
     expect(JSON.stringify(payload)).not.toContain('hunter2');
   });
 
@@ -122,6 +132,97 @@ describe('hook payload redaction', () => {
     });
     expect(ordinary).not.toHaveProperty('session_name');
     expect(JSON.stringify(ordinary)).not.toContain('AKIAIOSFODNN7EXAMPLE');
+  });
+
+  it('drops user_prompt, the other name Claude uses for prompt text', () => {
+    const payload = runHook({
+      session_id: 's1',
+      hook_event_name: 'UserPromptSubmit',
+      cwd: '/work',
+      user_prompt: 'the password is hunter2',
+    });
+    expectKeys(payload, BASE_KEYS);
+    expect(JSON.stringify(payload)).not.toContain('hunter2');
+  });
+
+  it('matches the old server regex on a multiline rename', () => {
+    // The regex this replaced was unanchored at the end, so `/rename foo\nbar`
+    // named the session `foo`. An anchored jq regex would silently drop it.
+    const payload = runHook({
+      session_id: 's1',
+      hook_event_name: 'UserPromptSubmit',
+      cwd: '/work',
+      prompt: '/rename foo\nbar',
+    });
+    expect(payload.session_name).toBe('foo');
+  });
+
+  it('lets an explicit rename win over a worktree name', () => {
+    const payload = runHook({
+      session_id: 's1',
+      hook_event_name: 'WorktreeCreate',
+      cwd: '/work',
+      prompt: '/rename desired',
+      tool_input: { name: 'override' },
+    });
+    expect(payload.session_name).toBe('desired');
+  });
+
+  it('only forwards tool_input.name for worktree events', () => {
+    // Another tool may put something private in a `name` field; it is read only
+    // for worktree events, so it is only sent for worktree events.
+    const payload = runHook({
+      session_id: 's1',
+      hook_event_name: 'PreToolUse',
+      cwd: '/work',
+      tool_name: 'Write',
+      tool_input: { name: 'internal-project-codename' },
+    });
+    expectKeys(payload, [...BASE_KEYS, 'tool_name']);
+    expect(JSON.stringify(payload)).not.toContain('codename');
+  });
+
+  it('forwards a Notification message, which the server renders', () => {
+    const payload = runHook({
+      session_id: 's1',
+      hook_event_name: 'Notification',
+      cwd: '/work',
+      message: 'needs your approval',
+    });
+    expect(payload.message).toBe('needs your approval');
+  });
+
+  it('accepts a legacy top-level worktree name', () => {
+    const payload = runHook({
+      session_id: 's1',
+      hook_event_name: 'WorktreeCreate',
+      cwd: '/work',
+      name: 'legacy-shape',
+    });
+    expect(payload.session_name).toBe('legacy-shape');
+  });
+
+  it('caps derived strings so curl cannot blow its argument limit', () => {
+    const payload = runHook({
+      session_id: 's1',
+      hook_event_name: 'UserPromptSubmit',
+      cwd: '/work',
+      prompt: `/rename ${'x'.repeat(50_000)}`,
+    });
+    expect((payload.session_name as string).length).toBe(200);
+  });
+
+  it('does not send git_action on PreToolUse', () => {
+    // The server plays these effects only from handlePostToolUse, so sending a
+    // verdict on PreToolUse would announce a commit that has not happened.
+    const payload = runHook({
+      session_id: 's1',
+      hook_event_name: 'PreToolUse',
+      cwd: '/work',
+      tool_name: 'Bash',
+      tool_input: { command: 'git commit -m wip' },
+    });
+    expect(payload).not.toHaveProperty('git_action');
   });
 
   it('derives git_action without forwarding the command', () => {

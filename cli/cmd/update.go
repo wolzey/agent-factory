@@ -118,6 +118,17 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	// Re-register hooks to pick up any new event types added in this version.
 	installedTargets := hooks.InstalledTargets()
 	if len(installedTargets) > 0 {
+		// The hook script itself is embedded in the binary, so an update that
+		// only rewrote the binary left the old script on disk. Changes to what
+		// the hook sends -- including which fields it redacts -- would never
+		// reach anyone who updated rather than reinstalling.
+		if err := hooks.WriteHookScript(); err != nil {
+			ui.Warn("Could not update hook script: " + err.Error())
+			ui.Info("Run 'agent-factory install' to fix hooks manually.")
+		} else {
+			ui.Success("Hook script updated")
+		}
+
 		for _, target := range installedTargets {
 			registered, _, err := hooks.RegisterHooks(target, hooks.HookScriptPath())
 			if err != nil {

@@ -149,12 +149,15 @@ Claude and Codex hand the hook far more than an avatar needs: `UserPromptSubmit`
 | `session_id`, `hook_event_name`, `cwd` | Prompt text |
 | `tool_name` (e.g. `Bash`), `username`, `avatar` | `tool_input` — commands, file paths, file contents |
 | `reason`, `agent_id`, `agent_type` | `tool_response` — tool output |
-| `session_name`, `git_action` (derived, see below) | `transcript_path` |
+| `message` (notifications) | `transcript_path` |
+| `session_name`, `git_action` (derived, see below) | anything else on the payload |
 
 Two features used to read the sensitive fields, so the hook derives them locally and sends only the result:
 
 - **`session_name`** — the name from `/rename <name>`, or a worktree's name. The rest of the prompt is discarded without being inspected further.
 - **`git_action`** — `commit` or `pr_merge`, so the celebration effects still fire. The command line itself never leaves the machine.
+
+The server applies the same allowlist again at `/api/hooks`, so a payload from an older hook script is reduced at ingest and never reaches world state, libSQL, or a browser. Old hooks keep working: the server derives `session_name` and `git_action` from the raw shape when they are absent.
 
 `cwd` is still sent in full, and it is shown on hover, so anyone viewing the factory can see your directory paths. If a path is itself sensitive, point that repo at a different server with the `repositories` overrides documented under [Configuration](#configuration).
 

@@ -67,39 +67,59 @@ PAYLOAD=$(echo "$INPUT" | jq -c \
   --arg username "$USERNAME" \
   --argjson avatar "$AVATAR" \
   '
+  # Derived strings are capped: they end up as a curl argument, and an enormous
+  # one would blow the argument limit and silently lose the event.
+  def cap: if type == "string" then .[0:200] else null end;
+
   . as $in
   | ($in.tool_input | if type == "object" then . else {} end) as $ti
+  | ($in.hook_event_name // "") as $ev
+  | ($in.tool_name // "") as $tool
+  | (($ev == "WorktreeCreate") or ($ev == "WorktreeRemove")
+     or ($tool == "EnterWorktree") or ($tool == "ExitWorktree")) as $isWorktree
+
+  # `/rename <name>` is the one prompt-derived feature. Deliberately unanchored at
+  # the end, matching the server regex it replaces: `/rename foo\nbar` names the
+  # session `foo` rather than failing to match.
+  | ((($in.user_prompt // $in.prompt) | if type == "string" then . else "" end)
+     | (capture("^/rename\\s+(?<n>.+)") // null)
+     | if . == null then null else (.n | gsub("^\\s+|\\s+$"; "")) end) as $renamed
+
+  # tool_input.name is read only for worktree events, so it is only forwarded for
+  # worktree events -- another tool may put something private in a `name` field.
+  | (if $isWorktree
+     then (if ($ti.name | type) == "string" then $ti.name
+           elif ($in.name | type) == "string" then $in.name
+           else null end)
+     else null end) as $worktreeName
+
+  # An explicit rename wins over a worktree name, rather than being overwritten.
+  | (if ($renamed // "") != "" then $renamed
+     elif ($worktreeName // "") != "" then $worktreeName
+     else null end) as $sessionName
+
+  # Only PostToolUse, matching the one place the server plays these effects.
+  | (if $ev == "PostToolUse" and $tool == "Bash"
+     then (($ti.command // "") | if type == "string" then . else "" end)
+          | if test("git\\s+commit\\b") then "commit"
+            elif test("gh\\s+pr\\s+merge\\b|git\\s+merge\\b") then "pr_merge"
+            else null end
+     else null end) as $gitAction
+
   | {
       session_id: $in.session_id,
       hook_event_name: $in.hook_event_name,
       cwd: $in.cwd,
       tool_name: $in.tool_name,
-      reason: $in.reason,
+      reason: ($in.reason | cap),
       agent_id: $in.agent_id,
       agent_type: $in.agent_type,
+      message: ($in.message | cap),
+      session_name: ($sessionName | cap),
+      git_action: $gitAction,
       username: $username,
       avatar: $avatar
     }
-  # `/rename <name>` is the one prompt-derived feature. Match it here and send the
-  # name alone; every other prompt is dropped without ever being inspected further.
-  + (
-      ((($in.user_prompt // $in.prompt) | if type == "string" then . else "" end)
-       | (capture("^/rename\\s+(?<n>.+)$") // null)
-       | if . == null then {} else {session_name: (.n | gsub("^\\s+|\\s+$"; ""))} end)
-    )
-  # Worktree events name the worktree in tool_input.name. That single string is
-  # the only member of tool_input anything reads.
-  + (if ($ti.name | type) == "string" then {session_name: $ti.name} else {} end)
-  # The commit / merge celebration effects. The regexes run here so the command
-  # itself never leaves the machine -- only which of the two effects to play.
-  + (
-      if $in.tool_name == "Bash"
-      then (($ti.command // "") | if type == "string" then . else "" end) as $cmd
-        | if ($cmd | test("git\\s+commit\\b")) then {git_action: "commit"}
-          elif ($cmd | test("gh\\s+pr\\s+merge\\b|git\\s+merge\\b")) then {git_action: "pr_merge"}
-          else {} end
-      else {} end
-    )
   | with_entries(select(.value != null))
   ' 2>/dev/null)
 
