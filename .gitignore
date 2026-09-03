@@ -8,3 +8,6 @@ cli/dist/
 .worktrees/
 server-config.json
 .data/
+
+# Local design QA captures
+design-qa*

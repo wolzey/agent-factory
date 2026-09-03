@@ -45,3 +45,6 @@ config/
 
 # Logs
 *.log
+
+# Local design QA captures
+design-qa*

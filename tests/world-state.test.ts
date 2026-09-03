@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { StateManager } from '../server/state.js';
 import { STALE_SESSION_TIMEOUT_MS, TOMBSTONE_DURATION_MS } from '../shared/constants.js';
 import type { HookPayload, WorldDelta } from '../shared/types.js';
+import { ARCADE_WINDOW_LOOKOUTS, positionAt, routeDistance, workstationWaypoints } from '../shared/world-layouts.js';
 
 function hook(sessionId: string, username = 'alice'): HookPayload {
   return {
@@ -14,6 +15,26 @@ function hook(sessionId: string, username = 'alice'): HookPayload {
 }
 
 describe('StateManager authoritative world', () => {
+  it('routes workstation travel through open aisles instead of cabinet footprints', () => {
+    const from = { x: 400, y: 470 };
+    const to = { x: 80, y: 164 };
+    const waypoints = workstationWaypoints('arcade', from, to, 'entrance', 'work', undefined, 0);
+    expect(waypoints).toEqual([
+      { x: 330, y: 470 },
+      { x: 330, y: 352 },
+      { x: 330, y: 332 },
+      { x: 122, y: 316 },
+      { x: 122, y: 164 },
+    ]);
+
+    const distance = routeDistance(from, waypoints, to);
+    const movement = { from, to, waypoints, startedAt: 0, arrivesAt: distance };
+    const midway = positionAt(movement, distance / 2);
+    expect(midway.x).toBeGreaterThan(122);
+    expect(midway.x).toBeLessThan(330);
+    expect(midway.y).toBeGreaterThanOrEqual(316);
+  });
+
   it('assigns unique server-owned slots and emits contiguous revisions', () => {
     let now = 1_000;
     const state = new StateManager('arcade', () => now);
@@ -34,6 +55,19 @@ describe('StateManager authoritative world', () => {
     expect(deltas.map(delta => [delta.previousRevision, delta.revision])).toEqual([
       [0, 1], [1, 2], [2, 3], [3, 4],
     ]);
+  });
+
+  it('persists a dropped workstation assignment and rejects occupied stations', () => {
+    const state = new StateManager('arcade', () => 1_000);
+    state.handleHookEvent(hook('one'));
+    state.handleHookEvent(hook('two', 'bob'));
+    expect(state.assignWorkstation('one', 7)).toBe(true);
+    expect(state.get('one')?.world).toEqual({
+      zone: 'work', slotIndex: 7, position: { x: 208, y: 274 }, facing: 'up',
+    });
+    expect(state.assignWorkstation('two', 7)).toBe(false);
+    expect(state.get('two')?.world.zone).toBe('idle');
+    expect(state.assignWorkstation('two', 99)).toBe(false);
   });
 
   it('persists bounded shared state and restores without a browser history', () => {
@@ -84,5 +118,41 @@ describe('StateManager authoritative world', () => {
     state.advanceWorld(now);
     expect(state.getSnapshot().tombstones).toHaveLength(0);
     vi.useRealTimers();
+  });
+
+  it('occasionally routes idle arcade agents across the shared dance floor', () => {
+    let now = 1_000;
+    const state = new StateManager('arcade', () => now);
+    state.handleHookEvent(hook('one'));
+
+    now = 10_000;
+    state.advanceWorld(now);
+    now = 40_000;
+    state.advanceWorld(now);
+
+    const movement = state.get('one')?.world.movement;
+    expect(movement?.waypoints).toHaveLength(3);
+    expect(movement?.waypoints?.every(point => point.x >= 582 && point.y >= 394)).toBe(true);
+    expect(movement?.to).toEqual({ x: 440, y: 382 });
+  });
+
+  it('occasionally pauses an idle agent at the window before routing home', () => {
+    let now = 1_000;
+    const state = new StateManager('arcade', () => now);
+    state.handleHookEvent(hook('agent'));
+
+    now = 10_000;
+    state.advanceWorld(now);
+    now = 40_000;
+    state.advanceWorld(now);
+
+    const visit = state.get('agent')?.world.movement;
+    expect(ARCADE_WINDOW_LOOKOUTS).toContainEqual(visit?.to);
+    expect(visit?.waypoints).toContainEqual({ x: visit?.to.x, y: 316 });
+    expect(state.get('agent')?.world.facing).toBe('up');
+
+    now = visit!.arrivesAt + 8_001;
+    state.advanceWorld(now);
+    expect(state.get('agent')?.world.movement?.to).toEqual({ x: 440, y: 382 });
   });
 });

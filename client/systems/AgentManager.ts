@@ -4,11 +4,14 @@ import type {
   EffectType,
   EnvironmentType,
   FacingDirection,
+  GrabTarget,
+  RpsChoice,
+  RpsOutcome,
   TombstoneState,
   WorldAgent,
   WorldSnapshot,
 } from '@shared/types';
-import { positionAt } from '@shared/world-layouts';
+import { nearestWorkstationSlot, positionAt } from '@shared/world-layouts';
 import { TOMBSTONE_DURATION_MS } from '@shared/constants';
 import { AgentSprite } from '../entities/AgentSprite';
 import { SubagentSprite } from '../entities/SubagentSprite';
@@ -18,6 +21,9 @@ import { getTheme } from '../environments';
 import type { ActivityBucket, EnvironmentTheme } from '../environments';
 import type { SoundBank } from '../audio/SoundBank';
 import { isInShotCorridor } from '../control/geometry';
+import type { Grabbable } from '../grab/GrabMotion';
+import type { Point } from '../grab/physics';
+import { agentDepth, machineDepth } from './depth';
 
 const WORKING_STATES = ['reading', 'writing', 'running', 'searching', 'chatting', 'planning', 'compacting'];
 
@@ -45,6 +51,7 @@ export class AgentManager {
   private preVortexPositions = new Map<string, { x: number; y: number }>();
   private authoritativeWorld = false;
   private serverClockOffset = 0;
+  private activeRpsPairs = new Map<string, number>();
 
   constructor(scene: Phaser.Scene, envType: EnvironmentType = 'arcade') {
     this.scene = scene;
@@ -230,7 +237,81 @@ export class AgentManager {
         this.reactToShot(sessionId, agent, facing, 180, this.effectTargets(data));
         break;
       }
+      case 'rps': {
+        const opponentSessionId = typeof data?.opponentSessionId === 'string' ? data.opponentSessionId : null;
+        const firstChoice = this.rpsChoice(data?.firstChoice);
+        const secondChoice = this.rpsChoice(data?.secondChoice);
+        const firstOutcome = this.rpsOutcome(data?.firstOutcome);
+        const secondOutcome = this.rpsOutcome(data?.secondOutcome);
+        if (opponentSessionId && firstChoice && secondChoice && firstOutcome && secondOutcome) {
+          this.queueRockPaperScissors(
+            sessionId,
+            opponentSessionId,
+            firstChoice,
+            secondChoice,
+            firstOutcome,
+            secondOutcome,
+          );
+        }
+        break;
+      }
     }
+  }
+
+  private rpsChoice(value: unknown): RpsChoice | null {
+    return value === 'rock' || value === 'paper' || value === 'scissors' ? value : null;
+  }
+
+  private rpsOutcome(value: unknown): RpsOutcome | null {
+    return value === 'win' || value === 'lose' || value === 'draw' ? value : null;
+  }
+
+  private queueRockPaperScissors(
+    firstSessionId: string,
+    secondSessionId: string,
+    firstChoice: RpsChoice,
+    secondChoice: RpsChoice,
+    firstOutcome: RpsOutcome,
+    secondOutcome: RpsOutcome,
+    attempt = 0,
+  ): void {
+    const pairKey = [firstSessionId, secondSessionId].sort().join(':');
+    const activeUntil = this.activeRpsPairs.get(pairKey) ?? 0;
+    if (attempt === 0 && activeUntil > this.scene.time.now) return;
+
+    const first = this.agents.get(firstSessionId);
+    const second = this.agents.get(secondSessionId);
+    if (!first || !second) return;
+
+    if (first.isDropping || second.isDropping) {
+      if (attempt < 40) {
+        this.scene.time.delayedCall(100, () => this.queueRockPaperScissors(
+          firstSessionId,
+          secondSessionId,
+          firstChoice,
+          secondChoice,
+          firstOutcome,
+          secondOutcome,
+          attempt + 1,
+        ));
+      }
+      return;
+    }
+    if (!first.canStartRockPaperScissors || !second.canStartRockPaperScissors) return;
+
+    const firstIsLeft = first.x === second.x
+      ? firstSessionId.localeCompare(secondSessionId) < 0
+      : first.x < second.x;
+    const left = firstIsLeft ? first : second;
+    const right = firstIsLeft ? second : first;
+    const centerX = (first.x + second.x) / 2;
+    const centerY = (first.y + second.y) / 2;
+    left.setPosition(centerX - 24, centerY);
+    right.setPosition(centerX + 24, centerY);
+
+    const firstStarted = first.startRockPaperScissors(firstIsLeft ? 'right' : 'left', firstChoice, firstOutcome, true);
+    const secondStarted = second.startRockPaperScissors(firstIsLeft ? 'left' : 'right', secondChoice, secondOutcome);
+    if (firstStarted && secondStarted) this.activeRpsPairs.set(pairKey, this.scene.time.now + 3600);
   }
 
   private effectTargets(data?: Record<string, unknown>): Set<string> | undefined {
@@ -273,6 +354,71 @@ export class AgentManager {
     }
   }
 
+  // ── Tactile grab ────────────────────────────────────────────────
+
+  get isVortexActive(): boolean {
+    return this.vortexActive;
+  }
+
+  /** Only full-size agents can be lifted; subagents stay with their parent. */
+  resolveGrabTarget(gameObject: Phaser.GameObjects.GameObject): GrabTarget | null {
+    const parent = (gameObject as { parentContainer?: unknown }).parentContainer;
+    if (parent instanceof AgentSprite) return { sessionId: parent.sessionData.sessionId };
+    return null;
+  }
+
+  hasGrabTarget(target: GrabTarget): boolean {
+    return !!this.grabbable(target);
+  }
+
+  beginGrab(target: GrabTarget, pointer: Point): boolean {
+    const sprite = this.grabbable(target);
+    if (!sprite) return false;
+    sprite.beginGrab(pointer);
+    return true;
+  }
+
+  /** Mirror another viewer's grab: lift if needed, otherwise just follow their pointer. */
+  applyRemoteGrab(target: GrabTarget, pointer: Point): void {
+    const sprite = this.grabbable(target);
+    if (!sprite) return;
+    if (sprite.isHeld) sprite.moveGrab(pointer);
+    else sprite.beginGrab(pointer);
+  }
+
+  workstationDropSlot(target: GrabTarget): number | undefined {
+    const sprite = this.grabbable(target);
+    return sprite ? nearestWorkstationSlot(this.theme.type, sprite.groundProjection) : undefined;
+  }
+
+  moveGrab(target: GrabTarget, pointer: Point): void {
+    this.grabbable(target)?.moveGrab(pointer);
+  }
+
+  releaseGrab(target: GrabTarget, pointer: Point): void {
+    this.grabbable(target)?.releaseGrab(pointer);
+  }
+
+  showGrabHint(target: GrabTarget, text: string): void {
+    this.grabbable(target)?.showGrabHint(text);
+  }
+
+  private grabbable(target: GrabTarget): Grabbable | undefined {
+    return this.agents.get(target.sessionId);
+  }
+
+  dropStaleGrabs(): void {
+    for (const agent of this.agents.values()) {
+      if (agent.isHeld) agent.releaseGrab();
+    }
+  }
+
+  floorPositions(): Point[] {
+    return Array.from(this.agents.values())
+      .filter(agent => !agent.isAirborne)
+      .map(agent => ({ x: agent.x, y: agent.y }));
+  }
+
   update(time: number, delta: number) {
     // Vortex swirl physics
     if (this.vortexActive) {
@@ -288,20 +434,22 @@ export class AgentManager {
       if (!this.vortexActive) {
         agent.update(time, delta);
       }
-      // Y-based depth: entities further down screen render on top
-      agent.setDepth(7 + agent.y * 0.001);
+      // Floor-sorted depth by feet position: behind a cabinet above its base line, in front below it.
+      // Airborne avatars render above everything.
+      agent.setDepth(agentDepth(agent.y, 1, agent.isAirborne));
     }
     for (const sub of this.subagents.values()) {
       const parent = this.agents.get(sub.parentSessionId);
       if (parent) {
-        sub.setParentPosition(parent.x, parent.y);
+        const ground = parent.groundProjection;
+        sub.setParentPosition(ground.x, ground.y, parent.isAirborne);
       }
       sub.update(time, delta);
-      sub.setDepth(7 + sub.y * 0.001);
+      sub.setDepth(agentDepth(sub.y, 0.5, false));
     }
-    // Machines also need Y-based depth
+    // Machines share the same band, sorted by the cabinet base line.
     for (const machine of this.machines) {
-      machine.setDepth(6 + machine.y * 0.001);
+      machine.setDepth(machineDepth(machine.y));
     }
 
     // Periodically check if idle agents should visit tombstones (every 8s)
@@ -1346,7 +1494,7 @@ export class AgentManager {
     for (const [id, agent] of this.agents) {
       const activity = agent.sessionData.activity;
       const notBusy = activity === 'idle' || activity === 'waiting';
-      if (notBusy && !agent.isZombie && !this.flowerVisitors.has(id) && !done.has(id)) {
+      if (notBusy && !agent.isZombie && !agent.isGrabbed && !this.flowerVisitors.has(id) && !done.has(id)) {
         candidates.push(id);
       }
     }

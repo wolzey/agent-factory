@@ -63,6 +63,23 @@ This starts:
 
 Open `http://localhost:5173` in your browser to see the arcade.
 
+The arcade window follows Salt Lake City daylight and live weather. It uses a no-key
+Open-Meteo request every ten minutes and keeps the last rendered conditions if that
+request is unavailable. The view uses transparent pixel-art terrain masks recolored by
+the solar palette, plus five cloud depths that drift at different speeds. Rain crosses
+the outdoor view and the glass; snow uses distant haze behind the mountains and flakes
+in front of them. Local visual QA can force a state with `skyWeather` (`clear`,
+`cloudy`, `fog`, `rain`, `rain-heavy`, `snow`, `snow-heavy`, or `post-rain`), freeze an instant with `skyTime`, or
+run time forward with `skySpeed`:
+
+```text
+http://localhost:5173/?skyTime=2026-09-03T06:30:00-06:00&skySpeed=600&skyWeather=rain
+```
+
+These overrides only change your own browser. Adding `skyDebug` to the URL, or typing
+up, up, down, down, left, right, left, right, B, A on the arcade, toggles a draggable clock
+and a weather menu next to the title; the key toggle is remembered per browser.
+
 ### Exposing to your team
 
 Use ngrok, Tailscale, or any tunnel to expose port 4242:
@@ -235,6 +252,17 @@ Once logged in, an **Avatar Uplink** panel appears in the top-left. It lists eve
 
 Manual control affects only the visual avatar. The underlying Claude/Codex session keeps running, its activity indicators continue to update, and automatic workstation/lounge routing resumes when control is released. Control is also released on logout, disconnect, or session end. A newer browser authenticated as the same owner can take over an existing control lease.
 
+### Grabbing Avatars
+
+Once logged in, you can also pick full-size agent avatars up. Press and drag: the avatar lifts off the floor and dangles under your pointer, with its shirt pinched into a shaded fabric triangle from the shoulders to your cursor (long-haired avatars are lifted by a matching wedge of hair instead). Let go anywhere and it drops with gravity, squashes on landing, and resumes its server-authored route. Dropping directly on a free workstation assigns it to that station.
+
+- Any authenticated viewer can grab any avatar, not just their own.
+- The server hands out one grab lease per avatar, so two viewers never fight over the same sprite. Everyone in the room sees the same lift, dangle, and drop.
+- A grab is released automatically on pointer cancel, window blur, tab hidden, logout, disconnect, when the session ends, or when the avatar's owner takes manual control.
+- Dropping an avatar next to a free workstation seats it there; dropping it onto another avatar starts a quick rock-paper-scissors match. Idle avatars roam the lounge and wander to the window on their own.
+- Ordinary floor drops are temporary. A validated workstation drop updates the shared workstation assignment.
+- Avatars and workstations share one floor-sorted depth band keyed on the base line of each object. An avatar dropped behind a machine renders behind the top of the cabinet and walks back out in front of it, while the server-authored aisle routes keep agents in the visible lane between cabinets.
+
 A terminal-style command bar also appears at the bottom. Available commands:
 
 | Command | Description |
@@ -373,9 +401,9 @@ agent-factory/
 
 ### WebSocket (`ws://host:4242/ws`)
 
-**Server -> Client:** `world_snapshot`, `world_delta`, `effect`, `auth_result`, `control_result`, `control_revoked`. Deltas carry consecutive revisions; clients request a fresh snapshot if a gap is detected.
+**Server -> Client:** `world_snapshot`, `world_delta`, `effect`, `auth_result`, `control_result`, `control_revoked`, `grab_result`, `grab_update`, `grab_release`. Deltas carry consecutive revisions; clients request a fresh snapshot if a gap is detected.
 
-**Client -> Server:** `request_state`, `auth` (token login), `logout`, `control_claim`, `control_input`, `control_release`, `shoot`, `emote`, `chat`
+**Client -> Server:** `request_state`, `auth` (token login), `logout`, `control_claim`, `control_input`, `control_release`, `shoot`, `grab_start`, `grab_move`, `grab_end`, `emote`, `chat`
 
 ## License
 

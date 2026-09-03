@@ -18,7 +18,19 @@ import type {
   WorldSnapshot,
 } from '../shared/types.js';
 import { isInShotCorridor } from '../shared/world-geometry.js';
-import { positionAt, slotPosition, WORLD_LAYOUTS, zoneForActivity } from '../shared/world-layouts.js';
+import {
+  ARCADE_WINDOW_LOOKOUTS,
+  arcadePlantWaypoints,
+  arcadeWindowWaypoints,
+  nearestWorkstationSlot,
+  positionAt,
+  routeDistance,
+  slotPosition,
+  workstationWaypoints,
+  WORLD_LAYOUTS,
+  zoneForActivity,
+} from '../shared/world-layouts.js';
+import { createRpsRound, rpsDelayForPair, rpsPairKey } from '../shared/rps.js';
 import {
   DEFAULT_AVATAR,
   MAX_BROADCAST_RATE_MS,
@@ -40,6 +52,17 @@ const WORLD_SCHEMA_VERSION = 1;
 const CHAT_HISTORY_LIMIT = 100;
 const WORLD_MOVE_SPEED = 80;
 const VORTEX_DURATION_MS = 15_000;
+const IDLE_ROAM_DELAY_MS = 14_000;
+const WINDOW_GAZE_DURATION_MS = 8_000;
+const RPS_PROXIMITY_PX = 52;
+const RPS_PAIR_COOLDOWN_MS = 60_000;
+
+const DANCE_FLOOR_PATHS: Position[][] = [
+  [{ x: 582, y: 394 }, { x: 638, y: 414 }, { x: 704, y: 434 }],
+  [{ x: 752, y: 394 }, { x: 676, y: 414 }, { x: 620, y: 454 }],
+  [{ x: 620, y: 394 }, { x: 695, y: 434 }, { x: 744, y: 414 }],
+  [{ x: 714, y: 394 }, { x: 638, y: 434 }, { x: 690, y: 454 }],
+];
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -56,6 +79,10 @@ export class StateManager {
   private onChange: StateChangeCallback | null = null;
   private sessionNameLookup: ((id: string) => string | undefined) | null = null;
   private sessionAliveCheck: ((id: string) => boolean) | null = null;
+  private idleRoamAt = new Map<string, number>();
+  private idleExcursionCount = new Map<string, number>();
+  private windowVisitors = new Set<string>();
+  private rpsReadyAt = new Map<string, number>();
 
   constructor(
     private environment: EnvironmentType = 'arcade',
@@ -104,6 +131,54 @@ export class StateManager {
       }
     }
     return targets;
+  }
+
+  findRockPaperScissorsOpponent(
+    sessionId: string,
+    point: Position,
+    radius = 72,
+  ): WorldAgent | undefined {
+    let closest: { session: WorldAgent; distance: number } | undefined;
+    const timestamp = this.now();
+    for (const candidate of this.sessions.values()) {
+      if (candidate.sessionId === sessionId || candidate.activity === 'stopped' || candidate.manualControl) continue;
+      const position = this.currentWorldPosition(candidate, timestamp);
+      const distance = Math.hypot(position.x - point.x, position.y - point.y);
+      if (distance <= radius && (!closest || distance < closest.distance)) {
+        closest = { session: candidate, distance };
+      }
+    }
+    return closest?.session;
+  }
+
+  startRockPaperScissors(
+    firstSessionId: string,
+    secondSessionId: string,
+    timestamp = this.now(),
+    forced = false,
+  ): boolean {
+    if (firstSessionId === secondSessionId) return false;
+    const first = this.sessions.get(firstSessionId);
+    const second = this.sessions.get(secondSessionId);
+    if (!first || !second || first.activity === 'stopped' || second.activity === 'stopped') return false;
+    if (first.manualControl || second.manualControl) return false;
+
+    const pairKey = rpsPairKey(firstSessionId, secondSessionId);
+    if (!forced && timestamp < (this.rpsReadyAt.get(pairKey) ?? 0)) return false;
+    const round = createRpsRound(firstSessionId, secondSessionId, timestamp);
+    this.rpsReadyAt.set(pairKey, timestamp + RPS_PAIR_COOLDOWN_MS);
+    this.emit('effect', {
+      sessionId: firstSessionId,
+      effect: 'rps',
+      effectData: {
+        opponentSessionId: secondSessionId,
+        firstChoice: round.firstChoice,
+        secondChoice: round.secondChoice,
+        firstOutcome: round.firstOutcome,
+        secondOutcome: round.secondOutcome,
+      },
+    });
+    return true;
   }
 
   getSnapshot(): WorldSnapshot {
@@ -164,6 +239,152 @@ export class StateManager {
 
   advanceWorld(timestamp = this.now()): void {
     this.pruneWorld(timestamp, true);
+    if (this.environment !== 'arcade') return;
+
+    const changes: WorldChange[] = [];
+    for (const session of this.sessions.values()) {
+      if (session.activity !== 'idle' || session.manualControl) {
+        this.idleRoamAt.delete(session.sessionId);
+        this.windowVisitors.delete(session.sessionId);
+        continue;
+      }
+
+      const current = this.currentWorldPosition(session, timestamp);
+      if (session.world.movement && timestamp < session.world.movement.arrivesAt) continue;
+
+      const seed = Array.from(session.sessionId).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+      const scheduledAt = this.idleRoamAt.get(session.sessionId);
+      if (scheduledAt === undefined) {
+        this.idleRoamAt.set(session.sessionId, timestamp + IDLE_ROAM_DELAY_MS + (seed % 8_000));
+        continue;
+      }
+      if (timestamp < scheduledAt) continue;
+
+      const slotIndex = session.world.zone === 'idle' && session.world.slotIndex !== undefined
+        ? session.world.slotIndex
+        : this.allocateSlot(session.sessionId, 'idle');
+      const home = slotPosition(this.environment, 'idle', slotIndex);
+      if (this.windowVisitors.delete(session.sessionId)) {
+        const path = workstationWaypoints(
+          this.environment,
+          current,
+          home,
+          'manual',
+          'idle',
+          undefined,
+          slotIndex,
+        );
+        const distance = routeDistance(current, path, home);
+        const arrivesAt = timestamp + Math.ceil(distance / WORLD_MOVE_SPEED * 1_000);
+        session.world = {
+          zone: 'idle',
+          slotIndex,
+          position: current,
+          facing: 'down',
+          movement: {
+            from: current,
+            to: home,
+            waypoints: path,
+            startedAt: timestamp,
+            arrivesAt,
+          },
+        };
+        this.idleRoamAt.set(session.sessionId, arrivesAt + IDLE_ROAM_DELAY_MS + (seed % 8_000));
+        changes.push({ kind: 'agent_upsert', agent: clone(session) });
+        continue;
+      }
+
+      const excursionCount = (this.idleExcursionCount.get(session.sessionId) ?? 0) + 1;
+      this.idleExcursionCount.set(session.sessionId, excursionCount);
+      if ((seed + excursionCount) % 3 === 0) {
+        const occupiedLookouts = new Set(Array.from(this.windowVisitors, visitorId => {
+          const visitor = this.sessions.get(visitorId);
+          const destination = visitor?.world.movement?.to ?? visitor?.world.position;
+          return destination ? `${destination.x}:${destination.y}` : '';
+        }));
+        const start = seed % ARCADE_WINDOW_LOOKOUTS.length;
+        const lookout = Array.from({ length: ARCADE_WINDOW_LOOKOUTS.length }, (_, offset) =>
+          ARCADE_WINDOW_LOOKOUTS[(start + offset) % ARCADE_WINDOW_LOOKOUTS.length],
+        ).find(point => !occupiedLookouts.has(`${point.x}:${point.y}`));
+        if (!lookout) {
+          this.idleRoamAt.set(session.sessionId, timestamp + 2_000);
+          continue;
+        }
+        const path = arcadeWindowWaypoints(current, lookout);
+        const distance = routeDistance(current, path, lookout);
+        const arrivesAt = timestamp + Math.ceil(distance / WORLD_MOVE_SPEED * 1_000);
+        session.world = {
+          zone: 'idle',
+          slotIndex,
+          position: current,
+          facing: 'up',
+          movement: {
+            from: current,
+            to: lookout,
+            waypoints: path,
+            startedAt: timestamp,
+            arrivesAt,
+          },
+        };
+        this.windowVisitors.add(session.sessionId);
+        this.idleRoamAt.set(session.sessionId, arrivesAt + WINDOW_GAZE_DURATION_MS);
+        changes.push({ kind: 'agent_upsert', agent: clone(session) });
+        continue;
+      }
+
+      const path = arcadePlantWaypoints(
+        current,
+        DANCE_FLOOR_PATHS[seed % DANCE_FLOOR_PATHS.length],
+        home,
+      );
+      const distance = routeDistance(current, path, home);
+      const arrivesAt = timestamp + Math.ceil(distance / WORLD_MOVE_SPEED * 1_000);
+      session.world = {
+        zone: 'idle',
+        slotIndex,
+        position: current,
+        facing: 'right',
+        movement: {
+          from: current,
+          to: home,
+          waypoints: path.map(point => ({ ...point })),
+          startedAt: timestamp,
+          arrivesAt,
+        },
+      };
+      this.idleRoamAt.set(session.sessionId, arrivesAt + IDLE_ROAM_DELAY_MS + (seed % 8_000));
+      changes.push({ kind: 'agent_upsert', agent: clone(session) });
+    }
+    if (changes.length > 0) this.commit(changes, false, timestamp);
+    this.maybeStartRockPaperScissors(timestamp);
+  }
+
+  private maybeStartRockPaperScissors(timestamp: number): void {
+    const candidates = Array.from(this.sessions.values())
+      .filter(session => (
+        (session.activity === 'idle' || session.activity === 'waiting')
+        && !session.manualControl
+        && (!session.world.movement || timestamp >= session.world.movement.arrivesAt)
+      ))
+      .sort((a, b) => a.sessionId.localeCompare(b.sessionId));
+
+    for (let firstIndex = 0; firstIndex < candidates.length; firstIndex++) {
+      const first = candidates[firstIndex];
+      const firstPosition = this.currentWorldPosition(first, timestamp);
+      for (let secondIndex = firstIndex + 1; secondIndex < candidates.length; secondIndex++) {
+        const second = candidates[secondIndex];
+        const secondPosition = this.currentWorldPosition(second, timestamp);
+        if (Math.hypot(secondPosition.x - firstPosition.x, secondPosition.y - firstPosition.y) > RPS_PROXIMITY_PX) continue;
+
+        const pairKey = rpsPairKey(first.sessionId, second.sessionId);
+        const readyAt = this.rpsReadyAt.get(pairKey);
+        if (readyAt === undefined) {
+          this.rpsReadyAt.set(pairKey, timestamp + rpsDelayForPair(first.sessionId, second.sessionId));
+          continue;
+        }
+        if (timestamp >= readyAt && this.startRockPaperScissors(first.sessionId, second.sessionId, timestamp)) return;
+      }
+    }
   }
 
   handleHookEvent(payload: HookPayload): void {
@@ -413,6 +634,40 @@ export class StateManager {
 
   emitUpdate(session: WorldAgent): void {
     this.emit('update', { agent: session }, true);
+  }
+
+  /** Place an active agent at a specific free workstation and persist the shared assignment. */
+  assignWorkstation(sessionId: string, slotIndex: number): boolean {
+    const session = this.sessions.get(sessionId);
+    const slots = WORLD_LAYOUTS[this.environment].workSlots;
+    if (!session || session.activity === 'stopped' || !Number.isInteger(slotIndex) || !slots[slotIndex]) return false;
+
+    const occupiedByAgent = Array.from(this.sessions.values()).some(candidate =>
+      candidate.sessionId !== sessionId
+      && candidate.activity !== 'stopped'
+      && candidate.world.zone === 'work'
+      && candidate.world.slotIndex === slotIndex,
+    );
+    const occupiedByTombstone = Array.from(this.tombstones.values()).some(tombstone =>
+      tombstone.sessionId !== sessionId && tombstone.slotIndex === slotIndex,
+    );
+    if (occupiedByAgent || occupiedByTombstone) return false;
+
+    const timestamp = this.now();
+    session.world = {
+      zone: 'work',
+      slotIndex,
+      position: slotPosition(this.environment, 'work', slotIndex),
+      facing: 'up',
+    };
+    this.commit([{ kind: 'agent_upsert', agent: clone(session) }], true, timestamp);
+    return true;
+  }
+
+  /** Accept a client workstation hint only when the released pointer is actually near it. */
+  assignNearbyWorkstation(sessionId: string, slotIndex: number, position: Position): boolean {
+    if (nearestWorkstationSlot(this.environment, position) !== slotIndex) return false;
+    return this.assignWorkstation(sessionId, slotIndex);
   }
 
   setManualControl(sessionId: string, control: ManualControlState): WorldAgent | undefined {
@@ -820,9 +1075,19 @@ export class StateManager {
       return;
     }
 
-    const dx = target.x - current.x;
-    const dy = target.y - current.y;
-    const distance = Math.hypot(dx, dy);
+    const waypoints = workstationWaypoints(
+      this.environment,
+      current,
+      target,
+      session.world.zone,
+      zone,
+      session.world.slotIndex,
+      slotIndex,
+    );
+    const firstLeg = waypoints[0] ?? target;
+    const dx = firstLeg.x - current.x;
+    const dy = firstLeg.y - current.y;
+    const distance = routeDistance(current, waypoints, target);
     const facing: FacingDirection = Math.abs(dx) > Math.abs(dy)
       ? dx >= 0 ? 'right' : 'left'
       : dy >= 0 ? 'down' : 'up';
@@ -836,6 +1101,7 @@ export class StateManager {
         : {
             from: current,
             to: target,
+            waypoints: waypoints.length ? waypoints : undefined,
             startedAt: timestamp,
             arrivesAt: timestamp + Math.ceil(distance / WORLD_MOVE_SPEED * 1_000),
           },

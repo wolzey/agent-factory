@@ -10,6 +10,9 @@ export const CONTROL_INPUT_TIMEOUT_MS = 1_500;
 export const CONTROL_SHOOT_COOLDOWN_MS = 300;
 export const CONTROL_MOVE_SPEED = 80; // pixels per second
 export const CONTROL_WORLD_BOUNDS = { minX: 18, maxX: 782, minY: 58, maxY: 462 } as const;
+export const GRAB_POINTER_BOUNDS = { minX: 18, maxX: 782, minY: -82, maxY: 462 } as const;
+export const GRAB_HEARTBEAT_MS = 500; // holder re-sends its pointer at least this often
+export const GRAB_INPUT_TIMEOUT_MS = 3_000; // server drops a grab lease that goes silent this long
 export const CHAT_MESSAGE_MAX_LENGTH = 200;
 export const CHAT_FADE_TIMEOUT_MS = 15_000; // 15 seconds before chat fades
 

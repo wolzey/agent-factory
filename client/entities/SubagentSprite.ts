@@ -1,5 +1,8 @@
 import Phaser from 'phaser';
 import type { SubagentInfo } from '@shared/types';
+import type { Point } from '../grab/physics';
+
+const SUBAGENT_SCALE = 0.5;
 
 // Distinct colors for each subagent so they're visually distinguishable
 const SUBAGENT_COLORS = [
@@ -25,6 +28,7 @@ export class SubagentSprite extends Phaser.GameObjects.Container {
 
   private parentX = 0;
   private parentY = 0;
+  private surroundingShadow = false;
 
   public isZombie = false;
 
@@ -52,10 +56,9 @@ export class SubagentSprite extends Phaser.GameObjects.Container {
 
     // Zombie subagents get the sickly green tint, normal ones get distinct colors
     const tint = isZombie ? 0x448833 : SUBAGENT_COLORS[siblingIndex % SUBAGENT_COLORS.length];
-
     const spriteKey = `agent_${spriteIndex % 8}`;
     this.sprite = scene.add.sprite(0, 0, spriteKey, 1);
-    this.sprite.setScale(0.5);
+    this.sprite.setScale(SUBAGENT_SCALE);
     this.sprite.setOrigin(0.5, 0.5);
     this.sprite.setTint(tint);
     this.sprite.setAlpha(isZombie ? 0.75 : 0.85);
@@ -100,15 +103,28 @@ export class SubagentSprite extends Phaser.GameObjects.Container {
   }
 
   update(_time: number, delta: number) {
-    // Orbit around parent position
-    this.orbitAngle += (this.orbitSpeed * delta) / 1000;
-    this.x = this.parentX + Math.cos(this.orbitAngle) * this.orbitRadius;
-    this.y = this.parentY + Math.sin(this.orbitAngle) * (this.orbitRadius * 0.4); // Elliptical orbit
+    // When the parent is airborne, tighten and quicken the orbit so the subagents
+    // read as a little group gathered around its moving floor shadow.
+    const speed = this.surroundingShadow ? this.orbitSpeed * 1.15 : this.orbitSpeed;
+    this.orbitAngle += (speed * delta) / 1000;
+    const orbit = this.orbitPoint();
+    this.x = orbit.x;
+    this.y = orbit.y;
   }
 
-  setParentPosition(x: number, y: number) {
+  /** Position on the elliptical orbit for the current angle. */
+  private orbitPoint(): Point {
+    const radius = this.surroundingShadow ? this.orbitRadius + 8 : this.orbitRadius;
+    return {
+      x: this.parentX + Math.cos(this.orbitAngle) * radius,
+      y: this.parentY + Math.sin(this.orbitAngle) * (radius * 0.42),
+    };
+  }
+
+  setParentPosition(x: number, y: number, surroundingShadow = false) {
     this.parentX = x;
     this.parentY = y;
+    this.surroundingShadow = surroundingShadow;
   }
 
   despawn(onComplete?: () => void) {

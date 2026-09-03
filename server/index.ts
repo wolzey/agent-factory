@@ -13,6 +13,7 @@ import { startStaleReaper } from './cleanup.js';
 import { SessionRegistryWatcher } from './session-registry.js';
 import { TokenAuth, loadOrCreateSecret } from './auth.js';
 import { ControlManager } from './control-manager.js';
+import { GrabManager, parseGrabTarget } from './grab-manager.js';
 import { DEFAULT_PORT, DEFAULT_SERVER_CONFIG, VALID_EMOTES, CHAT_MESSAGE_MAX_LENGTH } from '../shared/constants.js';
 import { loadSessions } from './session-store.js';
 import { LibSqlWorldRepository } from './persistence/libsql-world-repository.js';
@@ -104,6 +105,7 @@ async function main() {
   const persistence = new WorldPersistence(repository);
   const broadcast = new BroadcastManager();
   const controls = new ControlManager(state, broadcast);
+  const grabs = new GrabManager(state, broadcast);
 
   // HTTP routes
   registerHookRoutes(app, state, broadcast, serverConfig, auth, () => persistence.status());
@@ -113,9 +115,14 @@ async function main() {
     broadcast.add(socket);
     // Send one complete, revisioned world on connect.
     broadcast.sendWorldSnapshot(socket, state.getSnapshot());
+    grabs.sendActive(socket);
 
-    socket.on('close', () => controls.releaseSocket(socket, 'Browser disconnected'));
-    socket.on('error', () => controls.releaseSocket(socket, 'Browser disconnected'));
+    const dropSocket = (reason: string) => {
+      controls.releaseSocket(socket, reason);
+      grabs.releaseSocket(socket, reason);
+    };
+    socket.on('close', () => dropSocket('Browser disconnected'));
+    socket.on('error', () => dropSocket('Browser disconnected'));
 
     socket.on('message', (raw: string | Buffer) => {
       try {
@@ -128,11 +135,11 @@ async function main() {
           case 'auth': {
             const username = auth.validateToken(String(msg.token || ''));
             if (username) {
-              controls.releaseSocket(socket, 'Browser re-authenticated');
+              dropSocket('Browser re-authenticated');
               broadcast.authenticateSocket(socket, username);
               broadcast.sendTo(socket, { type: 'auth_result', success: true, username });
             } else {
-              controls.releaseSocket(socket, 'Authentication failed');
+              dropSocket('Authentication failed');
               broadcast.deauthenticateSocket(socket);
               broadcast.sendTo(socket, { type: 'auth_result', success: false, error: 'Invalid token' });
             }
@@ -140,7 +147,7 @@ async function main() {
           }
 
           case 'logout':
-            controls.releaseSocket(socket, 'Logged out');
+            dropSocket('Logged out');
             broadcast.deauthenticateSocket(socket);
             break;
 
@@ -174,6 +181,25 @@ async function main() {
               socket,
               broadcast.getSocketUsername(socket),
               String(msg.sessionId || ''),
+            );
+            break;
+
+          case 'grab_start':
+            grabs.begin(socket, broadcast.getSocketUsername(socket), parseGrabTarget(msg), Number(msg.x), Number(msg.y));
+            break;
+
+          case 'grab_move':
+            grabs.move(socket, broadcast.getSocketUsername(socket), parseGrabTarget(msg), Number(msg.x), Number(msg.y));
+            break;
+
+          case 'grab_end':
+            grabs.end(
+              socket,
+              broadcast.getSocketUsername(socket),
+              parseGrabTarget(msg),
+              Number(msg.x),
+              Number(msg.y),
+              Number.isInteger(msg.workstationSlot) ? Number(msg.workstationSlot) : undefined,
             );
             break;
 
@@ -237,10 +263,14 @@ async function main() {
     for (const change of notification.delta.changes) {
       if (change.kind === 'agent_remove') {
         controls.releaseSession(change.sessionId, 'Agent session ended');
+        grabs.releaseSession(change.sessionId, 'Agent session ended');
       } else if (change.kind === 'agent_upsert'
         && change.agent.activity === 'stopped'
         && change.agent.manualControl) {
         controls.releaseSession(change.agent.sessionId, 'Agent session ended');
+        grabs.syncSession(change.agent);
+      } else if (change.kind === 'agent_upsert') {
+        grabs.syncSession(change.agent);
       }
     }
   });
@@ -252,6 +282,7 @@ async function main() {
   const staleTimer = startStaleReaper(state);
   const worldTimer = setInterval(() => state.advanceWorld(), 1_000);
   controls.start();
+  grabs.start();
 
   let shuttingDown = false;
   const shutdown = async () => {
@@ -266,6 +297,7 @@ async function main() {
     clearInterval(worldTimer);
     registry.stop();
     controls.stop();
+    grabs.stop();
     await persistence.close();
   });
 

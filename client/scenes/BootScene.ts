@@ -116,6 +116,82 @@ const HAIR_STYLES: HairDrawFn[] = [
   },
 ];
 
+// Deliberate rear views for every supported haircut. These avoid front-only
+// details and let longer styles continue behind the neck and shoulders.
+const BACK_HAIR_STYLES: HairDrawFn[] = [
+  // 0: Short flat
+  (ctx, x, y, hc) => {
+    ctx.fillStyle = hc;
+    ctx.fillRect(x + 10, y, 12, 6);
+    ctx.fillRect(x + 9, y + 2, 2, 5);
+    ctx.fillRect(x + 21, y + 2, 2, 5);
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.fillRect(x + 12, y + 1, 7, 1);
+  },
+  // 1: Spiky
+  (ctx, x, y, hc) => {
+    ctx.fillStyle = hc;
+    ctx.fillRect(x + 10, y + 1, 12, 6);
+    ctx.fillRect(x + 10, y - 1, 3, 3);
+    ctx.fillRect(x + 14, y - 3, 3, 4);
+    ctx.fillRect(x + 19, y - 2, 3, 4);
+    ctx.fillRect(x + 9, y + 3, 2, 4);
+    ctx.fillRect(x + 21, y + 3, 2, 4);
+  },
+  // 2: Long hair, visible down the back and outside both shoulders
+  (ctx, x, y, hc) => {
+    ctx.fillStyle = hc;
+    ctx.fillRect(x + 9, y, 14, 10);
+    ctx.fillRect(x + 8, y + 4, 3, 13);
+    ctx.fillRect(x + 21, y + 4, 3, 13);
+    ctx.fillRect(x + 11, y + 7, 10, 8);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(x + 12, y + 1, 7, 2);
+  },
+  // 3: Cap
+  (ctx, x, y, _hc, bc) => {
+    ctx.fillStyle = bc;
+    ctx.fillRect(x + 8, y, 16, 6);
+    ctx.fillRect(x + 7, y + 4, 18, 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fillRect(x + 9, y + 5, 14, 1);
+  },
+  // 4: Mohawk
+  (ctx, x, y, hc) => {
+    ctx.fillStyle = hc;
+    ctx.fillRect(x + 14, y - 4, 4, 10);
+    ctx.fillRect(x + 12, y + 2, 8, 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.fillRect(x + 15, y - 3, 1, 6);
+  },
+  // 5: Bald
+  (ctx, x, y) => {
+    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    ctx.fillRect(x + 13, y, 6, 1);
+    ctx.fillStyle = 'rgba(0,0,0,0.1)';
+    ctx.fillRect(x + 11, y + 6, 10, 1);
+  },
+  // 6: Afro
+  (ctx, x, y, hc) => {
+    ctx.fillStyle = hc;
+    ctx.fillRect(x + 8, y - 2, 16, 10);
+    ctx.fillRect(x + 6, y, 20, 6);
+    ctx.fillRect(x + 9, y + 6, 14, 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(x + 11, y - 1, 7, 2);
+  },
+  // 7: Bandana
+  (ctx, x, y, _hc, bc) => {
+    ctx.fillStyle = bc;
+    ctx.fillRect(x + 8, y, 16, 5);
+    ctx.fillRect(x + 6, y + 3, 20, 2);
+    ctx.fillRect(x + 24, y + 5, 3, 2);
+    ctx.fillRect(x + 25, y + 7, 2, 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.16)';
+    ctx.fillRect(x + 9, y + 4, 14, 1);
+  },
+];
+
 // Mouth style drawing functions (fixed colors per style)
 type FaceDrawFn = (ctx: CanvasRenderingContext2D, x: number, y: number, bounce: number) => void;
 
@@ -499,7 +575,31 @@ export class BootScene extends Phaser.Scene {
     super({ key: 'BootScene' });
   }
 
-  preload() {}
+  preload() {
+    this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
+      console.warn(`[boot] asset failed to load, drawing without it: ${file.key}`);
+    });
+    this.load.image('sky_mountains_distant', new URL('../assets/skyline/mountains-distant.png', import.meta.url).href);
+    this.load.image('sky_mountains_main', new URL('../assets/skyline/mountains-main.png', import.meta.url).href);
+    this.load.image('sky_foothills_front', new URL('../assets/skyline/foothills-front.png', import.meta.url).href);
+    this.load.image('sky_clouds_distant', new URL('../assets/skyline/clouds-distant.png', import.meta.url).href);
+    this.load.image('sky_clouds_foreground', new URL('../assets/skyline/clouds-foreground.png', import.meta.url).href);
+    this.load.image('sky_clouds_cirrus', new URL('../assets/skyline/clouds-cirrus.png', import.meta.url).href);
+    this.load.image('sky_clouds_cumulus', new URL('../assets/skyline/clouds-cumulus.png', import.meta.url).href);
+    this.load.image('sky_clouds_storm', new URL('../assets/skyline/clouds-storm.png', import.meta.url).href);
+    this.load.image('prop_window_monstera', new URL('../assets/props/plant-window-monstera-room-v2.png', import.meta.url).href);
+    this.load.image('prop_window_rubber', new URL('../assets/props/plant-window-rubber-room-v2.png', import.meta.url).href);
+    this.load.image('prop_window_fern', new URL('../assets/props/plant-window-fern-room-v2.png', import.meta.url).href);
+    this.load.image('prop_window_palm', new URL('../assets/props/plant-window-bird-room-v2.png', import.meta.url).href);
+    this.load.image('prop_window_pothos', new URL('../assets/props/plant-window-pothos-room-v2.png', import.meta.url).href);
+    this.load.image('prop_window_calathea', new URL('../assets/props/plant-window-calathea-room-v2.png', import.meta.url).href);
+    this.load.image('prop_floor_palm', new URL('../assets/props/plant-floor-palm-room-v2.png', import.meta.url).href);
+    this.load.image('prop_floor_snake', new URL('../assets/props/plant-floor-snake-room-v2.png', import.meta.url).href);
+    this.load.spritesheet('rps_icons', new URL('../assets/props/rps-icons.png', import.meta.url).href, {
+      frameWidth: 24,
+      frameHeight: 24,
+    });
+  }
 
   async create() {
     // Fetch server config to determine environment
@@ -659,8 +759,24 @@ export class BootScene extends Phaser.Scene {
     const lightColor = `rgb(${Math.min(255, r + 40)}, ${Math.min(255, g + 40)}, ${Math.min(255, b + 40)})`;
     const skinColor = colors.skinTone;
     const hairColor = colors.hairColor;
+    const facesAway = anim === 'work' || anim === 'walk_up';
 
     ctx.clearRect(x, y, size, size);
+
+    if (anim === 'walk_left' || anim === 'walk_right') {
+      this.drawSideCharacter(
+        ctx,
+        x,
+        y,
+        anim === 'walk_right' ? 'right' : 'left',
+        frame,
+        colors,
+        bodyColor,
+        darkColor,
+        lightColor,
+      );
+      return;
+    }
 
     const bounce = (anim.startsWith('walk') && frame % 2 === 0) ? -2 : 0;
     const breathe = (anim === 'idle' && frame === 2) ? 1 : 0;
@@ -681,50 +797,45 @@ export class BootScene extends Phaser.Scene {
     ctx.fillRect(x + 13, y + 12 + bounce, 6, 1);
 
     // ── Hair / hat ──
-    const drawHair = HAIR_STYLES[colors.hairStyle % HAIR_STYLES.length];
+    const hairStyles = facesAway ? BACK_HAIR_STYLES : HAIR_STYLES;
+    const drawHair = hairStyles[colors.hairStyle % hairStyles.length];
     drawHair(ctx, x, y + 4 + bounce, hairColor, bodyColor);
 
-    // ── Eyes ──
-    const isBlink = anim === 'idle' && frame === 2;
-    const eyeY = anim === 'work' ? 9 : 8;
-    if (isBlink) {
-      ctx.fillStyle = '#000';
-      ctx.fillRect(x + 12, y + eyeY + 1 + bounce, 3, 1);
-      ctx.fillRect(x + 18, y + eyeY + 1 + bounce, 3, 1);
-    } else {
-      // Eye whites
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(x + 12, y + eyeY + bounce, 3, 3);
-      ctx.fillRect(x + 18, y + eyeY + bounce, 3, 3);
-      // Iris
-      ctx.fillStyle = '#4466aa';
-      ctx.fillRect(x + 13, y + eyeY + bounce, 2, 3);
-      ctx.fillRect(x + 19, y + eyeY + bounce, 2, 3);
-      // Pupil
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(x + 13, y + eyeY + 1 + bounce, 2, 1);
-      ctx.fillRect(x + 19, y + eyeY + 1 + bounce, 2, 1);
-      // Highlight
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(x + 14, y + eyeY + bounce, 1, 1);
-      ctx.fillRect(x + 20, y + eyeY + bounce, 1, 1);
+    if (!facesAway) {
+      // ── Face ──
+      const isBlink = anim === 'idle' && frame === 2;
+      const eyeY = 8;
+      if (isBlink) {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x + 12, y + eyeY + 1 + bounce, 3, 1);
+        ctx.fillRect(x + 18, y + eyeY + 1 + bounce, 3, 1);
+      } else {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(x + 12, y + eyeY + bounce, 3, 3);
+        ctx.fillRect(x + 18, y + eyeY + bounce, 3, 3);
+        ctx.fillStyle = '#4466aa';
+        ctx.fillRect(x + 13, y + eyeY + bounce, 2, 3);
+        ctx.fillRect(x + 19, y + eyeY + bounce, 2, 3);
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(x + 13, y + eyeY + 1 + bounce, 2, 1);
+        ctx.fillRect(x + 19, y + eyeY + 1 + bounce, 2, 1);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(x + 14, y + eyeY + bounce, 1, 1);
+        ctx.fillRect(x + 20, y + eyeY + bounce, 1, 1);
+      }
+
+      ctx.fillStyle = 'rgba(0,0,0,0.12)';
+      ctx.fillRect(x + 16, y + 10 + bounce, 1, 2);
+
+      const drawMouth = MOUTH_STYLES[colors.mouthStyle % MOUTH_STYLES.length];
+      drawMouth(ctx, x, y, bounce);
+
+      const drawBeard = FACIAL_HAIR_STYLES[colors.facialHair % FACIAL_HAIR_STYLES.length];
+      drawBeard(ctx, x, y, bounce, hairColor);
+
+      const drawFaceAcc = FACE_ACCESSORIES[colors.faceAccessory % FACE_ACCESSORIES.length];
+      drawFaceAcc(ctx, x, y, bounce, eyeY);
     }
-
-    // ── Nose (subtle shadow) ──
-    ctx.fillStyle = 'rgba(0,0,0,0.12)';
-    ctx.fillRect(x + 16, y + 10 + bounce, 1, 2);
-
-    // ── Mouth ──
-    const drawMouth = MOUTH_STYLES[colors.mouthStyle % MOUTH_STYLES.length];
-    drawMouth(ctx, x, y, bounce);
-
-    // ── Facial hair ──
-    const drawBeard = FACIAL_HAIR_STYLES[colors.facialHair % FACIAL_HAIR_STYLES.length];
-    drawBeard(ctx, x, y, bounce, hairColor);
-
-    // ── Face accessory ──
-    const drawFaceAcc = FACE_ACCESSORIES[colors.faceAccessory % FACE_ACCESSORIES.length];
-    drawFaceAcc(ctx, x, y, bounce, eyeY);
 
     // ── Head accessory ──
     const drawHeadAcc = HEAD_ACCESSORIES[colors.headAccessory % HEAD_ACCESSORIES.length];
@@ -867,6 +978,91 @@ export class BootScene extends Phaser.Scene {
     } else {
       ctx.fillRect(x + 10, y + 29, 4, 2);
       ctx.fillRect(x + 18, y + 29, 4, 2);
+    }
+  }
+
+  private drawSideCharacter(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    facing: 'left' | 'right',
+    frame: number,
+    colors: { hairStyle: number; hairColor: string; skinTone: string; shirtColor: string; pantsColor: string; shoeColor: string; facialHair: number; mouthStyle: number; faceAccessory: number; headAccessory: number; shirtDesign: number },
+    bodyColor: string,
+    darkColor: string,
+    lightColor: string,
+  ) {
+    const bounce = frame % 2 === 0 ? -1 : 0;
+    const stride = frame % 2 === 0 ? 2 : -2;
+    const rect = (left: number, top: number, width: number, height: number, color: string) => {
+      ctx.fillStyle = color;
+      const px = facing === 'right' ? x + left : x + 32 - left - width;
+      ctx.fillRect(px, y + top + bounce, width, height);
+    };
+
+    // Rear arm and leg sit behind the torso so the silhouette clearly reads in profile.
+    rect(10, 18 - stride, 3, 7, darkColor);
+    rect(11, 24 - stride, 4, 6, colors.pantsColor);
+    rect(10, 29 - stride, 6, 2, colors.shoeColor);
+
+    // Long hair, afros, caps and bandanas retain a recognizable rear silhouette.
+    const hairStyle = colors.hairStyle % 8;
+    if (hairStyle === 2) {
+      rect(11, 4, 9, 15, colors.hairColor);
+      rect(9, 10, 4, 11, colors.hairColor);
+    } else if (hairStyle === 6) {
+      rect(8, 2, 12, 12, colors.hairColor);
+      rect(10, 0, 8, 3, colors.hairColor);
+      rect(6, 5, 4, 7, colors.hairColor);
+    } else if (hairStyle === 4) {
+      rect(12, 0, 3, 5, colors.hairColor);
+      rect(9, 2, 8, 4, colors.hairColor);
+    } else if (hairStyle === 3) {
+      rect(9, 3, 11, 4, bodyColor);
+      rect(7, 6, 15, 2, darkColor);
+    } else if (hairStyle === 7) {
+      rect(8, 3, 12, 5, colors.hairColor);
+      rect(7, 7, 14, 2, colors.hairColor);
+      rect(8, 9, 3, 4, colors.hairColor);
+    } else if (hairStyle !== 5) {
+      rect(9, 3, 11, 5, colors.hairColor);
+      if (hairStyle === 1) rect(8, 1, 3, 3, colors.hairColor);
+    }
+
+    // Head profile: one eye and a two-pixel nose on the leading edge.
+    rect(11, 5, 10, 9, colors.skinTone);
+    rect(19, 8, 3, 4, colors.skinTone);
+    rect(18, 8, 2, 2, '#ffffff');
+    rect(19, 8, 1, 2, '#1b2440');
+    rect(20, 12, 2, 1, 'rgba(0,0,0,0.18)');
+    if (colors.facialHair > 0) rect(18, 12, 4, 2, colors.hairColor);
+
+    rect(14, 14, 4, 2, colors.skinTone);
+
+    // Narrow profile torso with a lit leading edge.
+    rect(10, 15, 11, 9, bodyColor);
+    rect(10, 16, 2, 6, darkColor);
+    rect(19, 16, 2, 6, lightColor);
+    rect(14, 15, 5, 1, lightColor);
+    rect(11, 23, 10, 1, '#443322');
+
+    // Front arm and leg swing opposite the rear pair.
+    rect(19, 17 + stride, 3, 7, bodyColor);
+    rect(20, 22 + stride, 3, 2, colors.skinTone);
+    rect(17, 24 + stride, 4, 6, colors.pantsColor);
+    rect(17, 29 + stride, 6, 2, colors.shoeColor);
+    rect(17, 30 + stride, 6, 1, '#111111');
+
+    // Keep the avatar's head accessory readable from the side without reverting to a front view.
+    if (colors.headAccessory === 1) {
+      rect(10, 0, 11, 3, '#ffd700');
+      rect(12, -2, 2, 3, '#ffd700');
+      rect(18, -1, 2, 2, '#ffd700');
+    } else if (colors.headAccessory === 2) {
+      rect(11, -3, 8, 7, '#111111');
+      rect(8, 3, 14, 2, '#111111');
+    } else if (colors.headAccessory === 3) {
+      rect(10, 0, 11, 1, '#ffdd44');
     }
   }
 

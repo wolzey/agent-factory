@@ -13,6 +13,7 @@
     html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a1a; }
     body { display: flex; }
     #game-container {
+      position: relative;
       flex: 1;
       height: 100vh;
       min-width: 0;
@@ -20,7 +21,34 @@
       align-items: center;
       justify-content: center;
     }
+
+    /* Keyboard twins of the skyline hover targets: invisible, pointer-transparent, focusable. */
+    .skyline-partners {
+      position: absolute;
+      inset: 0;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      pointer-events: none;
+    }
+    .skyline-partners li { display: contents; }
+    .skyline-partners button {
+      position: absolute;
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      border: 0;
+      pointer-events: none;
+      opacity: 0;
+    }
+    .skyline-partners button:focus-visible {
+      opacity: 1;
+      outline: 1px solid var(--accent-color);
+      outline-offset: 1px;
+    }
     canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+    body.is-grabbing canvas { cursor: grabbing !important; }
+    body.is-grabbing #tooltip { display: none !important; }
 
     /* Tooltip overlay */
     #tooltip {

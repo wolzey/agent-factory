@@ -47,11 +47,15 @@ export interface Position {
 }
 
 export type FacingDirection = 'up' | 'down' | 'left' | 'right';
+export type RpsChoice = 'rock' | 'paper' | 'scissors';
+export type RpsOutcome = 'win' | 'lose' | 'draw';
 export type WorldZone = 'entrance' | 'work' | 'waiting' | 'idle' | 'manual';
 
 export interface WorldMovement {
   from: Position;
   to: Position;
+  /** Server-authored intermediate points used to route around physical props. */
+  waypoints?: Position[];
   startedAt: number;
   arrivesAt: number;
 }
@@ -77,6 +81,20 @@ export interface ControlInputState {
   down: boolean;
   left: boolean;
   right: boolean;
+}
+
+// === Tactile Avatar Grab ===
+// A viewer can lift one avatar at a time. The server hands out a short lease so two
+// viewers never fight over one sprite, and mirrors the holder's pointer to the room.
+// Grab state is ephemeral: it never lands on AgentSession or on disk.
+export interface GrabTarget {
+  sessionId: string;
+}
+
+export interface GrabState extends GrabTarget {
+  username: string; // viewer holding the lease
+  x: number; // holder's pointer, world space
+  y: number;
 }
 
 // === Agent Session (Server State) ===
@@ -177,7 +195,8 @@ export interface ChatMessage {
 
 // === WebSocket Messages: Server -> Browser ===
 export type WSMessageToClient =
-  | { type: 'world_snapshot'; snapshot: WorldSnapshot }
+  /** `buildId` identifies the running server build; a client that sees it change reloads once. */
+  | { type: 'world_snapshot'; snapshot: WorldSnapshot; buildId?: string }
   | { type: 'world_delta'; delta: WorldDelta }
   | { type: 'full_state'; agents: AgentSession[] }
   | { type: 'agent_update'; agent: AgentSession }
@@ -187,6 +206,9 @@ export type WSMessageToClient =
   | { type: 'auth_result'; success: boolean; username?: string; error?: string }
   | { type: 'control_result'; success: boolean; sessionId?: string; action: 'claim' | 'release'; error?: string }
   | { type: 'control_revoked'; sessionId: string; reason: string }
+  | { type: 'grab_result'; success: boolean; action: 'start' | 'end'; sessionId: string; error?: string }
+  | { type: 'grab_update'; grab: GrabState }
+  | { type: 'grab_release'; sessionId: string; x: number; y: number; reason: string }
   | { type: 'global_effect'; effect: GlobalEffectType; data?: Record<string, unknown> };
 
 // === Global Effect Types ===
@@ -202,6 +224,9 @@ export type WSMessageToServer =
   | { type: 'control_input'; sessionId: string; input: ControlInputState }
   | { type: 'control_release'; sessionId: string }
   | { type: 'shoot'; sessionId: string }
+  | { type: 'grab_start'; sessionId: string; x: number; y: number }
+  | { type: 'grab_move'; sessionId: string; x: number; y: number }
+  | { type: 'grab_end'; sessionId: string; x: number; y: number; workstationSlot?: number }
   | { type: 'emote'; emote: string; sessionId?: string }
   | { type: 'chat'; message: string };
 
@@ -228,7 +253,8 @@ export type EffectType =
   | 'worktree_remove'
   | 'elicitation'
   | 'commit'
-  | 'pr_merge';
+  | 'pr_merge'
+  | 'rps';
 
 // === User Config File Format ===
 export interface UserConfig {
