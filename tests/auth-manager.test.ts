@@ -1,7 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthManager } from '../client/auth/AuthManager';
 
 let values: Map<string, string>;
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 beforeEach(() => {
   values = new Map([
@@ -27,6 +31,25 @@ function sessionResponse() {
 }
 
 describe('AuthManager cookie session lifecycle', () => {
+  it('invokes the default global fetch as a free function, not as a method', async () => {
+    // Browsers reject `fetch` called with a foreign `this` ("Illegal invocation"),
+    // and loadSession's catch turned that into a silent logged-out state and a
+    // misleading "link invalid or expired" error. Storing `fetch` in a field and
+    // calling `this.fetcher(...)` is exactly that shape; this pins the wrapper.
+    const receivers: unknown[] = [];
+    vi.stubGlobal('fetch', function (this: unknown) {
+      receivers.push(this);
+      return Promise.resolve(sessionResponse());
+    });
+
+    const auth = new AuthManager();
+    await expect(auth.restoreSession()).resolves.toBe(true);
+    expect(receivers).toHaveLength(1);
+    // A free call in an ES module has `this === undefined`; the bug had it as the
+    // AuthManager instance, which this assertion prints on failure.
+    expect(receivers[0]).toBeUndefined();
+  });
+
   it('removes legacy browser token storage on construction', () => {
     const auth = new AuthManager(vi.fn<typeof fetch>());
     expect(auth.isLoggedIn).toBe(false);

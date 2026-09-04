@@ -10,7 +10,11 @@ export class AuthManager {
   private _username: string | null = null;
   private _ownerId: string | null = null;
 
-  constructor(private fetcher: typeof fetch = fetch) {
+  // Wrapped rather than stored bare: `this.fetcher(...)` would invoke the
+  // browser's fetch with this AuthManager as `this`, which every browser
+  // rejects ("Illegal invocation"), and loadSession's catch turned that into a
+  // silent logged-out state and a misleading "link invalid or expired" error.
+  constructor(private fetcher: typeof fetch = (input, init) => fetch(input, init)) {
     this.clearLegacyStorage();
   }
 
