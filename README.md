@@ -110,7 +110,7 @@ Use the URL and token returned by the final two commands for the Render Blueprin
 
 | Variable | Required on Render | Purpose |
 |----------|--------------------|---------|
-| `AF_TOKEN_SECRET` | Yes | Secret used to sign login tokens. The blueprint generates this value; do not expose or reuse it elsewhere. |
+| `AF_TOKEN_SECRET` | Yes | Secret used to derive server-specific owner IDs and sign browser cookies. The blueprint generates this value; do not expose or reuse it elsewhere. |
 | `TURSO_DATABASE_URL` | Yes | Durable libSQL database URL. Entered securely during Blueprint setup. |
 | `TURSO_AUTH_TOKEN` | Yes | Database auth token. Entered securely during Blueprint setup. |
 | `HOST` | Yes | Must be `0.0.0.0` so Render can reach the server. Preconfigured by the blueprint. |
@@ -138,9 +138,9 @@ Claude/Codex Hooks  ──curl POST──>  Fastify Server  ──WebSocket─�
 ```
 
 1. **Hooks** fire on Claude Code/Codex events (session start/end, tool use, subagent spawn/stop)
-2. The hook script reads `~/.config/agent-factory/config.json` for your identity
-3. It `curl`s the event data to the server (fire-and-forget, never blocks Claude)
-4. The server updates one authoritative, revisioned world and checkpoints it to libSQL
+2. The hook script reads display settings from `config.json` and a private installation credential from `identity.json`
+3. It authenticates and sends the event to the server (fire-and-forget, never blocks Claude)
+4. The server derives an opaque installation owner, updates the authoritative world, and checkpoints it to libSQL
 5. The server broadcasts ordered deltas; reconnecting browsers receive a complete snapshot
 6. Browsers interpolate server-timestamped movement and render cosmetic animation locally
 
@@ -169,19 +169,15 @@ Claude/Codex Hooks  ──curl POST──>  Fastify Server  ──WebSocket─�
 
 ## Browser Commands
 
-You can send emotes and chat directly from the browser. First, get your auth token:
+You can send emotes and chat directly from the browser. On the machine running your agents, run:
 
 ```bash
-agent-factory token
+agent-factory login
 ```
 
-This prints a token like `d29semV5.a1b2c3d4...`. Copy it, then:
+The CLI authenticates this installation, creates a one-time 60-second handoff, and opens Agent Factory in your default browser. The handoff contains no device credential and is removed from the URL immediately after exchange.
 
-1. Open the Agent Factory page in your browser
-2. Click **Login** (top-left corner)
-3. Paste your token and click **Login**
-
-Once logged in, an **Avatar Uplink** panel appears in the top-left. It lists every active top-level agent session attributed to your authenticated username. Choose a session and click **Take Control**; the server validates ownership before enabling controls.
+Once logged in, an **Avatar Uplink** panel appears in the top-left. It lists active top-level agents owned by this installation. Choose a session and click **Take Control**; ownership is independent of the editable display username.
 
 ### Web Avatar Controls
 
@@ -206,18 +202,23 @@ A terminal-style command bar also appears at the bottom. Available commands:
 | `/logout` | Log out of the browser session |
 | bare text | Sent as a chat message (no `/` prefix needed) |
 
-Your login persists across page refreshes via localStorage and automatically re-authenticates on reconnect.
+Login persists in an HttpOnly, SameSite browser cookie and automatically re-authenticates on refresh, browser restart, server redeploy, and WebSocket reconnect. Its one-year expiration renews whenever the app restores the session. Browser JavaScript never stores or reads the credential.
 
-> **Note:** The `agent-factory token` command must be run on the machine running the server (tokens are generated via a localhost-only endpoint). Share tokens with team members who need browser access.
+For another browser or phone, run `agent-factory connect` and scan its single-use QR code. Hosted installations must use HTTPS because hooks and CLI commands authenticate with the private installation credential.
+
+After upgrading, start a new agent session to establish ownership. Sessions emitted by an older unsigned hook remain visible but display-only; knowing their public session ID is intentionally insufficient to claim them.
 
 ## CLI Commands
 
 | Command | Description |
 |---------|-------------|
 | `agent-factory install` | Interactive setup wizard (hooks, config, avatar) |
-| `agent-factory uninstall` | Remove hooks and config |
-| `agent-factory update` | Update CLI to latest release |
-| `agent-factory token` | Display your auth token for browser login |
+| `agent-factory uninstall` | Remove hooks/config while preserving installation identity |
+| `agent-factory uninstall --purge-identity` | Also permanently reset the installation identity |
+| `agent-factory update` | Update the CLI and refresh installed hooks |
+| `agent-factory login` | Securely connect this installation to the default browser |
+| `agent-factory connect` | Show a single-use browser login QR code |
+| `agent-factory token` | Deprecated alias for `agent-factory login` |
 | `agent-factory emote <name>` | Trigger an emote on your agent |
 | `agent-factory chat <message>` | Send a chat message |
 | `agent-factory avatar` | Customize your avatar |
@@ -230,7 +231,6 @@ Your config lives at `~/.config/agent-factory/config.json`:
 {
   "username": "ethan",
   "serverUrl": "http://localhost:4242",
-  "token": "ZXRoYW4.a1b2c3d4e5f6...",
   "avatar": {
     "spriteIndex": 0,
     "color": "#4a90d9",
@@ -242,9 +242,8 @@ Your config lives at `~/.config/agent-factory/config.json`:
 
 | Field | Description |
 |-------|-------------|
-| `username` | Display name shown on your avatar's nametag |
-| `serverUrl` | Agent Factory server URL (localhost or shared) |
-| `token` | Auth token for browser login (auto-generated) |
+| `username` | Display name shown on your avatar's nametag; not used for ownership |
+| `serverUrl` | Agent Factory server URL (localhost or HTTPS shared server) |
 | `avatar.spriteIndex` | Character style (0-7) |
 | `avatar.color` | Hex color for your avatar tint |
 | `avatar.hat` | Hat accessory (future feature) |
@@ -279,7 +278,7 @@ Use `repositories` to change config for sessions opened inside a directory tree.
 
 For a session under `~/work/github.com/wolzey/agent-factory`, the effective username is `agent-factory-user` and the inherited server is `https://team.example.com`. A sibling such as `~/work/github.com/wolzey-other` does not match. Use the existing `serverUrl` field name inside overrides.
 
-Hooks resolve against the event's `cwd` (falling back to the hook process directory), while CLI commands resolve against the current working directory. Generated auth tokens are saved to the most specific active prefix so repo identities do not overwrite the global token.
+Hooks resolve against the event's `cwd` (falling back to the hook process directory), while CLI commands resolve against the current working directory. Repository overrides affect display metadata and server routing, but ownership remains tied to the one installation identity at `~/.config/agent-factory/identity.json`. That file is created with `0600` permissions and must never be shared or committed.
 
 ## Uninstall
 
@@ -287,7 +286,7 @@ Hooks resolve against the event's `cwd` (falling back to the hook process direct
 agent-factory uninstall
 ```
 
-This removes all Agent Factory hook entries from `~/.claude/settings.json` and `~/.codex/hooks.json` (surgically, preserving your other hooks) and deletes `~/.config/agent-factory/`.
+This removes Agent Factory hook entries and mutable config while preserving `identity.json`, so reinstalling on the same machine keeps ownership. Use `agent-factory uninstall --purge-identity` only when you intentionally want a new owner identity; existing browser sessions for the old owner will not control agents from the new identity.
 
 ## Architecture
 
@@ -295,23 +294,23 @@ This removes all Agent Factory hook entries from `~/.claude/settings.json` and `
 agent-factory/
 ├── server/           # Fastify HTTP + WebSocket server
 │   ├── index.ts      # Entrypoint (port 4242)
-│   ├── auth.ts       # HMAC-SHA256 token auth
+│   ├── auth.ts       # Device ownership and signed browser sessions
 │   ├── state.ts      # Authoritative revisioned world aggregate
 │   ├── persistence/ # Turso/libSQL snapshot repository and write queue
-│   ├── routes/       # POST /api/hooks, GET /api/health, GET /api/auth/token
+│   ├── routes/       # Hook, command, health, and browser handoff APIs
 │   ├── ws/           # WebSocket broadcast manager (per-socket auth)
 │   └── cleanup.ts    # Stale session reaper
 ├── client/           # Phaser 3 browser app
 │   ├── scenes/       # BootScene, FactoryScene, UIScene
 │   ├── entities/     # AgentSprite, SubagentSprite, Machine
 │   ├── systems/      # AgentManager, LayoutManager
-│   ├── auth/         # AuthManager (localStorage token persistence)
+│   ├── auth/         # Cookie-session bootstrap state
 │   ├── ui/           # ChatOverlay, LoginOverlay, CommandInput
 │   └── network/      # WebSocket client with auto-reconnect
 ├── shared/           # Types and constants shared between server/client
 ├── cli/              # Go CLI binary
-│   ├── cmd/          # Cobra commands (install, uninstall, token, emote, chat, avatar, update)
-│   ├── internal/     # Config, hooks, wizard, UI helpers
+│   ├── cmd/          # Cobra commands (install, login, connect, emote, chat, avatar, update)
+│   ├── internal/     # Config, identity, hooks, wizard, and UI helpers
 │   └── main.go       # Entry point
 ├── hooks/            # Claude/Codex hook scripts (legacy)
 └── install-cli.sh    # Bootstrap script (downloads CLI binary)
@@ -323,11 +322,14 @@ agent-factory/
 
 | Endpoint | Description |
 |----------|-------------|
-| `POST /api/hooks` | Receives hook events from Claude Code/Codex |
-| `POST /api/emote` | Trigger an emote (`{ username, emote }`) |
-| `POST /api/chat` | Send a chat message (`{ username, message }`) |
-| `POST /api/context` | Update agent task description (`{ username, summary }`) |
-| `GET /api/auth/token?username=X` | Generate auth token (localhost-only) |
+| `POST /api/hooks` | Receives authenticated hook events; unsigned legacy events are display-only |
+| `POST /api/emote` | Trigger an emote for the authenticated installation |
+| `POST /api/chat` | Send a chat message as the authenticated installation |
+| `POST /api/context` | Authenticated installation task-description update |
+| `POST /api/auth/handoff` | Create a short-lived browser handoff for an installation |
+| `POST /api/auth/handoff/exchange` | Exchange a handoff for an HttpOnly browser cookie |
+| `GET /api/auth/session` | Restore and renew the browser cookie session |
+| `POST /api/auth/logout` | Clear the browser cookie |
 | `GET /api/health` | Server, revision, and persistence status |
 | `GET /api/state` | Complete authoritative world snapshot |
 | `GET /api/config` | Server config (title, environment, graphicDeath) |
@@ -336,7 +338,7 @@ agent-factory/
 
 **Server -> Client:** `world_snapshot`, `world_delta`, `effect`, `auth_result`, `control_result`, `control_revoked`. Deltas carry consecutive revisions; clients request a fresh snapshot if a gap is detected.
 
-**Client -> Server:** `request_state`, `auth` (token login), `logout`, `control_claim`, `control_input`, `control_release`, `shoot`, `emote`, `chat`
+**Client -> Server:** `request_state`, `logout`, `control_claim`, `control_input`, `control_release`, `shoot`, `emote`, `chat`
 
 ## License
 

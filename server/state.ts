@@ -335,6 +335,16 @@ export class StateManager {
     return best;
   }
 
+  findSessionsByOwnerId(ownerId: string): WorldAgent[] {
+    return Array.from(this.sessions.values())
+      .filter(session => session.ownerId === ownerId && session.activity !== 'stopped')
+      .sort((a, b) => b.lastEventAt - a.lastEventAt);
+  }
+
+  findSessionByOwnerId(ownerId: string): WorldAgent | undefined {
+    return this.findSessionsByOwnerId(ownerId)[0];
+  }
+
   updateSessionName(sessionId: string, name: string): void {
     const session = this.sessions.get(sessionId);
     if (session && session.sessionName !== name) {
@@ -539,6 +549,7 @@ export class StateManager {
       const session: WorldAgent = {
         sessionId: payload.session_id,
         username: payload.username || 'anonymous',
+        ownerId: payload.ownerId,
         avatar: payload.avatar || DEFAULT_AVATAR,
         cwd: payload.cwd || '',
         activity: 'idle',
@@ -752,6 +763,7 @@ export class StateManager {
       session = {
         sessionId: payload.session_id,
         username: payload.username || 'anonymous',
+        ownerId: payload.ownerId,
         avatar: payload.avatar || DEFAULT_AVATAR,
         cwd: payload.cwd || '',
         activity: 'idle',

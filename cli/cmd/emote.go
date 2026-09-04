@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -65,7 +64,12 @@ func runEmote(cmd *cobra.Command, args []string) error {
 	client := &http.Client{Timeout: 2 * time.Second}
 	url := strings.TrimRight(cfg.ServerURL, "/") + "/api/emote"
 
-	resp, err := client.Post(url, "application/json", bytes.NewReader(payload))
+	request, err := newAuthenticatedJSONRequest(cmd.Context(), http.MethodPost, url, payload)
+	if err != nil {
+		ui.Error("Could not load installation identity: " + err.Error())
+		return err
+	}
+	resp, err := client.Do(request)
 	if err != nil {
 		ui.Error("Could not reach server at " + cfg.ServerURL)
 		return err

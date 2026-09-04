@@ -1,4 +1,5 @@
 import type { WebSocket } from '@fastify/websocket';
+import type { AuthPrincipal } from '../auth.js';
 import type {
   AgentSession,
   ChatMessage,
@@ -10,7 +11,7 @@ import type {
 } from '../../shared/types.js';
 
 interface SocketMeta {
-  username?: string;
+  principal?: AuthPrincipal;
 }
 
 export class BroadcastManager {
@@ -26,18 +27,18 @@ export class BroadcastManager {
     return this.clients.size;
   }
 
-  authenticateSocket(ws: WebSocket, username: string): void {
+  authenticateSocket(ws: WebSocket, principal: AuthPrincipal): void {
     const meta = this.clients.get(ws);
-    if (meta) meta.username = username;
+    if (meta) meta.principal = principal;
   }
 
-  getSocketUsername(ws: WebSocket): string | undefined {
-    return this.clients.get(ws)?.username;
+  getSocketPrincipal(ws: WebSocket): AuthPrincipal | undefined {
+    return this.clients.get(ws)?.principal;
   }
 
   deauthenticateSocket(ws: WebSocket): void {
     const meta = this.clients.get(ws);
-    if (meta) delete meta.username;
+    if (meta) delete meta.principal;
   }
 
   sendTo(ws: WebSocket, msg: WSMessageToClient) {

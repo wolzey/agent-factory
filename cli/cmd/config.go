@@ -9,7 +9,7 @@ import (
 	"github.com/wolzey/agent-factory/cli/internal/ui"
 )
 
-var validKeys = []string{"serverUrl", "username", "token"}
+var validKeys = []string{"serverUrl", "username"}
 
 var configCmd = &cobra.Command{
 	Use:   "config",
@@ -47,8 +47,6 @@ func runConfigSet(cmd *cobra.Command, args []string) error {
 		cfg.ServerURL = value
 	case "username":
 		cfg.Username = value
-	case "token":
-		cfg.Token = value
 	default:
 		ui.Error(fmt.Sprintf("Unknown key %q. Valid keys: %s", key, strings.Join(validKeys, ", ")))
 		return fmt.Errorf("unknown config key: %s", key)

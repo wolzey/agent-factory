@@ -2,13 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"net/url"
 	"os"
-	"strings"
 
 	qrterminal "github.com/mdp/qrterminal/v3"
 	"github.com/spf13/cobra"
 	"github.com/wolzey/agent-factory/cli/internal/config"
+	"github.com/wolzey/agent-factory/cli/internal/identity"
 	"github.com/wolzey/agent-factory/cli/internal/ui"
 )
 
@@ -31,23 +30,20 @@ func runConnect(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Ensure we have a token
-	if cfg.Token == "" {
-		token, err := fetchToken(cfg.ServerURL, cfg.Username)
-		if err != nil {
-			ui.Error("Could not fetch token from server: " + err.Error())
-			ui.Info("Make sure the Agent Factory server is running at " + cfg.ServerURL)
-			return err
-		}
-		cfg.Token = token
-		if writeErr := config.WriteToken(token); writeErr != nil {
-			ui.Warn("Could not save token to config: " + writeErr.Error())
-		}
+	if err := refreshInstalledAssets(); err != nil {
+		ui.Warn("Could not refresh installed hook assets: " + err.Error())
 	}
-
-	// Build the login URL: http://server/#token=<token>
-	serverURL := strings.TrimRight(cfg.ServerURL, "/")
-	loginURL := fmt.Sprintf("%s/#token=%s", serverURL, url.QueryEscape(cfg.Token))
+	device, err := identity.LoadOrCreate()
+	if err != nil {
+		ui.Error("Failed to load installation identity: " + err.Error())
+		return err
+	}
+	handoff, err := requestLoginHandoff(cmd.Context(), loginHTTPClient, cfg.ServerURL, cfg.Username, device.Secret)
+	if err != nil {
+		ui.Error("Could not start browser login: " + err.Error())
+		return err
+	}
+	loginURL := buildLoginURL(cfg.ServerURL, handoff.Code)
 
 	fmt.Println()
 	ui.Info("Scan this QR code to connect to Agent Factory:")
@@ -62,7 +58,7 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	})
 
 	fmt.Println()
-	ui.Info(fmt.Sprintf("URL: %s", loginURL))
+	ui.Info(fmt.Sprintf("One-time URL (expires in %d seconds): %s", handoff.ExpiresIn, loginURL))
 	ui.Info(fmt.Sprintf("User: %s", cfg.Username))
 	fmt.Println()
 

@@ -83,6 +83,7 @@ export interface ControlInputState {
 export interface AgentSession {
   sessionId: string;
   username: string;
+  ownerId?: string;
   sessionName?: string;
   avatar: AvatarConfig;
   cwd: string;
@@ -155,6 +156,8 @@ export interface HookPayload {
   cwd: string;
   username: string;
   avatar: AvatarConfig;
+  /** Assigned by the server after device authentication; never trusted from request JSON. */
+  ownerId?: string;
   tool_name?: string;
   tool_input?: Record<string, unknown>;
   agent_id?: string;
@@ -183,7 +186,7 @@ export type WSMessageToClient =
   | { type: 'agent_remove'; sessionId: string }
   | { type: 'effect'; sessionId: string; effect: EffectType; data?: Record<string, unknown> }
   | { type: 'chat_message'; chat: ChatMessage }
-  | { type: 'auth_result'; success: boolean; username?: string; error?: string }
+  | { type: 'auth_result'; success: boolean; username?: string; ownerId?: string; error?: string }
   | { type: 'control_result'; success: boolean; sessionId?: string; action: 'claim' | 'release'; error?: string }
   | { type: 'control_revoked'; sessionId: string; reason: string }
   | { type: 'global_effect'; effect: GlobalEffectType; data?: Record<string, unknown> };
@@ -195,7 +198,6 @@ export type GlobalEffectType = 'vortex';
 export type WSMessageToServer =
   | { type: 'identify'; username: string; avatar: AvatarConfig }
   | { type: 'request_state' }
-  | { type: 'auth'; token: string }
   | { type: 'logout' }
   | { type: 'control_claim'; sessionId: string }
   | { type: 'control_input'; sessionId: string; input: ControlInputState }
