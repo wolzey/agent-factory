@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/wolzey/agent-factory/cli/internal/config"
 	"github.com/wolzey/agent-factory/cli/internal/hooks"
+	"github.com/wolzey/agent-factory/cli/internal/identity"
 	"github.com/wolzey/agent-factory/cli/internal/ui"
 	"github.com/wolzey/agent-factory/cli/internal/wizard"
 )
@@ -131,6 +132,12 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	ui.Success("Config saved to ~/.config/agent-factory/config.json")
+
+	if _, err := identity.LoadOrCreate(); err != nil {
+		ui.Error("Failed to create installation identity: " + err.Error())
+		return err
+	}
+	ui.Success("Installation identity ready")
 
 	// Write hook script
 	if err := hooks.WriteHookScript(); err != nil {

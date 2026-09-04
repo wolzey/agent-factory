@@ -1,7 +1,9 @@
 #!/bin/bash
 # Agent Factory hook - sends Claude/Codex events to the visualization server
 CONFIG_FILE="${HOME}/.config/agent-factory/config.json"
+IDENTITY_FILE="${HOME}/.config/agent-factory/identity.json"
 SERVER_URL="http://localhost:4242"
+DEVICE_SECRET=""
 INPUT=$(cat)
 WORKING_DIR=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
 if [ -z "$WORKING_DIR" ]; then
@@ -47,6 +49,10 @@ else
   AVATAR='{}'
 fi
 
+if [ -f "$IDENTITY_FILE" ]; then
+  DEVICE_SECRET=$(jq -r 'select(.version == 1) | .secret // empty' "$IDENTITY_FILE" 2>/dev/null)
+fi
+
 # Strip trailing slash to avoid double-slash in URLs
 SERVER_URL="${SERVER_URL%/}"
 
@@ -59,12 +65,18 @@ if [ -z "$PAYLOAD" ]; then
   PAYLOAD="$INPUT"
 fi
 
-curl -s -X POST \
-  -H "Content-Type: application/json" \
-  -d "$PAYLOAD" \
-  "${SERVER_URL}/api/hooks" \
-  --connect-timeout 1 \
-  --max-time 2 \
-  > /dev/null 2>&1 &
+CURL_ARGS=(
+  -s -X POST
+  -H "Content-Type: application/json"
+  -d "$PAYLOAD"
+  "${SERVER_URL}/api/hooks"
+  --connect-timeout 1
+  --max-time 2
+)
+if [ -n "$DEVICE_SECRET" ]; then
+  CURL_ARGS=(-H "Authorization: Bearer ${DEVICE_SECRET}" "${CURL_ARGS[@]}")
+fi
+
+curl "${CURL_ARGS[@]}" > /dev/null 2>&1 &
 
 exit 0

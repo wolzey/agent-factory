@@ -37,6 +37,11 @@ func TestHookScriptUsesMostSpecificRepositoryConfig(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(configJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	const deviceSecret = "afd1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	identityJSON := `{"version":1,"secret":"` + deviceSecret + `"}`
+	if err := os.WriteFile(filepath.Join(configDir, "identity.json"), []byte(identityJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	binDir := filepath.Join(home, "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
@@ -47,6 +52,9 @@ previous=""
 for argument in "$@"; do
   if [ "$previous" = "-d" ]; then
     printf '%s' "$argument" > "$CAPTURE_PAYLOAD"
+  fi
+  if [ "$previous" = "-H" ] && echo "$argument" | grep -q '^Authorization:'; then
+    printf '%s' "$argument" > "$CAPTURE_AUTH"
   fi
   case "$argument" in
     http://*|https://*) printf '%s' "$argument" > "$CAPTURE_URL" ;;
@@ -65,6 +73,7 @@ done
 
 	payloadPath := filepath.Join(home, "payload.json")
 	urlPath := filepath.Join(home, "url.txt")
+	authPath := filepath.Join(home, "auth.txt")
 	cwd := filepath.Join(home, "work", "github.com", "wolzey", "agent-factory", "cli")
 	input := `{"session_id":"session-1","cwd":` + quotedJSON(cwd) + `}`
 
@@ -75,6 +84,7 @@ done
 		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"CAPTURE_PAYLOAD="+payloadPath,
 		"CAPTURE_URL="+urlPath,
+		"CAPTURE_AUTH="+authPath,
 	)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("hook script error = %v, output = %s", err, output)
@@ -100,6 +110,15 @@ done
 	}
 	if string(urlData) != "https://factory.example/api/hooks" {
 		t.Fatalf("URL = %q, want %q", urlData, "https://factory.example/api/hooks")
+	}
+
+	waitForFile(t, authPath)
+	authData, err := os.ReadFile(authPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(authData) != "Authorization: Bearer "+deviceSecret {
+		t.Fatalf("authorization header was not sourced from the installation identity")
 	}
 }
 
