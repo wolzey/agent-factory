@@ -7,6 +7,7 @@ export class Machine extends Phaser.GameObjects.Container {
   private floorGlow: Phaser.GameObjects.Rectangle;
   private heatOverlay: Phaser.GameObjects.Rectangle;
   private heatTween: Phaser.Tweens.Tween | null = null;
+  private heatLevel = 0;
   private machineActive = false;
   private workstation: WorkstationConfig;
 
@@ -159,7 +160,10 @@ export class Machine extends Phaser.GameObjects.Container {
 
   /** Set heatmap intensity (0 = invisible, 1 = max hot red) */
   setHeat(intensity: number) {
-    if (intensity <= 0) {
+    const level = Math.max(0, intensity);
+    if (level === this.heatLevel) return;
+    this.heatLevel = level;
+    if (level <= 0) {
       if (this.heatTween) {
         this.heatTween.destroy();
         this.heatTween = null;
