@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -59,5 +62,28 @@ func TestRequestLoginHandoffReturnsServerError(t *testing.T) {
 	_, err := requestLoginHandoff(context.Background(), server.Client(), server.URL, "alice", testDeviceSecret)
 	if err == nil || !strings.Contains(err.Error(), "invalid installation") {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestOpenBrowserURLReportsLauncherFailure(t *testing.T) {
+	launcher := ""
+	switch runtime.GOOS {
+	case "darwin":
+		launcher = "open"
+	case "linux":
+		launcher = "xdg-open"
+	default:
+		t.Skip("automatic browser launch is not supported on this platform")
+	}
+
+	binDir := t.TempDir()
+	launcherPath := filepath.Join(binDir, launcher)
+	if err := os.WriteFile(launcherPath, []byte("#!/bin/sh\nexit 7\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir)
+
+	if err := openBrowserURL("https://factory.example/#handoff=code"); err == nil {
+		t.Fatal("openBrowserURL() succeeded even though the launcher failed")
 	}
 }

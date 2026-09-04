@@ -94,16 +94,26 @@ describe('browser login routes', () => {
     await app.close();
   });
 
-  it('requires HTTPS for hosted handoff creation', async () => {
+  it('requires HTTPS for hosted handoff creation but permits direct loopback', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     const app = await buildAuthApp();
-    const response = await app.inject({
+    const remote = await app.inject({
       method: 'POST',
       url: '/api/auth/handoff',
+      remoteAddress: '203.0.113.10',
       headers: { authorization: `Bearer ${DEVICE_SECRET}` },
       payload: { username: 'alice' },
     });
-    expect(response.statusCode).toBe(400);
+    expect(remote.statusCode).toBe(400);
+
+    const loopback = await app.inject({
+      method: 'POST',
+      url: '/api/auth/handoff',
+      remoteAddress: '127.0.0.1',
+      headers: { authorization: `Bearer ${DEVICE_SECRET}` },
+      payload: { username: 'alice' },
+    });
+    expect(loopback.statusCode).toBe(200);
     await app.close();
   });
 });

@@ -136,5 +136,5 @@ func openBrowserURL(target string) error {
 	if err != nil {
 		return err
 	}
-	return exec.Command(path, append(args, target)...).Start()
+	return exec.Command(path, append(args, target)...).Run()
 }
