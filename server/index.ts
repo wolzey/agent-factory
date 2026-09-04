@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import cors from '@fastify/cors';
+import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,9 +10,16 @@ import { existsSync, readFileSync } from 'node:fs';
 import { StateManager } from './state.js';
 import { BroadcastManager } from './ws/broadcast.js';
 import { registerHookRoutes } from './routes/hooks.js';
+import {
+  BROWSER_SESSION_COOKIE,
+  readBrowserPrincipal,
+  registerAuthRoutes,
+} from './routes/auth.js';
+import { isSameHostOrigin } from './request-security.js';
 import { startStaleReaper } from './cleanup.js';
 import { SessionRegistryWatcher } from './session-registry.js';
-import { TokenAuth, loadOrCreateSecret } from './auth.js';
+import { AuthService, loadOrCreateSecret } from './auth.js';
+import { AuthHandoffManager } from './auth-handoff.js';
 import { ControlManager } from './control-manager.js';
 import { GrabManager, parseGrabTarget } from './grab-manager.js';
 import { DEFAULT_PORT, DEFAULT_SERVER_CONFIG, VALID_EMOTES, CHAT_MESSAGE_MAX_LENGTH } from '../shared/constants.js';
@@ -63,6 +71,7 @@ async function main() {
   const app = Fastify({ logger: true });
 
   await app.register(cors, { origin: true });
+  await app.register(cookie);
   await app.register(websocket);
 
   // Serve built client in production.
@@ -85,7 +94,8 @@ async function main() {
 
   // Auth
   const tokenSecret = loadOrCreateSecret();
-  const auth = new TokenAuth(tokenSecret);
+  const auth = new AuthService(tokenSecret);
+  const authHandoffs = new AuthHandoffManager();
 
   // Authoritative world state and durable persistence
   const state = new StateManager(serverConfig.environment ?? 'arcade');
@@ -109,13 +119,31 @@ async function main() {
 
   // HTTP routes
   registerHookRoutes(app, state, broadcast, serverConfig, auth, () => persistence.status());
+  registerAuthRoutes(app, auth, authHandoffs);
 
   // WebSocket endpoint
-  app.get('/ws', { websocket: true }, (socket) => {
+  app.get('/ws', { websocket: true }, (socket, request) => {
+    const sessionCookie = request.cookies[BROWSER_SESSION_COOKIE];
+    if (sessionCookie && !isSameHostOrigin(request.headers.origin, request.headers.host)) {
+      socket.close(1008, 'Invalid browser origin');
+      return;
+    }
+
     broadcast.add(socket);
-    // Send one complete, revisioned world on connect.
+    const principal = readBrowserPrincipal(request, auth);
+    if (principal) broadcast.authenticateSocket(socket, principal);
+
+    // Send one complete, revisioned world and any active grab leases on connect.
     broadcast.sendWorldSnapshot(socket, state.getSnapshot());
     grabs.sendActive(socket);
+    if (principal) {
+      broadcast.sendTo(socket, {
+        type: 'auth_result',
+        success: true,
+        username: principal.username,
+        ownerId: principal.ownerId,
+      });
+    }
 
     const dropSocket = (reason: string) => {
       controls.releaseSocket(socket, reason);
@@ -132,19 +160,6 @@ async function main() {
             broadcast.sendWorldSnapshot(socket, state.getSnapshot());
             break;
 
-          case 'auth': {
-            const username = auth.validateToken(String(msg.token || ''));
-            if (username) {
-              dropSocket('Browser re-authenticated');
-              broadcast.authenticateSocket(socket, username);
-              broadcast.sendTo(socket, { type: 'auth_result', success: true, username });
-            } else {
-              dropSocket('Authentication failed');
-              broadcast.deauthenticateSocket(socket);
-              broadcast.sendTo(socket, { type: 'auth_result', success: false, error: 'Invalid token' });
-            }
-            break;
-          }
 
           case 'logout':
             dropSocket('Logged out');
@@ -154,7 +169,7 @@ async function main() {
           case 'control_claim':
             controls.claim(
               socket,
-              broadcast.getSocketUsername(socket),
+              broadcast.getSocketPrincipal(socket)?.ownerId,
               String(msg.sessionId || ''),
             );
             break;
@@ -162,7 +177,7 @@ async function main() {
           case 'control_input':
             controls.updateInput(
               socket,
-              broadcast.getSocketUsername(socket),
+              broadcast.getSocketPrincipal(socket)?.ownerId,
               String(msg.sessionId || ''),
               msg.input,
             );
@@ -171,7 +186,7 @@ async function main() {
           case 'control_release':
             controls.release(
               socket,
-              broadcast.getSocketUsername(socket),
+              broadcast.getSocketPrincipal(socket)?.ownerId,
               String(msg.sessionId || ''),
             );
             break;
@@ -179,23 +194,23 @@ async function main() {
           case 'shoot':
             controls.shoot(
               socket,
-              broadcast.getSocketUsername(socket),
+              broadcast.getSocketPrincipal(socket)?.ownerId,
               String(msg.sessionId || ''),
             );
             break;
 
           case 'grab_start':
-            grabs.begin(socket, broadcast.getSocketUsername(socket), parseGrabTarget(msg), Number(msg.x), Number(msg.y));
+            grabs.begin(socket, broadcast.getSocketPrincipal(socket)?.username, parseGrabTarget(msg), Number(msg.x), Number(msg.y));
             break;
 
           case 'grab_move':
-            grabs.move(socket, broadcast.getSocketUsername(socket), parseGrabTarget(msg), Number(msg.x), Number(msg.y));
+            grabs.move(socket, broadcast.getSocketPrincipal(socket)?.username, parseGrabTarget(msg), Number(msg.x), Number(msg.y));
             break;
 
           case 'grab_end':
             grabs.end(
               socket,
-              broadcast.getSocketUsername(socket),
+              broadcast.getSocketPrincipal(socket)?.username,
               parseGrabTarget(msg),
               Number(msg.x),
               Number(msg.y),
@@ -204,12 +219,12 @@ async function main() {
             break;
 
           case 'emote': {
-            const wsUser = broadcast.getSocketUsername(socket);
-            if (!wsUser || !VALID_EMOTES.includes(msg.emote as EmoteType)) break;
+            const wsPrincipal = broadcast.getSocketPrincipal(socket);
+            if (!wsPrincipal || !VALID_EMOTES.includes(msg.emote as EmoteType)) break;
             const requested = msg.sessionId ? state.get(String(msg.sessionId)) : undefined;
-            const session = requested && requested.username === wsUser
+            const session = requested && requested.ownerId === wsPrincipal.ownerId
               ? requested
-              : (!msg.sessionId ? state.findSessionByUsername(wsUser) : undefined);
+              : (!msg.sessionId ? state.findSessionByOwnerId(wsPrincipal.ownerId) : undefined);
             if (session) {
               state.emitEmote(session.sessionId, msg.emote, session.manualControl?.facing);
             }
@@ -217,11 +232,11 @@ async function main() {
           }
 
           case 'chat': {
-            const chatUser = broadcast.getSocketUsername(socket);
-            if (!chatUser) break;
+            const chatPrincipal = broadcast.getSocketPrincipal(socket);
+            if (!chatPrincipal) break;
             const message = String(msg.message || '').slice(0, CHAT_MESSAGE_MAX_LENGTH);
             if (message) {
-              state.appendChat({ username: chatUser, message, timestamp: Date.now() });
+              state.appendChat({ username: chatPrincipal.username, message, timestamp: Date.now() });
             }
             break;
           }

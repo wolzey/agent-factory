@@ -38,6 +38,7 @@ function hook(state: StateManager, event: string, sessionId: string, username: s
     hook_event_name: event,
     session_id: sessionId,
     username,
+    ownerId: `${username}-owner`,
     cwd: `/work/${sessionId}`,
     avatar: AVATAR,
     ...extra,
@@ -311,13 +312,13 @@ describe('GrabManager cleanup', () => {
     const alice = join(socket());
     const bob = join(socket());
 
-    controls.claim(alice, 'alice', 'alice-1');
+    controls.claim(alice, 'alice-owner', 'alice-1');
     expect(grabs.begin(bob, 'bob', { sessionId: 'alice-1' }, 100, 100)).toBe(false);
     expect(ofType(bob.sent, 'grab_result')[0].error).toBe('Agent is under manual control');
 
-    controls.release(alice, 'alice', 'alice-1');
+    controls.release(alice, 'alice-owner', 'alice-1');
     expect(grabs.begin(bob, 'bob', { sessionId: 'alice-1' }, 100, 100)).toBe(true);
-    controls.claim(alice, 'alice', 'alice-1');
+    controls.claim(alice, 'alice-owner', 'alice-1');
     expect(grabs.activeGrabs()).toEqual([]);
     expect(ofType(viewer.sent, 'grab_release')[0].reason).toBe('Agent is under manual control');
   });

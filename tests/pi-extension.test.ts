@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import agentFactoryPiExtension from '../extensions/agent-factory/index';
 
 /**
@@ -9,6 +12,8 @@ import agentFactoryPiExtension from '../extensions/agent-factory/index';
 type Handler = (event: Record<string, unknown>, ctx?: Record<string, unknown>) => Promise<void>;
 
 const posted: Record<string, unknown>[] = [];
+const postedHeaders: Record<string, string>[] = [];
+let testConfigDir: string;
 
 function loadExtension(): Record<string, Handler> {
   const handlers: Record<string, Handler> = {};
@@ -22,13 +27,39 @@ function loadExtension(): Record<string, Handler> {
 
 beforeEach(() => {
   posted.length = 0;
-  vi.stubGlobal('fetch', async (_url: string, init: { body: string }) => {
+  postedHeaders.length = 0;
+  testConfigDir = mkdtempSync(join(tmpdir(), 'af-pi-identity-'));
+  process.env.AGENT_FACTORY_CONFIG_DIR = testConfigDir;
+  vi.stubGlobal('fetch', async (_url: string, init: { body: string; headers: Record<string, string> }) => {
     posted.push(JSON.parse(init.body));
+    postedHeaders.push(init.headers);
     return { ok: true } as Response;
   });
 });
 
+afterEach(() => {
+  delete process.env.AGENT_FACTORY_CONFIG_DIR;
+  rmSync(testConfigDir, { recursive: true, force: true });
+  vi.unstubAllGlobals();
+});
+
 describe('pi extension redaction', () => {
+  it('creates and reuses an owner-only installation identity', async () => {
+    const handlers = loadExtension();
+    await handlers.session_start({ reason: 'new' }, { cwd: '/work' });
+    await handlers.agent_end({}, { cwd: '/work' });
+
+    const firstAuthorization = postedHeaders[0].Authorization;
+    expect(firstAuthorization).toMatch(/^Bearer afd1_[A-Za-z0-9_-]{43}$/);
+    expect(postedHeaders[1].Authorization).toBe(firstAuthorization);
+
+    const identityPath = join(testConfigDir, 'identity.json');
+    const identity = JSON.parse(readFileSync(identityPath, 'utf8')) as { version: number; secret: string };
+    expect(identity.version).toBe(1);
+    expect(`Bearer ${identity.secret}`).toBe(firstAuthorization);
+    expect(statSync(identityPath).mode & 0o777).toBe(0o600);
+  });
+
   it('does not send prompt text, but keeps /rename', async () => {
     const handlers = loadExtension();
 

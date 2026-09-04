@@ -1,12 +1,40 @@
 #!/bin/bash
 # Agent Factory hook - sends Claude/Codex events to the visualization server
-# Receives JSON from stdin, enriches with user config, POSTs to server
-# Always exits 0 to never block client execution
-
+#
+# Privacy boundary. Claude and Codex put a lot more on stdin than an avatar needs:
+# UserPromptSubmit carries the entire prompt, PreToolUse carries the entire
+# tool_input (whole Bash command lines, the file contents handed to Write/Edit),
+# and PostToolUse adds tool_response, which is tool output. This script therefore
+# sends an explicit allowlist -- never the raw payload -- so a session working in
+# a private repo or against production does not stream its contents to the server.
+#
+# The allowlist is exactly the set of fields server/state.ts reads. The two
+# features that used to read prompt text and tool_input are derived here instead,
+# at the boundary, and sent as small fields:
+#   session_name -- from `/rename <name>`, or a worktree's tool_input.name
+#   git_action   -- "commit" or "pr_merge", derived from a Bash command
 CONFIG_FILE="${HOME}/.config/agent-factory/config.json"
+IDENTITY_FILE="${HOME}/.config/agent-factory/identity.json"
 SERVER_URL="http://localhost:4242"
+DEVICE_SECRET=""
 
-# Read hook input and resolve config for its working directory.
+ensure_identity() {
+  if [ -f "$IDENTITY_FILE" ]; then return; fi
+
+  local generated temp
+  generated=$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr '+/' '-_' | tr -d '=\n\r')
+  if [ "${#generated}" -ne 43 ]; then return; fi
+
+  mkdir -p "$(dirname "$IDENTITY_FILE")" || return
+  temp="${IDENTITY_FILE}.$$"
+  (umask 077 && printf '{\n  "version": 1,\n  "secret": "afd1_%s"\n}\n' "$generated" > "$temp") || return
+  if ln "$temp" "$IDENTITY_FILE" 2>/dev/null; then
+    chmod 600 "$IDENTITY_FILE"
+  fi
+  rm -f "$temp"
+}
+
+ensure_identity
 INPUT=$(cat)
 WORKING_DIR=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
 if [ -z "$WORKING_DIR" ]; then
@@ -52,10 +80,13 @@ else
   AVATAR='{}'
 fi
 
+if [ -f "$IDENTITY_FILE" ]; then
+  DEVICE_SECRET=$(jq -r 'select(.version == 1) | .secret // empty' "$IDENTITY_FILE" 2>/dev/null)
+fi
+
 # Strip trailing slash to avoid double-slash in URLs
 SERVER_URL="${SERVER_URL%/}"
 
-# Enrich with user identity
 PAYLOAD=$(echo "$INPUT" | jq -c \
   --arg username "$USERNAME" \
   --argjson avatar "$AVATAR" \
@@ -124,14 +155,18 @@ if [ -z "$PAYLOAD" ]; then
   exit 0
 fi
 
-# Fire and forget - don't block client execution
-curl -s -X POST \
-  -H "Content-Type: application/json" \
-  -d "$PAYLOAD" \
-  "${SERVER_URL}/api/hooks" \
-  --connect-timeout 1 \
-  --max-time 2 \
-  > /dev/null 2>&1 &
+CURL_ARGS=(
+  -s -X POST
+  -H "Content-Type: application/json"
+  -d "$PAYLOAD"
+  "${SERVER_URL}/api/hooks"
+  --connect-timeout 1
+  --max-time 2
+)
+if [ -n "$DEVICE_SECRET" ]; then
+  CURL_ARGS=(-H "Authorization: Bearer ${DEVICE_SECRET}" "${CURL_ARGS[@]}")
+fi
 
-# Always exit 0 so we never block client execution
+curl "${CURL_ARGS[@]}" > /dev/null 2>&1 &
+
 exit 0

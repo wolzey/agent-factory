@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/wolzey/agent-factory/cli/internal/config"
 	"github.com/wolzey/agent-factory/cli/internal/hooks"
+	"github.com/wolzey/agent-factory/cli/internal/identity"
 	"github.com/wolzey/agent-factory/cli/internal/ui"
 	"github.com/wolzey/agent-factory/cli/internal/wizard"
 )
@@ -132,6 +133,12 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	}
 	ui.Success("Config saved to ~/.config/agent-factory/config.json")
 
+	if _, err := identity.LoadOrCreate(); err != nil {
+		ui.Error("Failed to create installation identity: " + err.Error())
+		return err
+	}
+	ui.Success("Installation identity ready")
+
 	// Write hook script
 	if err := hooks.WriteHookScript(); err != nil {
 		ui.Error("Failed to write hook script: " + err.Error())
@@ -170,18 +177,6 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Fetch auth token from server
-	token, tokenErr := fetchToken(cfg.ServerURL, cfg.Username)
-	if tokenErr == nil {
-		cfg.Token = token
-		if writeErr := config.Write(cfg); writeErr == nil {
-			ui.Success("Auth token generated")
-		}
-	} else {
-		ui.Warn("Could not fetch auth token (server may not be running)")
-		ui.Info("Run 'agent-factory token' later to generate your token")
-	}
-
 	// Success message
 	fmt.Println()
 	fmt.Printf("  %s\n", ui.SuccessStyle.Render(ui.BoldStyle.Render("Installation complete!")))
@@ -204,6 +199,8 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Println("  you start your next Claude Code session.")
 	}
+	fmt.Println()
+	fmt.Println("  Run " + ui.CyanStyle.Render("agent-factory login") + " to connect this installation to your browser.")
 	fmt.Println()
 	fmt.Println(ui.DimStyle.Render("  Config:  ~/.config/agent-factory/config.json"))
 	fmt.Println(ui.DimStyle.Render("  Hooks:   ~/.config/agent-factory/hooks/agent-factory-hook.sh"))

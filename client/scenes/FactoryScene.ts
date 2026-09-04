@@ -101,7 +101,7 @@ export class FactoryScene extends Phaser.Scene {
     const logout = () => {
       this.grabManager.handleLoggedOut();
       this.socket.send({ type: 'logout' });
-      this.authManager.logout();
+      void this.authManager.logout();
       this.controlManager.handleLoggedOut();
       this.commandInput.hide();
       this.loginOverlay.showLoggedOut();
@@ -116,28 +116,51 @@ export class FactoryScene extends Phaser.Scene {
     this.commandInput.attachTo(this.chatOverlay.getContainer());
 
     this.loginOverlay = new LoginOverlay(
-      this.authManager,
-      this.socket,
       () => this.commandInput.show(),
       logout,
     );
 
-    // Re-authenticate on reconnect
     this.socket.onConnect(() => {
       // Any visual grab left from the previous socket is stale. The server will
       // immediately re-send leases that are still genuinely active.
       this.agentManager.dropStaleGrabs();
       this.grabManager.handleConnected();
-      const token = this.authManager.authenticationToken;
-      if (token) {
-        this.socket.send({ type: 'auth', token });
-      }
     });
 
-    this.socket.connect();
+    void this.bootstrapAuthentication();
 
     this.fetchConfig();
     this.initAudio();
+  }
+
+  private async bootstrapAuthentication(): Promise<void> {
+    const handoffCode = this.consumeHandoffFragment();
+    const authenticated = handoffCode
+      ? await this.authManager.exchangeHandoff(handoffCode)
+      : await this.authManager.restoreSession();
+
+    if (authenticated && this.authManager.username && this.authManager.ownerId) {
+      this.loginOverlay.showLoggedIn(this.authManager.username);
+      this.controlManager.handleAuthenticated(this.authManager.username, this.authManager.ownerId);
+    } else if (handoffCode) {
+      this.loginOverlay.showError('This login link is invalid or expired. Run agent-factory login again.');
+    } else {
+      this.loginOverlay.showLoggedOut();
+    }
+
+    this.socket.connect();
+  }
+
+  private consumeHandoffFragment(): string | null {
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    const code = params.get('handoff');
+    if (!code) return null;
+
+    params.delete('handoff');
+    const remaining = params.toString();
+    const cleanURL = `${window.location.pathname}${window.location.search}${remaining ? `#${remaining}` : ''}`;
+    window.history.replaceState(null, '', cleanURL);
+    return code;
   }
 
   private async initAudio() {
@@ -226,11 +249,11 @@ export class FactoryScene extends Phaser.Scene {
         break;
       case 'chat_message': this.chatOverlay.addMessage(msg.chat); break;
       case 'auth_result':
-        if (msg.success && msg.username && this.authManager.completeLogin(msg.username)) {
+        if (msg.success && msg.username && msg.ownerId && this.authManager.completeLogin(msg.username, msg.ownerId)) {
           this.loginOverlay.showLoggedIn(msg.username);
-          this.controlManager.handleAuthenticated(msg.username);
+          this.controlManager.handleAuthenticated(msg.username, msg.ownerId);
         } else {
-          this.authManager.logout();
+          void this.authManager.logout();
           this.controlManager.handleLoggedOut();
           this.grabManager.handleLoggedOut();
           this.commandInput.hide();

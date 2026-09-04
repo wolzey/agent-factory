@@ -8,10 +8,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/wolzey/agent-factory/cli/internal/config"
 	"github.com/wolzey/agent-factory/cli/internal/hooks"
+	"github.com/wolzey/agent-factory/cli/internal/identity"
 	"github.com/wolzey/agent-factory/cli/internal/ui"
 )
 
-var flagForce bool
+var (
+	flagForce         bool
+	flagPurgeIdentity bool
+)
 
 var uninstallCmd = &cobra.Command{
 	Use:   "uninstall",
@@ -21,6 +25,7 @@ var uninstallCmd = &cobra.Command{
 
 func init() {
 	uninstallCmd.Flags().BoolVar(&flagForce, "force", false, "Skip confirmation prompt")
+	uninstallCmd.Flags().BoolVar(&flagPurgeIdentity, "purge-identity", false, "Also delete the persistent installation identity")
 }
 
 func runUninstall(cmd *cobra.Command, args []string) error {
@@ -31,8 +36,9 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	installedTargets := hooks.InstalledTargets()
 	hasHooks := len(installedTargets) > 0
 	hasConfig := config.Exists()
+	hasIdentity := identity.Exists()
 
-	if !hasHooks && !hasConfig {
+	if !hasHooks && !hasConfig && !(flagPurgeIdentity && hasIdentity) {
 		ui.Success("Agent Factory is not installed. Nothing to do.")
 		return nil
 	}
@@ -48,7 +54,14 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if hasConfig {
-		fmt.Printf("    - Delete %s\n", ui.DimStyle.Render("~/.config/agent-factory/"))
+		fmt.Printf("    - Delete %s\n", ui.DimStyle.Render("~/.config/agent-factory/config.json and hooks/"))
+	}
+	if hasIdentity {
+		if flagPurgeIdentity {
+			fmt.Printf("    - Delete %s\n", ui.DimStyle.Render("~/.config/agent-factory/identity.json"))
+		} else {
+			fmt.Printf("    - Preserve %s\n", ui.DimStyle.Render("~/.config/agent-factory/identity.json"))
+		}
 	}
 	fmt.Println()
 
@@ -89,13 +102,26 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Remove config directory
+	// Remove mutable config and generated hooks while preserving installation identity by default.
 	if hasConfig {
-		if err := os.RemoveAll(config.ConfigDir()); err != nil {
+		if err := os.Remove(config.ConfigPath()); err != nil && !os.IsNotExist(err) {
 			ui.Error("Failed to remove config: " + err.Error())
 			return err
 		}
-		ui.Success("Removed ~/.config/agent-factory/")
+		if err := os.RemoveAll(hooks.HooksDir()); err != nil {
+			ui.Error("Failed to remove hook scripts: " + err.Error())
+			return err
+		}
+		ui.Success("Removed Agent Factory config and hook scripts")
+	}
+	if flagPurgeIdentity && hasIdentity {
+		if err := identity.Delete(); err != nil {
+			ui.Error("Failed to remove installation identity: " + err.Error())
+			return err
+		}
+		ui.Success("Removed persistent installation identity")
+	} else if hasIdentity {
+		ui.Info("Preserved installation identity for future reinstalls")
 	}
 
 	// Remove backup

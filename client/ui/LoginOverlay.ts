@@ -1,32 +1,21 @@
-import type { AuthManager } from '../auth/AuthManager';
-import type { SocketClient } from '../network/socket';
-
 export class LoginOverlay {
   private loginBtn: HTMLButtonElement;
   private modal: HTMLDivElement;
   private badge: HTMLDivElement;
-  private tokenInput: HTMLInputElement;
   private errorEl: HTMLDivElement;
 
   constructor(
-    private auth: AuthManager,
-    private socket: SocketClient,
     private onLogin: () => void,
     private onLogout: () => void,
   ) {
     this.loginBtn = this.createLoginButton();
     this.modal = this.createModal();
     this.badge = this.createBadge();
-    this.tokenInput = this.modal.querySelector('.login-token-input') as HTMLInputElement;
     this.errorEl = this.modal.querySelector('.login-error') as HTMLDivElement;
 
     document.body.appendChild(this.loginBtn);
     document.body.appendChild(this.modal);
     document.body.appendChild(this.badge);
-
-    if (auth.isLoggedIn) {
-      this.showLoggedIn(auth.username!);
-    }
   }
 
   showLoggedIn(username: string): void {
@@ -35,7 +24,6 @@ export class LoginOverlay {
     this.badge.style.display = 'block';
     this.badge.querySelector('.badge-name')!.textContent = username;
     this.errorEl.textContent = '';
-    this.tokenInput.value = '';
     this.onLogin();
   }
 
@@ -50,7 +38,6 @@ export class LoginOverlay {
     this.badge.style.display = 'none';
     this.modal.style.display = 'flex';
     this.errorEl.textContent = msg;
-    this.tokenInput.focus();
   }
 
   private createLoginButton(): HTMLButtonElement {
@@ -60,7 +47,6 @@ export class LoginOverlay {
     btn.addEventListener('click', () => {
       this.modal.style.display = 'flex';
       this.loginBtn.style.display = 'none';
-      this.tokenInput.focus();
     });
     return btn;
   }
@@ -71,37 +57,23 @@ export class LoginOverlay {
     modal.style.display = 'none';
     modal.innerHTML = `
       <div class="login-box">
-        <div class="login-title">Login with Token</div>
-        <div class="login-hint">Run <code>agent-factory token</code> to get your token</div>
-        <input type="text" class="login-token-input" placeholder="Paste your token here" autocomplete="off" spellcheck="false" />
+        <div class="login-title">Connect This Browser</div>
+        <div class="login-hint">Run <code>agent-factory login</code> on the machine whose agents you want to control. Your browser stays connected for one year and renews whenever you return.</div>
         <div class="login-error"></div>
         <div class="login-actions">
-          <button class="login-submit">Login</button>
-          <button class="login-cancel">Cancel</button>
+          <button class="login-cancel">Close</button>
         </div>
       </div>
     `;
 
-    const submit = () => {
-      const token = this.tokenInput.value.trim();
-      if (!token) return;
-      this.errorEl.textContent = '';
-      this.auth.beginLogin(token);
-      this.socket.send({ type: 'auth', token });
-    };
-
-    modal.querySelector('.login-submit')!.addEventListener('click', submit);
     modal.querySelector('.login-cancel')!.addEventListener('click', () => {
       this.modal.style.display = 'none';
       this.loginBtn.style.display = 'block';
       this.errorEl.textContent = '';
-      this.tokenInput.value = '';
     });
 
-    // Enter key submits
-    modal.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') submit();
-      if (e.key === 'Escape') {
+    modal.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
         this.modal.style.display = 'none';
         this.loginBtn.style.display = 'block';
       }

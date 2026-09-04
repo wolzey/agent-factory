@@ -1,61 +1,87 @@
-const STORAGE_KEY_TOKEN = 'af_token';
-const STORAGE_KEY_USERNAME = 'af_username';
+const LEGACY_STORAGE_KEYS = ['af_token', 'af_username'];
+
+interface BrowserSessionResponse {
+  authenticated: boolean;
+  username?: string;
+  ownerId?: string;
+}
 
 export class AuthManager {
-  private _token: string | null = null;
   private _username: string | null = null;
-  private _pendingToken: string | null = null;
+  private _ownerId: string | null = null;
 
-  constructor() {
-    this.loadFromStorage();
+  constructor(private fetcher: typeof fetch = fetch) {
+    this.clearLegacyStorage();
   }
 
   get isLoggedIn(): boolean {
-    return !!this._token && !!this._username;
+    return !!this._username && !!this._ownerId;
   }
 
   get username(): string | null {
     return this._username;
   }
 
-  get token(): string | null {
-    return this._token;
+  get ownerId(): string | null {
+    return this._ownerId;
   }
 
-  get authenticationToken(): string | null {
-    return this._pendingToken ?? this._token;
+  async restoreSession(): Promise<boolean> {
+    return this.loadSession('/api/auth/session', { method: 'GET' });
   }
 
-  beginLogin(token: string): void {
-    this._pendingToken = token;
+  async exchangeHandoff(code: string): Promise<boolean> {
+    return this.loadSession('/api/auth/handoff/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
   }
 
-  completeLogin(username: string): boolean {
-    const token = this._pendingToken ?? this._token;
-    if (!token) return false;
-    this._token = token;
+  completeLogin(username: string, ownerId: string): boolean {
+    if (!username || !ownerId) return false;
     this._username = username;
-    this._pendingToken = null;
-    localStorage.setItem(STORAGE_KEY_TOKEN, token);
-    localStorage.setItem(STORAGE_KEY_USERNAME, username);
+    this._ownerId = ownerId;
     return true;
   }
 
-  login(token: string, username: string): void {
-    this.beginLogin(token);
-    this.completeLogin(username);
-  }
-
-  logout(): void {
-    this._token = null;
+  async logout(): Promise<void> {
     this._username = null;
-    this._pendingToken = null;
-    localStorage.removeItem(STORAGE_KEY_TOKEN);
-    localStorage.removeItem(STORAGE_KEY_USERNAME);
+    this._ownerId = null;
+    try {
+      await this.fetcher('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+    } catch {
+      // Local state is still cleared; the cookie can be cleared on the next successful request.
+    }
   }
 
-  private loadFromStorage(): void {
-    this._token = localStorage.getItem(STORAGE_KEY_TOKEN);
-    this._username = localStorage.getItem(STORAGE_KEY_USERNAME);
+  private async loadSession(url: string, init: RequestInit): Promise<boolean> {
+    try {
+      const response = await this.fetcher(url, { ...init, credentials: 'same-origin' });
+      if (!response.ok) {
+        this._username = null;
+        this._ownerId = null;
+        return false;
+      }
+      const session = await response.json() as BrowserSessionResponse;
+      if (!session.authenticated || !session.username || !session.ownerId) {
+        this._username = null;
+        this._ownerId = null;
+        return false;
+      }
+      return this.completeLogin(session.username, session.ownerId);
+    } catch {
+      this._username = null;
+      this._ownerId = null;
+      return false;
+    }
+  }
+
+  private clearLegacyStorage(): void {
+    if (typeof localStorage === 'undefined') return;
+    for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key);
   }
 }

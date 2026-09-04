@@ -3,16 +3,17 @@ import type { HookPayload, ServerConfig, EmoteType, ChatMessage } from '../../sh
 import { VALID_EMOTES, CHAT_MESSAGE_MAX_LENGTH } from '../../shared/constants.js';
 import type { StateManager } from '../state.js';
 import type { BroadcastManager } from '../ws/broadcast.js';
-import type { TokenAuth } from '../auth.js';
+import type { AuthService } from '../auth.js';
 import type { PersistenceStatus } from '../persistence/world-repository.js';
 import { normalizeHookPayload } from '../hook-payload.js';
+import { usesSecureTransport } from '../request-security.js';
 
 export function registerHookRoutes(
   app: FastifyInstance,
   state: StateManager,
   broadcast: BroadcastManager,
   serverConfig: ServerConfig,
-  auth: TokenAuth,
+  auth: AuthService,
   getPersistenceStatus: () => PersistenceStatus,
 ) {
   app.post<{ Body: HookPayload }>('/api/hooks', async (request, reply) => {
@@ -25,25 +26,50 @@ export function registerHookRoutes(
       return reply.status(400).send({ error: 'Missing session_id or hook_event_name' });
     }
 
+    const device = auth.authenticateDevice(request.headers.authorization);
+    if (device.kind === 'authenticated' && !usesSecureTransport(request)) {
+      return reply.status(400).send({ error: 'HTTPS is required for installation authentication' });
+    }
+    if (device.kind === 'invalid') {
+      return reply.status(401).send({ error: 'Invalid installation credential' });
+    }
+
+    const existing = state.get(payload.session_id);
+    const incomingOwnerId = device.kind === 'authenticated' ? device.ownerId : undefined;
+    if (existing?.ownerId && existing.ownerId !== incomingOwnerId) {
+      return reply.status(403).send({ error: 'Agent session belongs to another installation' });
+    }
+
+    // Existing legacy sessions remain unowned. This prevents someone from claiming
+    // a public legacy session ID after upgrading or observing it in world state.
+    const ownerId = existing ? existing.ownerId : incomingOwnerId;
+    const trustedPayload: HookPayload = { ...payload, ownerId };
     console.log(`[hook] event=${payload.hook_event_name} session=${payload.session_id} user=${payload.username || 'unknown'}`);
-    state.handleHookEvent(payload);
+    state.handleHookEvent(trustedPayload);
     return reply.status(200).send({ ok: true });
   });
 
   app.post<{ Body: { username: string; emote: string } }>('/api/emote', async (request, reply) => {
-    const { username, emote } = request.body || {};
+    const { emote } = request.body || {};
+    const device = auth.authenticateDevice(request.headers.authorization);
+    if (device.kind === 'authenticated' && !usesSecureTransport(request)) {
+      return reply.status(400).send({ error: 'HTTPS is required for installation authentication' });
+    }
+    if (device.kind !== 'authenticated') {
+      return reply.status(401).send({ error: 'Installation authentication required' });
+    }
 
-    if (!username || !emote) {
-      return reply.status(400).send({ error: 'Missing username or emote' });
+    if (!emote) {
+      return reply.status(400).send({ error: 'Missing emote' });
     }
 
     if (!VALID_EMOTES.includes(emote as EmoteType)) {
       return reply.status(400).send({ error: `Invalid emote. Valid: ${VALID_EMOTES.join(', ')}` });
     }
 
-    const session = state.findSessionByUsername(username);
+    const session = state.findSessionByOwnerId(device.ownerId);
     if (!session) {
-      return reply.status(404).send({ error: 'No active session for username' });
+      return reply.status(404).send({ error: 'No active session for this installation' });
     }
 
     state.emitEmote(session.sessionId, emote, session.manualControl?.facing);
@@ -52,6 +78,13 @@ export function registerHookRoutes(
 
   app.post<{ Body: { username: string; message: string } }>('/api/chat', async (request, reply) => {
     const { username, message } = request.body || {};
+    const device = auth.authenticateDevice(request.headers.authorization);
+    if (device.kind === 'authenticated' && !usesSecureTransport(request)) {
+      return reply.status(400).send({ error: 'HTTPS is required for installation authentication' });
+    }
+    if (device.kind !== 'authenticated') {
+      return reply.status(401).send({ error: 'Installation authentication required' });
+    }
 
     if (!username || !message) {
       return reply.status(400).send({ error: 'Missing username or message' });
@@ -72,39 +105,30 @@ export function registerHookRoutes(
   });
 
   app.post<{ Body: { username?: string; session_id?: string; summary: string } }>('/api/context', async (request, reply) => {
-    const { username, session_id, summary } = request.body || {};
+    const { session_id, summary } = request.body || {};
+    const device = auth.authenticateDevice(request.headers.authorization);
+    if (device.kind === 'authenticated' && !usesSecureTransport(request)) {
+      return reply.status(400).send({ error: 'HTTPS is required for installation authentication' });
+    }
+    if (device.kind !== 'authenticated') {
+      return reply.status(401).send({ error: 'Installation authentication required' });
+    }
 
     if (!summary) {
       return reply.status(400).send({ error: 'Missing summary' });
     }
 
-    let session = session_id ? state.get(session_id) : undefined;
-    if (!session && username) {
-      session = state.findSessionByUsername(username);
-    }
+    const requested = session_id ? state.get(session_id) : undefined;
+    const session = requested?.ownerId === device.ownerId
+      ? requested
+      : (!session_id ? state.findSessionByOwnerId(device.ownerId) : undefined);
 
     if (!session) {
-      return reply.status(404).send({ error: 'No active session found' });
+      return reply.status(404).send({ error: 'No active session found for this installation' });
     }
 
     const updated = state.updateContext(session.sessionId, summary);
     return reply.status(200).send({ ok: true, sessionId: updated?.sessionId ?? session.sessionId });
-  });
-
-  app.get<{ Querystring: { username?: string } }>('/api/auth/token', async (request, reply) => {
-    const username = request.query.username;
-    if (!username) {
-      return reply.status(400).send({ error: 'Missing username query param' });
-    }
-
-    // Restrict to localhost
-    const ip = request.ip;
-    if (ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1') {
-      return reply.status(403).send({ error: 'Token generation is localhost-only' });
-    }
-
-    const token = auth.generateToken(username);
-    return reply.send({ token });
   });
 
   app.get('/api/config', async (_request, reply) => {

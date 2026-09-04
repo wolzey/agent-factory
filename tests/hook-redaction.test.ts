@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -55,10 +55,12 @@ function runHook(input: Record<string, unknown>, hookPath: string = HOOK): Recor
 
   // Stand in for curl so the payload is captured instead of sent.
   const capture = join(home, 'payload.json');
+  const authCapture = join(home, 'authorization.txt');
   const fakeCurl = `#!/bin/bash
 prev=""
 for arg in "$@"; do
   if [ "$prev" = "-d" ]; then printf '%s' "$arg" > ${JSON.stringify(capture)}; fi
+  if [ "$prev" = "-H" ] && [[ "$arg" == Authorization:* ]]; then printf '%s' "$arg" > ${JSON.stringify(authCapture)}; fi
   prev="$arg"
 done
 exit 0
@@ -75,9 +77,18 @@ exit 0
   const deadline = Date.now() + 5000;
   for (;;) {
     try {
-      return JSON.parse(readFileSync(capture, 'utf8')) as Record<string, unknown>;
+      const payload = JSON.parse(readFileSync(capture, 'utf8')) as Record<string, unknown>;
+      const authorization = readFileSync(authCapture, 'utf8');
+      if (!/^Authorization: Bearer afd1_[A-Za-z0-9_-]{43}$/.test(authorization)) {
+        throw new Error('hook did not authenticate with an installation identity');
+      }
+      const identity = join(home, '.config', 'agent-factory', 'identity.json');
+      if ((statSync(identity).mode & 0o777) !== 0o600) {
+        throw new Error('hook identity permissions are not owner-only');
+      }
+      return payload;
     } catch {
-      if (Date.now() > deadline) throw new Error('hook never posted a payload');
+      if (Date.now() > deadline) throw new Error('hook never posted an authenticated payload');
       execFileSync('sleep', ['0.05']);
     }
   }

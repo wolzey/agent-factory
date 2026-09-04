@@ -20,7 +20,7 @@ const EMPTY_INPUT: ControlInputState = {
 export class ControlManager {
   private overlay: AgentControlOverlay;
   private wheel: EmoteWheel;
-  private username: string | null = null;
+  private ownerId: string | null = null;
   private activeSessionId: string | null = null;
   private preferredSessionId = localStorage.getItem(STORAGE_KEY_SESSION);
   private input: ControlInputState = { ...EMPTY_INPUT };
@@ -54,8 +54,8 @@ export class ControlManager {
     return this.activeSessionId;
   }
 
-  handleAuthenticated(username: string): void {
-    this.username = username;
+  handleAuthenticated(username: string, ownerId: string): void {
+    this.ownerId = ownerId;
     this.reclaimAttempted = false;
     this.ownedAgentsSignature = '';
     this.activeSessionId = null;
@@ -68,7 +68,7 @@ export class ControlManager {
   handleLoggedOut(): void {
     this.stopMovement();
     this.wheel.hide();
-    this.username = null;
+    this.ownerId = null;
     this.activeSessionId = null;
     this.reclaimAttempted = false;
     this.ownedAgentsSignature = '';
@@ -77,7 +77,7 @@ export class ControlManager {
   }
 
   handleStateChanged(): void {
-    if (!this.username) return;
+    if (!this.ownerId) return;
     const owned = this.ownedAgents();
     if (this.activeSessionId && !owned.some(agent => agent.sessionId === this.activeSessionId)) {
       this.clearActiveSession(false);
@@ -140,7 +140,7 @@ export class ControlManager {
   }
 
   private claim(sessionId: string): void {
-    if (!this.auth.isLoggedIn || !this.username) return;
+    if (!this.auth.isLoggedIn || !this.ownerId) return;
     if (sessionId === this.activeSessionId) return;
     this.stopMovement();
     this.socket.send({ type: 'control_claim', sessionId });
@@ -152,9 +152,9 @@ export class ControlManager {
   }
 
   private ownedAgents(): AgentSession[] {
-    if (!this.username) return [];
+    if (!this.ownerId) return [];
     return this.agents.getSessions().filter(
-      agent => agent.username === this.username && agent.activity !== 'stopped',
+      agent => agent.ownerId === this.ownerId && agent.activity !== 'stopped',
     );
   }
 

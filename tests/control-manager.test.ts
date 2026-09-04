@@ -31,11 +31,17 @@ function socket(): WebSocket & FakeSocket {
   } as unknown as WebSocket & FakeSocket;
 }
 
-function session(state: StateManager, sessionId: string, username: string): void {
+function session(
+  state: StateManager,
+  sessionId: string,
+  username: string,
+  ownerId = `${username}-owner`,
+): void {
   state.handleHookEvent({
     hook_event_name: 'SessionStart',
     session_id: sessionId,
     username,
+    ownerId,
     cwd: `/work/${sessionId}`,
     avatar: { spriteIndex: 0, color: '#ffffff', hat: null, trail: null },
   });
@@ -65,9 +71,20 @@ describe('ControlManager authorization and leases', () => {
     const ws = socket();
 
     expect(controls.claim(ws, undefined, 'alice-1')).toBe(false);
-    expect(controls.claim(ws, 'bob', 'alice-1')).toBe(false);
+    expect(controls.claim(ws, 'bob-owner', 'alice-1')).toBe(false);
     expect(state.get('alice-1')?.manualControl).toBeUndefined();
     expect(ws.sent.filter((message: WSMessageToClient) => message.type === 'control_result')).toHaveLength(2);
+  });
+
+  it('isolates installations that use the same display username', () => {
+    const { state, controls } = setup();
+    session(state, 'first-device', 'alice', 'owner-one');
+    session(state, 'second-device', 'alice', 'owner-two');
+    const ws = socket();
+
+    expect(controls.claim(ws, 'owner-one', 'first-device')).toBe(true);
+    expect(controls.claim(ws, 'owner-one', 'second-device')).toBe(false);
+    expect(state.get('second-device')?.manualControl).toBeUndefined();
   });
 
   it('lets an owner choose among sessions and releases the previous one', () => {
@@ -76,8 +93,8 @@ describe('ControlManager authorization and leases', () => {
     session(state, 'alice-2', 'alice');
     const ws = socket();
 
-    expect(controls.claim(ws, 'alice', 'alice-1')).toBe(true);
-    expect(controls.claim(ws, 'alice', 'alice-2')).toBe(true);
+    expect(controls.claim(ws, 'alice-owner', 'alice-1')).toBe(true);
+    expect(controls.claim(ws, 'alice-owner', 'alice-2')).toBe(true);
 
     expect(state.get('alice-1')?.manualControl).toBeUndefined();
     expect(state.get('alice-2')?.manualControl).toMatchObject({ x: 400, y: CONTROL_WORLD_BOUNDS.maxY });
@@ -89,15 +106,15 @@ describe('ControlManager authorization and leases', () => {
     const first = socket();
     const second = socket();
 
-    controls.claim(first, 'alice', 'alice-1');
-    controls.claim(second, 'alice', 'alice-1');
+    controls.claim(first, 'alice-owner', 'alice-1');
+    controls.claim(second, 'alice-owner', 'alice-1');
 
     expect(first.sent).toContainEqual(expect.objectContaining({
       type: 'control_revoked',
       sessionId: 'alice-1',
     }));
     expect(state.get('alice-1')?.manualControl).toMatchObject({ x: 400, y: CONTROL_WORLD_BOUNDS.maxY });
-    expect(controls.updateInput(first, 'alice', 'alice-1', {
+    expect(controls.updateInput(first, 'alice-owner', 'alice-1', {
       up: true, down: false, left: false, right: false,
     })).toBe(false);
   });
@@ -106,7 +123,7 @@ describe('ControlManager authorization and leases', () => {
     const { state, controls } = setup();
     session(state, 'alice-1', 'alice');
     const ws = socket();
-    controls.claim(ws, 'alice', 'alice-1');
+    controls.claim(ws, 'alice-owner', 'alice-1');
 
     state.handleHookEvent({
       hook_event_name: 'PreToolUse',
@@ -121,33 +138,30 @@ describe('ControlManager authorization and leases', () => {
       activity: 'reading',
       manualControl: { x: 400, y: CONTROL_WORLD_BOUNDS.maxY },
     });
-    controls.release(ws, 'alice', 'alice-1');
+    controls.release(ws, 'alice-owner', 'alice-1');
     expect(state.get('alice-1')).toMatchObject({ activity: 'reading' });
     expect(state.get('alice-1')?.manualControl).toBeUndefined();
   });
 
-  it('revokes control if a hook reattributes the session to another username', () => {
+  it('keeps control when display attribution changes but ownership does not', () => {
     const { state, controls } = setup();
     session(state, 'alice-1', 'alice');
     const ws = socket();
-    controls.claim(ws, 'alice', 'alice-1');
+    controls.claim(ws, 'alice-owner', 'alice-1');
 
     state.handleHookEvent({
       hook_event_name: 'SessionStart',
       session_id: 'alice-1',
-      username: 'bob',
+      username: 'renamed-alice',
+      ownerId: 'alice-owner',
       cwd: '/work/alice-1',
       avatar: { spriteIndex: 0, color: '#ffffff', hat: null, trail: null },
     });
 
-    expect(controls.updateInput(ws, 'alice', 'alice-1', {
+    expect(controls.updateInput(ws, 'alice-owner', 'alice-1', {
       up: true, down: false, left: false, right: false,
-    })).toBe(false);
-    expect(state.get('alice-1')?.manualControl).toBeUndefined();
-    expect(ws.sent).toContainEqual(expect.objectContaining({
-      type: 'control_revoked',
-      reason: 'Agent attribution changed',
-    }));
+    })).toBe(true);
+    expect(state.get('alice-1')?.manualControl).toBeDefined();
   });
 
   it('releases leases on disconnect or session end', () => {
@@ -155,11 +169,11 @@ describe('ControlManager authorization and leases', () => {
     session(state, 'alice-1', 'alice');
     const ws = socket();
 
-    controls.claim(ws, 'alice', 'alice-1');
+    controls.claim(ws, 'alice-owner', 'alice-1');
     controls.releaseSocket(ws, 'disconnect');
     expect(state.get('alice-1')?.manualControl).toBeUndefined();
 
-    controls.claim(ws, 'alice', 'alice-1');
+    controls.claim(ws, 'alice-owner', 'alice-1');
     controls.releaseSession('alice-1', 'ended');
     expect(state.get('alice-1')?.manualControl).toBeUndefined();
   });
@@ -170,8 +184,8 @@ describe('ControlManager movement and actions', () => {
     const { state, controls, advance } = setup();
     session(state, 'alice-1', 'alice');
     const ws = socket();
-    controls.claim(ws, 'alice', 'alice-1');
-    controls.updateInput(ws, 'alice', 'alice-1', {
+    controls.claim(ws, 'alice-owner', 'alice-1');
+    controls.updateInput(ws, 'alice-owner', 'alice-1', {
       up: true, down: false, left: false, right: true,
     });
 
@@ -187,8 +201,8 @@ describe('ControlManager movement and actions', () => {
     const { state, controls, advance } = setup();
     session(state, 'alice-1', 'alice');
     const ws = socket();
-    controls.claim(ws, 'alice', 'alice-1');
-    controls.updateInput(ws, 'alice', 'alice-1', {
+    controls.claim(ws, 'alice-owner', 'alice-1');
+    controls.updateInput(ws, 'alice-owner', 'alice-1', {
       up: false, down: true, left: false, right: false,
     });
 
@@ -207,16 +221,16 @@ describe('ControlManager movement and actions', () => {
       if (notification.type === 'effect') effects(notification);
     });
 
-    controls.claim(ws, 'alice', 'alice-1');
-    controls.updateInput(ws, 'alice', 'alice-1', {
+    controls.claim(ws, 'alice-owner', 'alice-1');
+    controls.updateInput(ws, 'alice-owner', 'alice-1', {
       up: false, down: false, left: true, right: false,
     });
 
     // Facing changes synchronously, so an immediate Space press shoots left.
-    expect(controls.shoot(ws, 'alice', 'alice-1')).toBe(true);
-    expect(controls.shoot(ws, 'alice', 'alice-1')).toBe(false);
+    expect(controls.shoot(ws, 'alice-owner', 'alice-1')).toBe(true);
+    expect(controls.shoot(ws, 'alice-owner', 'alice-1')).toBe(false);
     advance(CONTROL_SHOOT_COOLDOWN_MS);
-    expect(controls.shoot(ws, 'alice', 'alice-1')).toBe(true);
+    expect(controls.shoot(ws, 'alice-owner', 'alice-1')).toBe(true);
 
     expect(effects).toHaveBeenCalledWith(expect.objectContaining({
       effect: 'shoot',

@@ -13,7 +13,7 @@ import type { BroadcastManager } from './ws/broadcast.js';
 
 interface ControlLease {
   socket: WebSocket;
-  username: string;
+  ownerId: string;
   sessionId: string;
   input: ControlInputState;
   x: number;
@@ -67,15 +67,15 @@ export class ControlManager {
     }
   }
 
-  claim(socket: WebSocket, username: string | undefined, sessionId: string): boolean {
-    if (!username) return this.reject(socket, 'claim', 'Authentication required');
+  claim(socket: WebSocket, ownerId: string | undefined, sessionId: string): boolean {
+    if (!ownerId) return this.reject(socket, 'claim', 'Authentication required');
 
     const session = this.state.get(sessionId);
     if (!session || session.activity === 'stopped') {
       return this.reject(socket, 'claim', 'Agent is no longer active', sessionId);
     }
-    if (session.username !== username) {
-      return this.reject(socket, 'claim', 'You can only control agents attributed to you', sessionId);
+    if (session.ownerId !== ownerId) {
+      return this.reject(socket, 'claim', 'You can only control agents owned by this installation', sessionId);
     }
 
     const currentForSocket = this.bySocket.get(socket);
@@ -101,7 +101,7 @@ export class ControlManager {
     const canonicalPosition = this.state.getCurrentPosition(sessionId, timestamp) ?? { x: 400, y: 240 };
     const lease: ControlLease = {
       socket,
-      username,
+      ownerId,
       sessionId,
       input: { ...STOPPED_INPUT },
       x: safeCoordinate(canonicalPosition.x, 400, CONTROL_WORLD_BOUNDS.minX, CONTROL_WORLD_BOUNDS.maxX),
@@ -123,11 +123,11 @@ export class ControlManager {
 
   updateInput(
     socket: WebSocket,
-    username: string | undefined,
+    ownerId: string | undefined,
     sessionId: string,
     input: ControlInputState,
   ): boolean {
-    const lease = this.authorizedLease(socket, username, sessionId);
+    const lease = this.authorizedLease(socket, ownerId, sessionId);
     if (!lease) return false;
 
     lease.input = {
@@ -143,8 +143,8 @@ export class ControlManager {
     return true;
   }
 
-  release(socket: WebSocket, username: string | undefined, sessionId: string): boolean {
-    const lease = this.authorizedLease(socket, username, sessionId);
+  release(socket: WebSocket, ownerId: string | undefined, sessionId: string): boolean {
+    const lease = this.authorizedLease(socket, ownerId, sessionId);
     if (!lease) {
       return this.reject(socket, 'release', 'You do not control that agent', sessionId);
     }
@@ -164,8 +164,8 @@ export class ControlManager {
     this.releaseLease(lease, reason, false);
   }
 
-  shoot(socket: WebSocket, username: string | undefined, sessionId: string): boolean {
-    const lease = this.authorizedLease(socket, username, sessionId);
+  shoot(socket: WebSocket, ownerId: string | undefined, sessionId: string): boolean {
+    const lease = this.authorizedLease(socket, ownerId, sessionId);
     if (!lease) return false;
 
     const timestamp = this.now();
@@ -185,8 +185,8 @@ export class ControlManager {
         this.releaseSession(lease.sessionId, 'Agent session ended');
         continue;
       }
-      if (session.username !== lease.username) {
-        this.releaseSession(lease.sessionId, 'Agent attribution changed');
+      if (session.ownerId !== lease.ownerId) {
+        this.releaseSession(lease.sessionId, 'Agent ownership changed');
         continue;
       }
 
@@ -229,16 +229,16 @@ export class ControlManager {
 
   private authorizedLease(
     socket: WebSocket,
-    username: string | undefined,
+    ownerId: string | undefined,
     sessionId: string,
   ): ControlLease | undefined {
-    if (!username) return undefined;
+    if (!ownerId) return undefined;
     const lease = this.bySocket.get(socket);
-    if (!lease || lease.sessionId !== sessionId || lease.username !== username) return undefined;
+    if (!lease || lease.sessionId !== sessionId || lease.ownerId !== ownerId) return undefined;
     const session = this.state.get(sessionId);
-    if (!session || session.activity === 'stopped' || session.username !== lease.username) {
-      const reason = session && session.username !== lease.username
-        ? 'Agent attribution changed'
+    if (!session || session.activity === 'stopped' || session.ownerId !== lease.ownerId) {
+      const reason = session && session.ownerId !== lease.ownerId
+        ? 'Agent ownership changed'
         : 'Agent session ended';
       this.releaseSession(sessionId, reason);
       return undefined;
