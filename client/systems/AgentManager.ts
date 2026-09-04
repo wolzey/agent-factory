@@ -650,14 +650,21 @@ export class AgentManager {
   }
 
   private syncAuthoritativeMachines(): void {
-    for (const machine of this.machines) machine.setActive(false);
+    const occupied = new Set<number>();
     for (const session of this.sessions.values()) {
       if (!this.isWorldAgent(session) || session.activity === 'stopped') continue;
       if (session.world.zone !== 'work' || session.world.slotIndex === undefined) continue;
       const machine = this.machines[session.world.slotIndex];
-      machine?.setActive(true);
-      machine?.setHeat(Math.min((session.toolUseCount ?? 0) / 20, 1));
+      if (!machine) continue;
+      occupied.add(session.world.slotIndex);
+      machine.setActive(true);
+      machine.setHeat(Math.min((session.toolUseCount ?? 0) / 20, 1));
     }
+    this.machines.forEach((machine, index) => {
+      if (occupied.has(index)) return;
+      machine.setActive(false);
+      machine.setHeat(0);
+    });
   }
 
   private bucketForActivity(activity: AgentSession['activity']): ActivityBucket {
