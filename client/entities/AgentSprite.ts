@@ -6,37 +6,23 @@ import type {
   EnvironmentType,
   FacingDirection,
   ManualControlState,
+  RpsChoice,
+  RpsOutcome,
 } from '@shared/types';
 import { TOMBSTONE_DURATION_MS } from '@shared/constants';
-import { positionAt } from '@shared/world-layouts';
+import { movementHeadingAt, positionAt, workstationWaypoints } from '@shared/world-layouts';
 import { BootScene } from '../scenes/BootScene';
 import type { ActionSpec } from '../environments';
+import { GrabMotion } from '../grab/GrabMotion';
+import type { Grabbable } from '../grab/GrabMotion';
+import { resolveGrabAnchor, resolveSheetGrabAnchor, shadeColor } from '../grab/anchors';
+import type { GrabAnchor } from '../grab/anchors';
+import { GRAB_REST_LENGTH, fabricWedge } from '../grab/physics';
+import type { Point } from '../grab/physics';
 
-const ACTIVITY_ICONS: Record<string, string> = {
-  running: 'terminal',
-  writing: 'pencil',
-  reading: 'magnifier',
-  searching: 'globe',
-  chatting: 'chat',
-  thinking: 'brain',
-  planning: 'brain',
-  compacting: 'compress',
-};
-
-const ICON_FRAME_MAP: Record<string, number> = {
-  terminal: 1,
-  pencil: 2,
-  magnifier: 3,
-  globe: 4,
-  chat: 5,
-  brain: 6,
-  compress: 7,
-};
-
-export class AgentSprite extends Phaser.GameObjects.Container {
+export class AgentSprite extends Phaser.GameObjects.Container implements Grabbable {
   private sprite: Phaser.GameObjects.Sprite;
   private nametag: Phaser.GameObjects.Text;
-  private statusIcon: Phaser.GameObjects.Sprite | null = null;
   private neonGlow: Phaser.GameObjects.Rectangle;
   private controlMarker: Phaser.GameObjects.Ellipse;
   private thoughtBubble: Phaser.GameObjects.Container | null = null;
@@ -64,6 +50,18 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   private zombieStaggerTimer: Phaser.Time.TimerEvent | null = null;
   private authoritativeWorld: AgentWorldState | null = null;
   private serverNow: (() => number) | null = null;
+  private lastAction: { action: ActionSpec; environment: EnvironmentType } | null = null;
+
+  // Tactile grab state: held/falling motion, the elastic band, and the post-landing recovery.
+  private grab: GrabMotion | null = null;
+  private grabBand: Phaser.GameObjects.Graphics | null = null;
+  private grabKnot: Phaser.GameObjects.Graphics | null = null;
+  private grabAnchor: GrabAnchor | null = null;
+  private grabSettling = false;
+  private grabReturning = false;
+  private grabReturnWaypoints: Point[] = [];
+  private socialActive = false;
+  private socialTimers: Phaser.Time.TimerEvent[] = [];
 
   constructor(scene: Phaser.Scene, session: AgentSession) {
     super(scene, 0, 0);
@@ -128,7 +126,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.playAnimation('idle');
 
     // Enable input for tooltip
-    this.sprite.setInteractive({ useHandCursor: true });
+    this.sprite.setInteractive({ cursor: 'grab' });
     this.sprite.on('pointerover', () => this.showTooltip());
     this.sprite.on('pointerout', () => this.hideTooltip());
     this.sprite.on('pointermove', (pointer: Phaser.Input.Pointer) => this.moveTooltip(pointer));
@@ -137,7 +135,14 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   update(_time: number, delta: number) {
-    if (this.authoritativeWorld && this.serverNow) {
+    if (this.grab) {
+      this.stepGrab(delta / 1000);
+      return;
+    }
+    if (this.grabSettling) return;
+    if (this.socialActive) return;
+
+    if (this.authoritativeWorld && this.serverNow && !this.grabReturning) {
       const timestamp = this.serverNow();
       const movement = this.authoritativeWorld.movement;
       const position = movement
@@ -147,15 +152,22 @@ export class AgentSprite extends Phaser.GameObjects.Container {
       const moving = !!movement && timestamp < movement.arrivesAt;
       this.isMoving = moving;
       if (moving && movement) {
-        const dx = movement.to.x - position.x;
-        const dy = movement.to.y - position.y;
+        const heading = movementHeadingAt(movement, timestamp);
+        const dx = heading.x;
+        const dy = heading.y;
         if (Math.abs(dx) > Math.abs(dy)) {
           this.playAnimation(dx > 0 ? 'walk_right' : 'walk_left');
         } else {
           this.playAnimation(dy > 0 ? 'walk_down' : 'walk_up');
         }
       } else if (!this.isEmoting) {
-        this.applyPose(this.currentActionPose);
+        if (this.authoritativeWorld.zone === 'idle' && position.y <= 140) {
+          this.playAnimation('walk_up');
+          this.sprite.anims.pause(this.sprite.anims.currentAnim?.frames[1]);
+        } else {
+          this.sprite.anims.resume();
+          this.applyPose(this.currentActionPose);
+        }
       }
       return;
     }
@@ -168,8 +180,15 @@ export class AgentSprite extends Phaser.GameObjects.Container {
       if (dist < 2) {
         this.x = this.targetX;
         this.y = this.targetY;
+        const next = this.grabReturnWaypoints.shift();
+        if (next) {
+          this.targetX = next.x;
+          this.targetY = next.y;
+          return;
+        }
         this.isMoving = false;
         this.onArrived();
+        this.grabReturning = false;
       } else {
         const step = (this.moveSpeed * delta) / 1000;
         const ratio = Math.min(step / dist, 1);
@@ -195,6 +214,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   routeTo(x: number, y: number) {
+    this.grabReturnWaypoints = [];
     this.targetX = x;
     this.targetY = y;
     this.isMoving = true;
@@ -204,13 +224,16 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.authoritativeWorld = structuredClone(world);
     this.serverNow = serverNow;
     const position = world.movement ? positionAt(world.movement, serverNow()) : world.position;
-    this.setPosition(position.x, position.y);
+    if (!this.grab && !this.grabSettling && !this.grabReturning && !this.socialActive) {
+      this.setPosition(position.x, position.y);
+    }
     this.manualMode = world.zone === 'manual';
     this.manualMoving = this.manualMode && !!world.movement;
     this.manualFacing = world.facing;
   }
 
   setManualControl(control: ManualControlState) {
+    this.cancelGrab();
     if (!this.manualMode) {
       this.clearBackgroundActionLoop();
       this.currentActionKey = '';
@@ -248,10 +271,18 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.nametag.setText(this.computeLabel(session));
 
     // Update status icon
-    this.updateStatusIcon(session.activity, session.currentTool);
+    if (this.isGrabbed) {
+      this.hideGrabbedStatusDecorations();
+    } else {
+      this.updateStatusIcon(session.activity, session.currentTool);
+    }
   }
 
   setBackgroundAction(action: ActionSpec, environment: EnvironmentType) {
+    // Remember the latest action so it can be restored after a grab; apply it once we are back on the floor.
+    this.lastAction = { action, environment };
+    if (this.isGrabbed || this.socialActive) return;
+
     const key = `${environment}:${action.loop}:${action.pose}`;
     this.currentActionPose = action.pose;
 
@@ -275,6 +306,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   die(onComplete?: () => void, serverGraphicDeath?: boolean) {
+    this.cancelGrab();
     if (serverGraphicDeath || this.sessionData.avatar?.graphicDeath) {
       this.dieGraphic(onComplete);
     } else {
@@ -285,7 +317,6 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   private dieStandard(onComplete?: () => void) {
     this.clearBackgroundActionLoop();
     this.hideThoughtBubble();
-    this.statusIcon?.setVisible(false);
     this.isMoving = false;
 
     // Hide nametag
@@ -340,7 +371,6 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   private dieGraphic(onComplete?: () => void) {
     this.clearBackgroundActionLoop();
     this.hideThoughtBubble();
-    this.statusIcon?.setVisible(false);
     this.isMoving = false;
 
     // Hide nametag immediately
@@ -1296,7 +1326,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   // ── Emotes ───────────────────────────────────────────────────────
 
   playEmote(emote: string, facing: FacingDirection = 'right') {
-    if (this.isEmoting) return;
+    if (this.isEmoting || this.isGrabbed) return;
     this.isEmoting = true;
 
     switch (emote) {
@@ -1325,7 +1355,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   playGunDeath() {
-    if (this.isEmoting) return;
+    if (this.isEmoting || this.isGrabbed) return;
     this.isEmoting = true;
 
     const origGlowColor = this.neonGlow.fillColor;
@@ -1338,7 +1368,6 @@ export class AgentSprite extends Phaser.GameObjects.Container {
       alpha: 0,
       duration: 300,
     });
-    this.statusIcon?.setVisible(false);
 
     this.scene.tweens.add({
       targets: this.sprite,
@@ -1395,7 +1424,6 @@ export class AgentSprite extends Phaser.GameObjects.Container {
 
         // Restore glow
         this.neonGlow.setFillStyle(origGlowColor, origGlowAlpha);
-        this.statusIcon?.setVisible(true);
 
         // Finish
         this.scene.time.delayedCall(500, () => this.finishEmote());
@@ -2829,6 +2857,487 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     });
   }
 
+  // ── Tactile grab: lift, dangle, drop, walk back ──────────────────
+
+  /** True while held, falling, or recovering from the landing. Routing and actions are suspended. */
+  get isGrabbed(): boolean {
+    return this.grab !== null || this.grabSettling || this.grabReturning;
+  }
+
+  get isHeld(): boolean {
+    return this.grab?.phase === 'held';
+  }
+
+  get isAirborne(): boolean {
+    return this.grab?.isAirborne ?? false;
+  }
+
+  get canStartRockPaperScissors(): boolean {
+    return !this.grab && !this.grabSettling && !this.socialActive && !this.manualMode && !this.isZombie;
+  }
+
+  get isDropping(): boolean {
+    return this.grab !== null || this.grabSettling;
+  }
+
+  startRockPaperScissors(
+    facing: 'left' | 'right',
+    choice: RpsChoice,
+    outcome: RpsOutcome,
+    leadsCount = false,
+  ): boolean {
+    if (!this.canStartRockPaperScissors) return false;
+
+    this.cancelSocialInteraction();
+    this.socialActive = true;
+    this.isEmoting = true;
+    this.isMoving = false;
+    this.grabReturning = false;
+    this.grabReturnWaypoints = [];
+    this.clearBackgroundActionLoop();
+    this.hideGrabbedStatusDecorations();
+    this.currentActionKey = '';
+    this.scene.tweens.killTweensOf(this.sprite);
+    this.scene.tweens.killTweensOf(this.nametag);
+    this.nametag.setAlpha(0.3);
+    this.sprite.setAngle(0).setPosition(0, 0).setScale(1);
+    this.playAnimation(`walk_${facing}`);
+    this.sprite.anims.pause(this.sprite.anims.currentAnim?.frames[1]);
+
+    this.scene.tweens.add({
+      targets: this.sprite,
+      y: -2,
+      duration: 150,
+      yoyo: true,
+      repeat: 5,
+      ease: 'Quad.easeInOut',
+    });
+
+    const beats: Array<[number, RpsChoice, number]> = [
+      [1660, choice, 700],
+    ];
+    if (leadsCount) beats.unshift(
+      [100, 'rock', 520],
+      [620, 'paper', 520],
+      [1140, 'scissors', 520],
+    );
+    for (const [delay, icon, duration] of beats) {
+      this.socialTimers.push(this.scene.time.delayedCall(delay, () => {
+        if (this.socialActive) this.showRockPaperScissorsIcon(icon, duration);
+      }));
+    }
+    this.socialTimers.push(this.scene.time.delayedCall(2320, () => {
+      if (!this.socialActive) return;
+      this.showRockPaperScissorsResult(outcome);
+      this.scene.tweens.killTweensOf(this.sprite);
+      if (outcome === 'win') {
+        this.scene.tweens.add({
+          targets: this.sprite,
+          y: -6,
+          scaleX: 1.12,
+          scaleY: 1.12,
+          duration: 170,
+          yoyo: true,
+          repeat: 2,
+          ease: 'Back.easeOut',
+        });
+      } else if (outcome === 'lose') {
+        this.scene.tweens.add({
+          targets: this.sprite,
+          y: 4,
+          angle: facing === 'left' ? -12 : 12,
+          scaleY: 0.88,
+          duration: 260,
+          ease: 'Quad.easeOut',
+        });
+      } else {
+        this.scene.tweens.add({ targets: this.sprite, angle: 5, duration: 100, yoyo: true, repeat: 3 });
+      }
+    }));
+    this.socialTimers.push(this.scene.time.delayedCall(3900, () => this.finishRockPaperScissors()));
+    return true;
+  }
+
+  private showRockPaperScissorsResult(outcome: RpsOutcome) {
+    const text = outcome === 'win' ? 'WINNER!' : outcome === 'lose' ? 'LOST' : 'DRAW';
+    const color = outcome === 'win' ? '#55ff88' : outcome === 'lose' ? '#ff6688' : '#ffee77';
+    const label = this.scene.add.text(0, -40, text, {
+      fontFamily: 'monospace',
+      fontSize: '12px',
+      fontStyle: 'bold',
+      color,
+      backgroundColor: 'rgba(8, 8, 22, 0.94)',
+      padding: { x: 4, y: 2 },
+    }).setOrigin(0.5);
+    this.add(label);
+    this.scene.tweens.add({
+      targets: label,
+      y: -45,
+      duration: 1200,
+      ease: 'Sine.easeOut',
+    });
+    this.scene.tweens.add({ targets: label, alpha: 0, duration: 300, delay: 900, onComplete: () => label.destroy() });
+  }
+
+  private showRockPaperScissorsIcon(choice: RpsChoice, duration: number) {
+    if (!this.scene.textures.exists('rps_icons')) return;
+    const frame = choice === 'rock' ? 0 : choice === 'paper' ? 1 : 2;
+    const icon = this.scene.add.sprite(0, -42, 'rps_icons', frame).setScale(0.85);
+    this.add(icon);
+    this.scene.tweens.add({
+      targets: icon,
+      y: icon.y - 12,
+      alpha: 0,
+      duration,
+      ease: 'Power2',
+      onComplete: () => icon.destroy(),
+    });
+  }
+
+  /** Floor point directly beneath the avatar while it is being carried. */
+  get groundProjection(): Point {
+    return this.grab
+      ? { x: this.grab.floor.x, y: this.grab.floor.y }
+      : { x: this.x, y: this.y };
+  }
+
+  beginGrab(pointer: Point) {
+    this.cancelSocialInteraction();
+    if (this.grab) {
+      // Re-lift mid-fall (e.g. a reconnect re-asserting a live lease).
+      this.grab.begin(pointer, { x: this.x, y: this.y });
+      return;
+    }
+    if (this.grabSettling) this.cancelGrab();
+
+    // Remember exactly where this avatar belongs. In authoritative rooms the
+    // server's destination wins; older rooms retain their local route target.
+    if (this.authoritativeWorld) {
+      const destination = this.authoritativeWorld.movement?.to ?? this.authoritativeWorld.position;
+      this.targetX = destination.x;
+      this.targetY = destination.y;
+      this.isMoving = true;
+    } else if (!this.isMoving) {
+      this.targetX = this.x;
+      this.targetY = this.y;
+      this.isMoving = true;
+    }
+
+    this.grabAnchor = this.resolveGrabAnchor();
+    this.hideTooltip();
+    this.clearBackgroundActionLoop();
+    this.hideGrabbedStatusDecorations();
+    this.currentActionKey = '';
+    this.scene.tweens.killTweensOf(this.sprite);
+    this.sprite.setAngle(0).setPosition(0, 0).setScale(1);
+    this.playAnimation('idle');
+    this.scene.tweens.killTweensOf(this.nametag);
+    this.scene.tweens.add({ targets: this.nametag, alpha: 0, duration: 150 });
+
+    // The fabric sits behind the body so it reads as part of the shirt / top of the hair;
+    // the grip knot sits in front so the pointer's hold point is always visible.
+    this.grabBand = this.scene.add.graphics();
+    this.addAt(this.grabBand, 0);
+    this.grabKnot = this.scene.add.graphics();
+    this.add(this.grabKnot);
+    this.grab = new GrabMotion(this.grabAnchor.offsetY, 1);
+    this.grab.begin(pointer, { x: this.x, y: this.y });
+  }
+
+  moveGrab(pointer: Point) {
+    if (this.grab?.phase === 'held') this.grab.setPointer(pointer);
+  }
+
+  releaseGrab(pointer?: Point) {
+    if (this.grab?.phase !== 'held') return;
+    this.grab.release(pointer);
+    this.grabBand?.clear();
+    this.grabKnot?.clear();
+    this.sprite.setAngle(0);
+  }
+
+  showGrabHint(text: string) {
+    this.showFloatingLabel(text, '#ff6688', 1200);
+  }
+
+  /** Band colour and attach point: the shirt collar, or the hair for long-haired avatars. */
+  private resolveGrabAnchor(): GrabAnchor {
+    const avatar = this.sessionData.avatar;
+    const zombieTint = this.isZombie ? 0x448833 : null;
+    if (avatar?.hairStyle !== undefined && this.spriteKey.startsWith('avatar_')) {
+      return resolveGrabAnchor(avatar, zombieTint);
+    }
+    // Legacy agent_N sheets are tinted as a whole, so the visible shirt/hair is sheet colour x tint.
+    const legacyTint = avatar?.color ? parseInt(avatar.color.replace('#', ''), 16) : Number.NaN;
+    const tint = zombieTint ?? (Number.isNaN(legacyTint) ? null : legacyTint);
+    return resolveSheetGrabAnchor(avatar?.spriteIndex ?? 0, tint);
+  }
+
+  private stepGrab(dt: number) {
+    const grab = this.grab!;
+    const result = grab.step(dt);
+    this.setPosition(grab.body.x, grab.body.y);
+
+    // The shadow stays on the floor and shrinks as the body rises.
+    const lift = grab.lift;
+    this.neonGlow.setPosition(0, 6 + lift).setScale(Math.max(0.5, 1 - lift / 40), 1);
+    this.controlMarker.setPosition(0, 7 + lift);
+
+    if (result === 'held') {
+      // Pendulum tilt from horizontal velocity while dangling.
+      this.sprite.setAngle(Phaser.Math.Clamp(-grab.body.vx * 0.06, -14, 14));
+      this.sprite.setAngle(this.sprite.angle + Math.sin(this.scene.time.now * 0.02) * 3);
+      this.drawGrabBand(grab);
+    } else if (result === 'landed') {
+      this.onGrabLanded();
+    }
+  }
+
+  private drawGrabBand(grab: GrabMotion) {
+    if (!this.grabBand || !this.grabKnot || !this.grabAnchor) return;
+    const anchor = this.grabAnchor;
+    // Lay pixels on whole world coordinates so the band stays crisp, then offset into container space.
+    const from = { x: Math.round(grab.grip.x), y: Math.round(grab.grip.y) };
+    const to = { x: Math.round(this.x + anchor.offsetX), y: Math.round(this.y + anchor.offsetY) };
+    const fabric = fabricWedge(from, to, anchor.kind === 'hair' ? 5 : 7, GRAB_REST_LENGTH);
+    const ox = -this.x;
+    const oy = -this.y;
+    const highlight = shadeColor(anchor.color, 1.35);
+    const shadow = shadeColor(anchor.color, 0.55);
+
+    const g = this.grabBand;
+    g.clear();
+    if (anchor.kind === 'hair') {
+      // Long hair keeps flowing behind the head instead of terminating at a
+      // straight scalp seam. The bulb overlaps beneath the sprite, turning the
+      // taut upper section into one continuous teardrop silhouette.
+      const overlapY = fabric.centerShoulder.y + 11;
+      const bulbY = fabric.centerShoulder.y + 5;
+      g.fillStyle(shadow, 1);
+      g.fillTriangle(
+        fabric.tip.x + ox, fabric.tip.y + oy,
+        fabric.centerShoulder.x + ox - 7, overlapY + oy,
+        fabric.centerShoulder.x + ox + 7, overlapY + oy,
+      );
+      g.fillEllipse(fabric.centerShoulder.x + ox, bulbY + oy, 14, 17);
+      g.fillStyle(anchor.color, 1);
+      g.fillTriangle(
+        fabric.tip.x + ox, fabric.tip.y + oy,
+        fabric.centerShoulder.x + ox - 5, overlapY + oy - 1,
+        fabric.centerShoulder.x + ox, overlapY + oy,
+      );
+      g.fillStyle(shadeColor(anchor.color, 0.78), 1);
+      g.fillTriangle(
+        fabric.tip.x + ox, fabric.tip.y + oy,
+        fabric.centerShoulder.x + ox, overlapY + oy,
+        fabric.centerShoulder.x + ox + 5, overlapY + oy - 1,
+      );
+      g.fillStyle(anchor.color, 1);
+      g.fillEllipse(fabric.centerShoulder.x + ox - 1, bulbY + oy - 1, 10, 13);
+      g.lineStyle(1, highlight, 0.75);
+      g.lineBetween(
+        fabric.tip.x + ox, fabric.tip.y + oy,
+        fabric.centerShoulder.x + ox - 4, overlapY + oy - 2,
+      );
+    } else {
+    // A dark full triangle gives the lifted cloth a crisp pixel edge.
+    g.fillStyle(shadow, 1);
+    g.fillTriangle(
+      fabric.tip.x + ox, fabric.tip.y + oy,
+      fabric.leftShoulder.x + ox, fabric.leftShoulder.y + oy,
+      fabric.rightShoulder.x + ox, fabric.rightShoulder.y + oy,
+    );
+    // Two differently shaded folds keep the wedge from reading as a flat pointer shape.
+    g.fillStyle(anchor.color, 1);
+    g.fillTriangle(
+      fabric.tip.x + ox, fabric.tip.y + oy,
+      fabric.leftShoulder.x + ox + 1, fabric.leftShoulder.y + oy - 1,
+      fabric.centerShoulder.x + ox, fabric.centerShoulder.y + oy,
+    );
+    g.fillStyle(shadeColor(anchor.color, 0.78), 1);
+    g.fillTriangle(
+      fabric.tip.x + ox, fabric.tip.y + oy,
+      fabric.centerShoulder.x + ox, fabric.centerShoulder.y + oy,
+      fabric.rightShoulder.x + ox - 1, fabric.rightShoulder.y + oy - 1,
+    );
+    g.lineStyle(1, highlight, 0.9);
+    g.lineBetween(
+      fabric.tip.x + ox, fabric.tip.y + oy,
+      fabric.leftShoulder.x + ox + 1, fabric.leftShoulder.y + oy - 1,
+    );
+    }
+    // Grip knot under the pointer, drawn on the front layer.
+    const k = this.grabKnot;
+    k.clear();
+    k.fillStyle(shadow, 1);
+    k.fillRect(from.x + ox - 2, from.y + oy - 2, 5, 5);
+    k.fillStyle(highlight, 1);
+    k.fillRect(from.x + ox - 1, from.y + oy - 1, 3, 3);
+  }
+
+  private onGrabLanded() {
+    this.grab = null;
+    this.grabSettling = true;
+    this.destroyGrabGraphics();
+    this.neonGlow.setPosition(0, 6).setScale(1);
+    this.controlMarker.setPosition(0, 7);
+    this.sprite.setAngle(0).setPosition(0, 0);
+    this.playAnimation('idle');
+    this.updateStatusIcon(this.sessionData.activity, this.sessionData.currentTool);
+    this.emitLandingDust();
+    this.landSquash();
+  }
+
+  private emitLandingDust() {
+    for (let i = 0; i < 6; i++) {
+      const dust = this.scene.add.circle(
+        this.x + Phaser.Math.Between(-10, 10),
+        this.y + 6,
+        Phaser.Math.Between(1, 3), 0xaaaaaa, 0.5,
+      ).setDepth(this.depth + 1);
+      this.scene.tweens.add({
+        targets: dust,
+        x: dust.x + Phaser.Math.Between(-16, 16),
+        y: dust.y + Phaser.Math.Between(-6, 2),
+        alpha: 0,
+        duration: Phaser.Math.Between(250, 450),
+        ease: 'Power2',
+        onComplete: () => dust.destroy(),
+      });
+    }
+  }
+
+  /** Landing stage 1: squash on impact. */
+  private landSquash() {
+    this.scene.tweens.add({
+      targets: this.sprite,
+      scaleX: 1.3,
+      scaleY: 0.7,
+      y: 4,
+      duration: 80,
+      yoyo: true,
+      ease: 'Quad.easeOut',
+      onComplete: () => this.landHop(),
+    });
+  }
+
+  /** Landing stage 2: a small recovery hop. */
+  private landHop() {
+    this.scene.tweens.add({
+      targets: this.sprite,
+      y: -4,
+      scaleX: 0.95,
+      scaleY: 1.05,
+      duration: 110,
+      yoyo: true,
+      ease: 'Sine.easeOut',
+      onComplete: () => this.landSettle(),
+    });
+  }
+
+  /** Landing stage 3: stand up, restore the room action, and walk back to the exact pre-grab spot. */
+  private landSettle() {
+    this.grabSettling = false;
+    this.grabAnchor = null;
+    this.sprite.setAngle(0).setPosition(0, 0).setScale(1);
+    this.scene.tweens.add({ targets: this.nametag, alpha: 1, duration: 200 });
+    if (this.lastAction) this.setBackgroundAction(this.lastAction.action, this.lastAction.environment);
+    this.routeBackToAuthoritativeDestination();
+  }
+
+  private finishRockPaperScissors() {
+    if (!this.socialActive) return;
+    this.socialActive = false;
+    this.isEmoting = false;
+    this.socialTimers = [];
+    this.scene.tweens.killTweensOf(this.sprite);
+    this.sprite.anims.resume();
+    this.sprite.setAngle(0).setPosition(0, 0).setScale(1);
+    this.scene.tweens.add({ targets: this.nametag, alpha: 1, duration: 180 });
+    if (this.lastAction) this.setBackgroundAction(this.lastAction.action, this.lastAction.environment);
+    if (!this.routeBackToAuthoritativeDestination()) this.applyPose(this.currentActionPose);
+  }
+
+  private routeBackToAuthoritativeDestination(): boolean {
+    if (this.authoritativeWorld) {
+      const destination = this.authoritativeWorld.movement?.to ?? this.authoritativeWorld.position;
+      const environment = this.lastAction?.environment ?? 'arcade';
+      const closeToDestination = Math.hypot(destination.x - this.x, destination.y - this.y) <= 44;
+      const route = closeToDestination
+        ? [destination]
+        : [
+            ...workstationWaypoints(
+              environment,
+              { x: this.x, y: this.y },
+              destination,
+              'manual',
+              this.authoritativeWorld.zone,
+              undefined,
+              this.authoritativeWorld.slotIndex,
+            ),
+            destination,
+          ];
+      const first = route.shift() ?? destination;
+      this.targetX = first.x;
+      this.targetY = first.y;
+      this.grabReturnWaypoints = route;
+      this.grabReturning = true;
+      this.isMoving = true;
+      return true;
+    }
+    this.grabReturning = false;
+    this.isMoving = false;
+    return false;
+  }
+
+  private cancelSocialInteraction() {
+    for (const timer of this.socialTimers) timer.remove(false);
+    this.socialTimers = [];
+    if (!this.socialActive) return;
+    this.socialActive = false;
+    this.isEmoting = false;
+    this.scene.tweens.killTweensOf(this.sprite);
+    this.sprite.anims.resume();
+    this.sprite.setAngle(0).setPosition(0, 0).setScale(1);
+    this.nametag.setAlpha(1);
+  }
+
+  /** Abort a grab instantly (manual control took over, or the agent is dying): snap to the floor. */
+  private cancelGrab() {
+    this.cancelSocialInteraction();
+    if (!this.grab && !this.grabSettling && !this.grabReturning) return;
+    if (this.grab) {
+      if (this.grab.phase !== 'idle') this.setPosition(this.grab.floor.x, this.grab.floor.y);
+      this.grab.cancel();
+      this.grab = null;
+    }
+    this.grabSettling = false;
+    this.grabReturning = false;
+    this.grabReturnWaypoints = [];
+    this.grabAnchor = null;
+    this.destroyGrabGraphics();
+    this.scene.tweens.killTweensOf(this.sprite);
+    this.scene.tweens.killTweensOf(this.nametag);
+    this.sprite.setAngle(0).setPosition(0, 0).setScale(1);
+    this.nametag.setAlpha(1);
+    this.neonGlow.setPosition(0, 6).setScale(1);
+    this.controlMarker.setPosition(0, 7);
+    this.updateStatusIcon(this.sessionData.activity, this.sessionData.currentTool);
+  }
+
+  private hideGrabbedStatusDecorations() {
+    this.hideThoughtBubble();
+    this.hideQuestionBubble();
+    this.hidePlanningClipboard();
+  }
+
+  private destroyGrabGraphics() {
+    this.grabBand?.destroy();
+    this.grabBand = null;
+    this.grabKnot?.destroy();
+    this.grabKnot = null;
+  }
+
   private onArrived() {
     if (this.manualMode) {
       if (this.manualMoving) {
@@ -3029,12 +3538,10 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     }
   }
 
-  private updateStatusIcon(activity: AgentActivity, tool: string | null) {
-    const iconName = ACTIVITY_ICONS[activity];
+  private updateStatusIcon(activity: AgentActivity, _tool: string | null) {
 
     // Handle question bubble for waiting state (permission requests)
     if (activity === 'waiting') {
-      this.statusIcon?.setVisible(false);
       this.hideThoughtBubble();
       this.hidePlanningClipboard();
       this.showQuestionBubble();
@@ -3046,7 +3553,6 @@ export class AgentSprite extends Phaser.GameObjects.Container {
 
     // Handle clipboard for planning state
     if (activity === 'planning') {
-      this.statusIcon?.setVisible(false);
       this.hideThoughtBubble();
       this.showPlanningClipboard();
       this.neonGlow.setAlpha(0.35);
@@ -3057,7 +3563,6 @@ export class AgentSprite extends Phaser.GameObjects.Container {
 
     // Handle thought bubble for thinking state
     if (activity === 'thinking') {
-      this.statusIcon?.setVisible(false);
       this.showThoughtBubble();
       this.neonGlow.setAlpha(0.25);
       return;
@@ -3065,20 +3570,10 @@ export class AgentSprite extends Phaser.GameObjects.Container {
       this.hideThoughtBubble();
     }
 
-    if (!iconName || activity === 'idle' || activity === 'stopped') {
-      this.statusIcon?.setVisible(false);
+    if (activity === 'idle' || activity === 'stopped') {
       this.neonGlow.setAlpha(0.15);
       return;
     }
-
-    if (!this.statusIcon) {
-      this.statusIcon = this.scene.add.sprite(12, -20, 'icons', ICON_FRAME_MAP[iconName] || 1);
-      this.statusIcon.setScale(1.5);
-      this.add(this.statusIcon);
-    }
-
-    this.statusIcon.setFrame(ICON_FRAME_MAP[iconName] || 1);
-    this.statusIcon.setVisible(true);
 
     // Brighter glow when active
     this.neonGlow.setAlpha(0.4);
@@ -3261,6 +3756,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   destroy(fromScene?: boolean) {
+    this.cancelGrab();
     this.clearBackgroundActionLoop();
     super.destroy(fromScene);
   }
@@ -3270,6 +3766,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   private showTooltip() {
+    if (this.isGrabbed) return;
     const tooltip = document.getElementById('tooltip');
     if (!tooltip) return;
 

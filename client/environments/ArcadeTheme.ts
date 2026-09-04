@@ -163,62 +163,6 @@ function drawArcadeCabinet(ctx: CanvasRenderingContext2D, x: number, y: number, 
   ctx.fillRect(x + 22, y + 30, 4, 2);
 }
 
-function generatePlant(textures: Phaser.Textures.TextureManager) {
-  const plant = textures.createCanvas('prop_plant', 16, 16)!;
-  const pctx = plant.getContext();
-  pctx.fillStyle = '#3a2a1e';
-  pctx.fillRect(5, 11, 6, 4);
-  pctx.fillStyle = '#4a3a2e';
-  pctx.fillRect(4, 10, 8, 2);
-  pctx.fillStyle = '#006633';
-  pctx.fillRect(7, 4, 2, 7);
-  pctx.fillStyle = '#00ff66';
-  pctx.fillRect(4, 3, 3, 2);
-  pctx.fillRect(9, 2, 3, 2);
-  pctx.fillRect(5, 6, 2, 2);
-  pctx.fillRect(10, 5, 2, 2);
-  pctx.fillStyle = '#88ffaa';
-  pctx.fillRect(4, 3, 1, 1);
-  pctx.fillRect(11, 2, 1, 1);
-  plant.refresh();
-}
-
-function generatePoster(textures: Phaser.Textures.TextureManager) {
-  const poster = textures.createCanvas('prop_poster', 16, 20)!;
-  const ctx = poster.getContext();
-  ctx.fillStyle = '#333';
-  ctx.fillRect(0, 0, 16, 20);
-  ctx.fillStyle = '#111122';
-  ctx.fillRect(1, 1, 14, 18);
-  ctx.fillStyle = '#ff00ff';
-  ctx.fillRect(7, 4, 2, 8);
-  ctx.fillRect(5, 4, 6, 2);
-  ctx.fillStyle = '#ff0044';
-  ctx.fillRect(6, 3, 4, 3);
-  ctx.fillStyle = '#00ffff';
-  ctx.fillRect(3, 15, 10, 1);
-  ctx.fillRect(5, 17, 6, 1);
-  poster.refresh();
-}
-
-function generatePoster2(textures: Phaser.Textures.TextureManager) {
-  const poster2 = textures.createCanvas('prop_poster2', 16, 20)!;
-  const ctx = poster2.getContext();
-  ctx.fillStyle = '#333';
-  ctx.fillRect(0, 0, 16, 20);
-  ctx.fillStyle = '#0a1a0a';
-  ctx.fillRect(1, 1, 14, 18);
-  ctx.fillStyle = '#00ff66';
-  ctx.fillRect(3, 3, 6, 1);
-  ctx.fillRect(3, 5, 8, 1);
-  ctx.fillRect(3, 7, 4, 1);
-  ctx.fillRect(3, 9, 7, 1);
-  ctx.fillRect(3, 11, 5, 1);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(3, 13, 2, 1);
-  poster2.refresh();
-}
-
 function generateVending(textures: Phaser.Textures.TextureManager) {
   const vend = textures.createCanvas('prop_vending', 16, 24)!;
   const ctx = vend.getContext();
@@ -316,8 +260,16 @@ export const ARCADE_THEME: EnvironmentTheme = {
     highlightColor: 0x2a3550,
     highlightAlpha: 0.5,
     neonStripColor: 0xff00ff,
-    neonStripAlpha: 0.8,
-    neonGlowAlpha: 0.06,
+    neonStripAlpha: 0,
+    neonGlowAlpha: 0,
+  },
+
+  skylineWindow: {
+    frameColor: 0x0b1024,
+    mullionColor: 0x1c2748,
+    sillColor: 0x2a3550,
+    panes: 6,
+    showCity: false,
   },
 
   bottomStrip: {
@@ -344,7 +296,7 @@ export const ARCADE_THEME: EnvironmentTheme = {
   },
 
   labels: {
-    mainLabel: '[ ARCADE FLOOR ]',
+    mainLabel: '',
     mainLabelColor: '#00ffff',
     counterLabel: 'FRONT COUNTER',
     counterLabelColor: '#ff9900',
@@ -361,22 +313,24 @@ export const ARCADE_THEME: EnvironmentTheme = {
   },
 
   signs: [
-    { x: 80, y: 15, text: 'NOW CODING', color: '#00ff66', baseAlpha: 0.7, flickerMs: 2200 },
-    { x: 700, y: 15, text: 'HIGH SCORE', color: '#ffff00', baseAlpha: 0.6, flickerMs: 1800 },
+    { x: 90, y: -75, text: 'NOW CODING', color: '#00ff66', baseAlpha: 0.7, flickerMs: 2200, fontSize: '7px' },
+    { x: 610, y: -75, text: 'HIGH SCORE', color: '#ffff00', baseAlpha: 0.6, flickerMs: 1800, fontSize: '7px' },
     { x: 60, y: 358, text: 'OPEN 24/7', color: '#00ccff', baseAlpha: 0.4, flickerMs: 3000 },
     { x: 760, y: 358, text: 'CHILL ZONE', color: '#aa88ff', baseAlpha: 0.4, flickerMs: 2800 },
   ],
 
   props: [
-    { textureKey: 'prop_plant', x: 22, y: 58, scale: 2, depth: 4, generate: generatePlant },
-    { textureKey: 'prop_plant', x: 778, y: 58, scale: 2, depth: 4, generate: () => {} },
-    { textureKey: 'prop_plant', x: 22, y: 420, scale: 2, depth: 4, generate: () => {} },
-    { textureKey: 'prop_plant', x: 778, y: 420, scale: 2, depth: 4, generate: () => {} },
-    { textureKey: 'prop_poster', x: 160, y: 24, scale: 1.5, depth: 3, generate: generatePoster },
-    { textureKey: 'prop_poster2', x: 560, y: 24, scale: 1.5, depth: 3, generate: generatePoster2 },
-    { textureKey: 'prop_vending', x: 395, y: 420, scale: 1.5, depth: 4, generate: generateVending },
-    { textureKey: 'prop_couch', x: 560, y: 430, scale: 1.5, depth: 4, generate: generateCouch },
-    { textureKey: 'prop_couch', x: 700, y: 430, scale: 1.5, depth: 4, generate: () => {} },
+    { textureKey: 'prop_window_monstera', x: 43, y: 70, scale: 1.06, depth: 4, generate: () => {} },
+    { textureKey: 'prop_window_rubber', x: 81, y: 76, scale: 1.01, depth: 4.24, generate: () => {} },
+    { textureKey: 'prop_window_fern', x: 119, y: 72, scale: 1.12, depth: 4.08, generate: () => {} },
+    { textureKey: 'prop_window_palm', x: 681, y: 70, scale: 1.06, depth: 4, generate: () => {} },
+    { textureKey: 'prop_window_pothos', x: 722, y: 77, scale: 1.03, depth: 4.26, generate: () => {} },
+    { textureKey: 'prop_window_calathea', x: 760, y: 72, scale: 1.08, depth: 4.08, generate: () => {} },
+    { textureKey: 'prop_floor_palm', x: 515, y: 456, scale: 0.92, depth: 4, generate: () => {} },
+    { textureKey: 'prop_floor_snake', x: 772, y: 456, scale: 0.9, depth: 4, generate: () => {} },
+    { textureKey: 'prop_vending', x: 635, y: 366, scale: 1.35, depth: 4, generate: generateVending },
+    { textureKey: 'prop_couch', x: 448, y: 370, scale: 1.35, depth: 4, generate: generateCouch },
+    { textureKey: 'prop_couch', x: 414, y: 410, scale: 1.35, depth: 4, angle: 90, generate: () => {} },
     { textureKey: 'prop_coffee', x: 32, y: 380, scale: 1.5, depth: 4, generate: generateCoffee },
   ],
 

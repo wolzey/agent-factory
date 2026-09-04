@@ -4,6 +4,8 @@ import type {
   ChatMessage,
   EffectType,
   GlobalEffectType,
+  GrabState,
+  GrabTarget,
   WorldDelta,
   WorldSnapshot,
   WSMessageToClient,
@@ -12,6 +14,9 @@ import type {
 interface SocketMeta {
   username?: string;
 }
+
+/** Stable for the life of this process, so redeploys hand connected tabs a new value. */
+export const SERVER_BUILD_ID = process.env.RENDER_GIT_COMMIT ?? `local-${Date.now().toString(36)}`;
 
 export class BroadcastManager {
   private clients = new Map<WebSocket, SocketMeta>();
@@ -51,7 +56,7 @@ export class BroadcastManager {
   }
 
   sendWorldSnapshot(ws: WebSocket, snapshot: WorldSnapshot) {
-    this.sendTo(ws, { type: 'world_snapshot', snapshot });
+    this.sendTo(ws, { type: 'world_snapshot', snapshot, buildId: SERVER_BUILD_ID });
   }
 
   broadcastWorldDelta(delta: WorldDelta) {
@@ -80,6 +85,14 @@ export class BroadcastManager {
 
   broadcastChatMessage(chat: ChatMessage) {
     this.broadcast({ type: 'chat_message', chat });
+  }
+
+  broadcastGrab(grab: GrabState) {
+    this.broadcast({ type: 'grab_update', grab });
+  }
+
+  broadcastGrabRelease(target: GrabTarget, x: number, y: number, reason: string) {
+    this.broadcast({ type: 'grab_release', ...target, x, y, reason });
   }
 
   private broadcast(msg: WSMessageToClient) {

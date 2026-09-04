@@ -72,7 +72,7 @@ agent-factory/
 
 ## Architecture
 
-The system follows an event-driven architecture. Claude Code sessions emit hook events (tool use, model response, session start/end) that the Go CLI forwards to the Fastify server via HTTP POST. The server's `StateManager` processes these into visual agent states and broadcasts updates over WebSocket to all connected Phaser clients. All textures are procedurally generated — no external image assets.
+The system follows an event-driven architecture. Claude Code sessions emit hook events (tool use, model response, session start/end) that the Go CLI forwards to the Fastify server via HTTP POST. The server's `StateManager` processes these into visual agent states and broadcasts updates over WebSocket to all connected Phaser clients. Most textures are procedurally generated; the skyline window terrain and cloud masks, the plants, and the rock-paper-scissors icons are small PNGs under `client/assets/` served from Vite's public dir.
 
 ## Conventions
 

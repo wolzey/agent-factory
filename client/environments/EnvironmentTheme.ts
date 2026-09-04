@@ -1,5 +1,6 @@
 import type { EnvironmentType, Position } from '@shared/types';
 import type { WorldLayoutSpec } from '@shared/world-layouts';
+import type { SkylinePartner } from '../sky/partners';
 
 export type { Position };
 
@@ -38,6 +39,7 @@ export interface PropConfig {
   y: number;
   scale: number;
   depth: number;
+  angle?: number;
   generate: (textures: Phaser.Textures.TextureManager) => void;
 }
 
@@ -48,6 +50,7 @@ export interface SignConfig {
   color: string;
   baseAlpha: number;
   flickerMs: number;
+  fontSize?: string;
 }
 
 export interface WorkstationConfig {
@@ -71,6 +74,17 @@ export interface WallConfig {
   neonStripColor: number;
   neonStripAlpha: number;
   neonGlowAlpha: number;
+}
+
+/** Optional pixel-art skyline window set into the top wall band. */
+export interface SkylineWindowConfig {
+  frameColor: number;
+  mullionColor: number;
+  sillColor: number;
+  panes: number;
+  showCity?: boolean;
+  /** Organisations from the approved public source to place on the skyline; omit for a fully generic city. */
+  partners?: readonly SkylinePartner[];
 }
 
 export interface BottomStripConfig {
@@ -121,6 +135,8 @@ export interface EnvironmentTheme {
   };
 
   wall: WallConfig;
+  /** When set, the wall band shows the Wasatch skyline window behind the signs. */
+  skylineWindow?: SkylineWindowConfig;
   bottomStrip: BottomStripConfig;
 
   zoneDividerColor: number;

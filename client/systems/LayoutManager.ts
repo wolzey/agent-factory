@@ -104,7 +104,7 @@ export class LayoutManager {
   }
 
   private defaultBase(zone: Zone): Position {
-    if (zone === 'work') return { x: 80, y: 110 };
+    if (zone === 'work') return { x: 80, y: 130 };
     if (zone === 'waiting') return { x: 60, y: 390 };
     return { x: 550, y: 424 };
   }
