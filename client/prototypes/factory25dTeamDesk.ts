@@ -51,7 +51,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   function paint() {
     const members = data?.members ?? [], now = Date.now() + (data ? data.serverTime - previousTime : 0);
     const online = members.filter(member => member.online).length;
-    count.textContent = unavailable ? 'reconnecting' : `${online} here · ${members.length} people`;
+    count.textContent = unavailable ? 'reconnecting' : `${online} here · ${members.length} ${members.length === 1 ? 'person' : 'people'}`;
     status.textContent = unavailable ? 'reconnecting · showing the last update'
       : data?.historyAvailable === false ? 'live now · visit history is waiting to save'
       : 'people join this list when they connect';
