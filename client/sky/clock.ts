@@ -56,11 +56,12 @@ export function createAdjustableClock(source: Clock): AdjustableClock {
 export function formatMountainClock(timestamp: number): string {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Denver',
-    hour: '2-digit',
+    hour: 'numeric',
     minute: '2-digit',
-    hourCycle: 'h23',
+    hour12: true,
   }).formatToParts(new Date(timestamp));
   const hour = parts.find(part => part.type === 'hour')?.value ?? '00';
   const minute = parts.find(part => part.type === 'minute')?.value ?? '00';
-  return `${hour}:${minute}`;
+  const period = parts.find(part => part.type === 'dayPeriod')?.value.toLowerCase() ?? 'am';
+  return `${hour}:${minute} ${period}`;
 }

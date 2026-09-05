@@ -7,8 +7,6 @@ import type { SkyPalette } from '../sky/skyPhase';
 import { cloudLayerWeights } from '../sky/weather';
 import type { WeatherVisualState } from '../sky/weather';
 import { createCloudVolume, cloudStyleFromSearch } from './factory25dCloudVolume';
-import type { CloudStyle } from './factory25dCloudVolume';
-import { requireElement } from './dom';
 
 /** A Three.js view of the existing factory cloud, snow and wet-glass models. */
 export function createWindowWeather(scene: THREE.Scene, renderer: THREE.WebGLRenderer, width: number, height: number, centerY: number) {
@@ -53,20 +51,9 @@ export function createWindowWeather(scene: THREE.Scene, renderer: THREE.WebGLRen
   const volumeMesh = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ map: volume.texture, transparent: true, depthWrite: false }));
   volumeMesh.position.set(0, centerY, -4.57);
   scene.add(volumeMesh);
-  let style = cloudStyleFromSearch(location.search);
-  const choices = (['painted', 'volume'] as const).map(value => ({ value, button: requireElement<HTMLButtonElement>(`#cloud-${value}`) }));
-  function selectStyle(next: CloudStyle, persist = true) {
-    style = next;
-    clouds.forEach(cloud => { cloud.mesh.visible = style === 'painted'; });
-    volumeMesh.visible = style === 'volume';
-    choices.forEach(choice => choice.button.setAttribute('aria-pressed', String(choice.value === style)));
-    if (!persist) return;
-    const url = new URL(location.href);
-    if (style === 'painted') url.searchParams.delete('clouds'); else url.searchParams.set('clouds', style);
-    history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
-  }
-  choices.forEach(choice => choice.button.addEventListener('click', () => selectStyle(choice.value)));
-  selectStyle(style, false);
+  const style = import.meta.env.DEV ? cloudStyleFromSearch(location.search) : 'volume';
+  clouds.forEach(cloud => { cloud.mesh.visible = style === 'painted'; });
+  volumeMesh.visible = style === 'volume';
 
   function pixelLayer(z: number) {
     const canvas = document.createElement('canvas');

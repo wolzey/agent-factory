@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { createClient, type Client } from '@libsql/client';
 import type { AvatarConfig, WorldSnapshot } from '../../shared/types.js';
 import { parseAvatarConfig } from '../../shared/avatar-customization.js';
+import type { StoredTeamMember } from '../../shared/team.js';
 import {
   WORLD_SCHEMA_VERSION,
   parseWorldSnapshot,
@@ -58,6 +59,10 @@ export class LibSqlWorldRepository implements WorldRepository {
       await this.client.execute(`CREATE TABLE IF NOT EXISTS avatar_profiles (
         owner_id TEXT PRIMARY KEY NOT NULL,
         avatar TEXT NOT NULL
+      )`);
+      await this.client.execute(`CREATE TABLE IF NOT EXISTS team_members (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL,
+        avatar TEXT NOT NULL, last_seen INTEGER NOT NULL
       )`);
       this.markHealthy();
     } catch (error) {
@@ -139,6 +144,26 @@ export class LibSqlWorldRepository implements WorldRepository {
 
   status(): PersistenceStatus {
     return { ...this.persistenceStatus };
+  }
+
+  async loadTeamMembers(): Promise<StoredTeamMember[]> {
+    const result = await this.requireClient().execute('SELECT id, name, avatar, last_seen FROM team_members');
+    return result.rows.map(row => {
+      const avatar = parseAvatarConfig(JSON.parse(String(row.avatar)));
+      const lastSeen = Number(row.last_seen);
+      if (!avatar || !Number.isSafeInteger(lastSeen) || lastSeen < 0) throw new Error('Invalid stored team member');
+      return { id: String(row.id), name: String(row.name), avatar, lastSeen };
+    });
+  }
+
+  async saveTeamMembers(members: StoredTeamMember[]): Promise<void> {
+    if (!members.length) return;
+    await this.requireClient().batch(members.map(member => ({
+      sql: `INSERT INTO team_members (id, name, avatar, last_seen) VALUES (?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET name = excluded.name, avatar = excluded.avatar,
+        last_seen = MAX(team_members.last_seen, excluded.last_seen)`,
+      args: [member.id, member.name, JSON.stringify(member.avatar), member.lastSeen],
+    })), 'write');
   }
 
   async close(): Promise<void> {

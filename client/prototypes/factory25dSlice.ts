@@ -1,4 +1,6 @@
 /// <reference types="vite/client" />
+import { createTeamDesk } from './factory25dTeamDesk';
+import { createNatureTv } from './factory25dNatureTv';
 import * as THREE from 'three';
 import { createLiveAgents } from './factory25dLiveAgents';
 import { createFactoryControls } from './factory25dControls';
@@ -9,7 +11,7 @@ import { WORKSTATIONS } from './factory25dWorkstations';
 import { createMountainView } from './factory25dMountains';
 import { requireElement } from './dom';
 import { signTexture } from './factory25dLabels';
-import { createDeskCard, createWallClock, factoryTitleTexture } from './factory25dSigns';
+import { createWallClock, factoryTitleTexture } from './factory25dSigns';
 import { watchFactoryTitle } from './factory25dSite';
 import { installWeatherShortcut } from './factory25dDebug';
 import { createWindowWeather } from './factory25dWeather';
@@ -413,10 +415,10 @@ const activityFeedback = createActivityFeedback(canvas.parentElement!);
 // Small, uneven groups sit on the room floor, with a walking strip behind the desks.
 const indoorPlants = createIndoorPlants(interior);
 const plant = indoorPlants.plant;
-plant('broad', -7.15, -5.42, 1.12, 0);
-plant('rubber', -6.25, -5.55, 0.92, 0.8);
-plant('fern', -5.62, -5.1, 0.78, 1.6);
-plant('cactus', -4.55, -5.5, 0.72, 0);
+plant('broad', -5.83, -5.72, 1.12, 0);
+plant('rubber', -4.85, -5.77, 0.92, 0.8);
+plant('fern', -4.1, -5.38, 0.78, 1.6);
+plant('cactus', -3.3, -5.74, 0.72, 0);
 plant('trailing', 4.38, -5.2, 0.79, 2.4);
 const movablePlant = plant('calathea', 5.85, -5.25, 0.85, 3.2);
 plant('bird', 7.05, -5.98, 1.02, 4);
@@ -487,7 +489,7 @@ const counterLabel = new THREE.Mesh(new THREE.PlaneGeometry(1.65, 0.16), new THR
 }));
 counterLabel.position.set(counterCenter, 0.23, 4.878);
 interior.add(counterLabel);
-createDeskCard(interior);
+const teamDesk = createTeamDesk(interior, canvas, camera, renderer, () => factoryControls.state.stop());
 
 function cornerCouch(x: number, z: number): void {
   const group = new THREE.Group();
@@ -531,18 +533,19 @@ function cornerCouch(x: number, z: number): void {
 
 // Keep the doorway and a walking lane open along the couch’s right side.
 cornerCouch(0.65, 5.8);
-indoorPlants.shelf(-7.08, -4.42);
+indoorPlants.shelf(-7.12, -5.93);
+const natureTv = createNatureTv(interior);
 const loungeDetails = createLoungeDetails(interior, canvas, camera, renderer);
 
 let currentViewCamera: THREE.Camera = camera;
 const factoryControls = createFactoryControls(canvas, liveAgents, () => currentViewCamera,
-  () => whiteboardInteraction.isRoomView() && !windowInteraction.isOpen() && !loungeDetails.chat.isActive() && !document.body.classList.contains('inspect-open'),
+  () => whiteboardInteraction.isRoomView() && !windowInteraction.isOpen() && !loungeDetails.chat.isActive() && !teamDesk.isActive() && !document.body.classList.contains('inspect-open'),
   outside => sideRoom.visit(outside));
 loungeDetails.chat.configureCommands({
   getTargetSessionId: () => factoryControls.getTargetSessionId(),
   logout: () => factoryControls.logout(),
   requestRoom() {
-    if (!whiteboardInteraction.isRoomView() || windowInteraction.isOpen() || document.body.classList.contains('inspect-open')) return false;
+    if (!whiteboardInteraction.isRoomView() || windowInteraction.isOpen() || teamDesk.isActive() || document.body.classList.contains('inspect-open')) return false;
     factoryControls.state.stop(); sideRoom.visit(false); return true;
   },
 });
@@ -739,9 +742,11 @@ function animate(): void {
   wallClock.update(now);
   if (liveTime && now - lastSunUpdate >= 1000) { const sun = liveSunAt(skyClock()); isNight = sun.night; setLightX(sun.arc); lastSunUpdate = now; }
   whiteboardInteraction.update(now);
-  sideRoom.update(now, whiteboardInteraction.isRoomView() && !windowInteraction.isOpen() && !loungeDetails.chat.isActive());
-  const mainRoomVisible = whiteboardInteraction.isRoomView() && !windowInteraction.isOpen() && !sideRoom.isActive() && !loungeDetails.chat.isActive();
-  windowInteraction.update(now, whiteboardInteraction.isRoomView() && !sideRoom.isActive() && !loungeDetails.chat.isActive());
+  sideRoom.update(now, whiteboardInteraction.isRoomView() && !windowInteraction.isOpen() && !loungeDetails.chat.isActive() && !teamDesk.isActive());
+  const mainRoomVisible = whiteboardInteraction.isRoomView() && !windowInteraction.isOpen() && !sideRoom.isActive() && !loungeDetails.chat.isActive() && !teamDesk.isActive();
+  windowInteraction.update(now, whiteboardInteraction.isRoomView() && !sideRoom.isActive() && !loungeDetails.chat.isActive() && !teamDesk.isActive());
+  teamDesk.update(now, mainRoomVisible);
+  natureTv.update(elapsed, reducedSceneMotion.matches, mainRoomVisible);
   hangingPothos.update(elapsed, reducedSceneMotion.matches);
   if (!weatherSettled && now - lastWeatherUpdate >= 50) {
     weather = weatherTransition.at(now);
@@ -750,7 +755,7 @@ function animate(): void {
     setLightX(sunArc);
   }
   sceneAudio.update({ weather, patio01: sideRoom.outdoorProgress(), window01: windowInteraction.proximity(), night: isNight,
-    reading: !whiteboardInteraction.isRoomView() || loungeDetails.chat.isActive() });
+    reading: !whiteboardInteraction.isRoomView() || loungeDetails.chat.isActive() || teamDesk.isActive() });
   windowWeather.update(dt, weather, currentPalette, sunArc, isNight, whiteboardInteraction.isRoomView());
   activeScreenTexture.offset.x = (Math.floor(elapsed * 4) % 4) * 0.25;
   const factoryData = whiteboardInteraction.getData();
@@ -782,7 +787,7 @@ function animate(): void {
   loungeDetails.update(elapsed, reducedSceneMotion.matches, whiteboardInteraction.getData(), camera, mainRoomVisible);
   mountainView.setDepthOfField(displayStudy.depthOfField);
   mountainView.render(elapsed, whiteboardInteraction.isRoomView());
-  const baseCamera = loungeDetails.chat.isActive() ? loungeDetails.chat.camera : windowInteraction.isOpen() ? windowInteraction.camera : sideRoom.isActive() ? sideRoom.camera : camera;
+  const baseCamera = teamDesk.isActive() ? teamDesk.camera : loungeDetails.chat.isActive() ? loungeDetails.chat.camera : windowInteraction.isOpen() ? windowInteraction.camera : sideRoom.isActive() ? sideRoom.camera : camera;
   const viewCamera = pointerZoom.cameraFor(baseCamera, now);
   viewCamera.updateMatrixWorld(); currentViewCamera = viewCamera;
   liveAgents.update(elapsed, viewCamera, mainRoomVisible, sideRoom.isActive(), point => floorKeyboard.floorHeight(point), whiteboard);
@@ -803,8 +808,9 @@ function animate(): void {
   const patioSun = sideRoomScene.getObjectByName('patio-sun')!;
   patioSun.position.copy(sun.position).x += 16; patioSun.scale.copy(sun.scale);
   const showFactory = sideRoom.showsFactory();
-  const boardCloseUp = !whiteboardInteraction.isRoomView() || loungeDetails.chat.isActive();
-  if (loungeDetails.chat.isActive()) studyFocusPoint.copy(loungeDetails.chat.focusPoint());
+  const boardCloseUp = !whiteboardInteraction.isRoomView() || loungeDetails.chat.isActive() || teamDesk.isActive();
+  if (teamDesk.isActive()) studyFocusPoint.copy(teamDesk.focusPoint());
+  else if (loungeDetails.chat.isActive()) studyFocusPoint.copy(loungeDetails.chat.focusPoint());
   else if (boardCloseUp) whiteboard.localToWorld(studyFocusPoint.set(0, 1.0, 0));
   else if (sideRoom.isActive()) studyFocusPoint.set(16, 0.7, 0);
   else studyFocusPoint.set(0, 0.5, 0);
@@ -825,4 +831,4 @@ function animate(): void {
 
 animate();
 
-if (import.meta.hot) import.meta.hot.dispose(() => { titleDisposed = true; stopTitle(); sceneAudio.dispose(); stopWeather(); factoryControls.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.chat.dispose(); });
+if (import.meta.hot) import.meta.hot.dispose(() => { titleDisposed = true; stopTitle(); sceneAudio.dispose(); stopWeather(); factoryControls.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.chat.dispose(); teamDesk.dispose(); });

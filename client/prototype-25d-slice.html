@@ -243,16 +243,12 @@
       .weather-open #slice-canvas:active { cursor: grabbing; }
       .window-navigation.pixel-island { position: relative; left: auto; bottom: auto; transform: none; max-width: 100%; pointer-events: auto; }
       .window-heading { min-width: 112px; }
-      .cloud-options { display: flex; gap: 3px; border-left: 1px solid #53616a85; padding-left: 10px; }
-      .cloud-options button { padding: 6px 10px; color: #9eabb6; }
-      .cloud-options button[aria-pressed="true"] { --pixel-face: #29433e; --pixel-edge: #749c8d; color: #d7f0e5; }
       .window-scroll { display: flex; align-items: center; gap: 4px; width: 204px; }
       @media (max-width: 600px) {
         .window-navigation.pixel-island { flex-wrap: wrap; gap: 8px; width: min(380px, calc(100vw - 24px)); padding: 10px 14px; }
         .window-heading { order: -1; flex-basis: 100%; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 1px 2px 3px; }
         .window-heading .room-view-status { margin-top: 0; }
         .window-scroll { flex: 1; min-width: 0; width: auto; }
-        .cloud-options { flex-basis: 100%; justify-content: center; border-left: 0; border-top: 1px solid #53616a50; padding: 6px 0 0; }
       }
       .window-scroll button { color: #dcebf0; flex-shrink: 0; width: 44px; height: 44px; padding: 8px; cursor: pointer; }
       .window-scroll input { min-width: 0; flex: 1; height: 44px; appearance: none; background: transparent; cursor: ew-resize; }
@@ -399,10 +395,7 @@
             <input id="window-position" type="range" min="0" max="100" step="0.1" value="50" aria-label="Window position" />
             <button id="window-right" type="button" aria-label="Look right">→</button>
           </div>
-          <div class="cloud-options" role="group" aria-label="Cloud style">
-            <button id="cloud-painted" type="button" aria-pressed="true">painted</button>
-            <button id="cloud-volume" type="button" aria-pressed="false">volumetric</button>
-          </div>
+
         </nav>
       </div>
     </div>

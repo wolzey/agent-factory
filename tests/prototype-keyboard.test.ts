@@ -2,15 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { FLOOR_KEYS, KEYBOARD_WIDTH, KEYBOARD_DEPTH, keyAt, keyIntensity, stepToward } from '../client/prototypes/factory25dKeyboardState';
 
 describe('floor keyboard footfalls', () => {
-  it('hits all 32 key centers including the wide space bar within the keyboard', () => {
-    expect(FLOOR_KEYS).toHaveLength(32);
+  it('hits all 61 key centers including the wide space bar within the keyboard', () => {
+    expect(FLOOR_KEYS).toHaveLength(61);
     FLOOR_KEYS.forEach((key, index) => {
       expect(keyAt(key)).toBe(index);
       expect(Math.abs(key.x) + key.width / 2).toBeLessThanOrEqual(KEYBOARD_WIDTH / 2);
       expect(Math.abs(key.z) + key.depth / 2).toBeLessThanOrEqual(KEYBOARD_DEPTH / 2);
     });
-    const space = FLOOR_KEYS[30];
-    expect(keyAt({x:space.x + space.width * 0.45,z:space.z})).toBe(30);
+    const space = FLOOR_KEYS.find(key => key.label === 'space')!;
+    expect(keyAt({x:space.x + space.width * 0.45,z:space.z})).toBe(FLOOR_KEYS.indexOf(space));
   });
   it('leaves gaps and the surrounding floor unlit', () => {
     const a = FLOOR_KEYS[0]; const b = FLOOR_KEYS[1];

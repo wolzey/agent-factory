@@ -1,3 +1,4 @@
+import { createMountainClimbers } from './factory25dClimbers';
 import * as THREE from 'three';
 import { CLEAR_WEATHER } from '../sky/weather';
 import type { WeatherVisualState } from '../sky/weather';
@@ -23,6 +24,7 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
   let depthOfField = false;
   scene.add(landscape.group);
   const bear = createRidgeBear(scene, originalLandscape.hazeColor, (x, z) => landscape.heightAt(x, z));
+  const climbers = createMountainClimbers(scene, (x, z) => landscape.heightAt(x, z));
   const birds = createValleyBirds(scene, landscape.hazeColor);
   const fill = new THREE.HemisphereLight('#c8d5e5', '#7b8998', 1.35);
   const sunlight = new THREE.DirectionalLight('#fff1d9', 2.2);
@@ -111,6 +113,7 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
     render(elapsed = 0, visible = true) {
       bear.update(elapsed - previousElapsed, !visible || reducedMotion.matches || document.hidden);
       birds.update(elapsed - previousElapsed, currentWeather, isNight, !visible || reducedMotion.matches || document.hidden);
+      climbers.update(elapsed - previousElapsed, !visible || reducedMotion.matches || document.hidden);
       previousElapsed = elapsed;
       const windFrame = Math.floor(elapsed * 12);
       if (!reducedMotion.matches && windFrame !== lastWindFrame) {
