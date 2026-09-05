@@ -283,6 +283,19 @@ Once logged in, an **Avatar Uplink** panel appears in the top-left. It lists act
 
 Manual control affects only the visual avatar. The underlying Claude/Codex session keeps running, its activity indicators continue to update, and automatic workstation/lounge routing resumes when control is released. Control is also released on logout, disconnect, or session end. A newer browser authenticated as the same owner can take over an existing control lease.
 
+### Web Avatar Editor
+
+In the 2.5D room, open **agents → edit avatar** after connecting your browser.
+Preview hair, skin, clothing and accessories, turn the character, or preview its
+walking animation. **Save avatar** updates your connected installation's agents
+immediately and applies the same appearance to its future sessions. Cancel keeps
+the existing look. You can also customize before starting an agent session.
+
+The saved appearance uses the existing avatar format and database. Once saved on
+the web, it takes precedence over that installation's terminal avatar settings,
+so ordinary Claude/Codex hooks cannot overwrite it. Installations without a web
+preference continue using their terminal configuration. No CLI update is needed.
+
 ### Grabbing Avatars
 
 Once logged in, you can also pick full-size agent avatars up. Press and drag: the avatar lifts off the floor and dangles under your pointer, with its shirt pinched into a shaded fabric triangle from the shoulders to your cursor (long-haired avatars are lifted by a matching wedge of hair instead). Let go anywhere and it drops with gravity, squashes on landing, and resumes its server-authored route. Dropping directly on a free workstation assigns it to that station.

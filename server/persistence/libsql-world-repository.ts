@@ -1,7 +1,8 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { createClient, type Client } from '@libsql/client';
-import type { WorldSnapshot } from '../../shared/types.js';
+import type { AvatarConfig, WorldSnapshot } from '../../shared/types.js';
+import { parseAvatarConfig } from '../../shared/avatar-customization.js';
 import {
   WORLD_SCHEMA_VERSION,
   parseWorldSnapshot,
@@ -54,6 +55,10 @@ export class LibSqlWorldRepository implements WorldRepository {
           updated_at INTEGER NOT NULL
         )
       `);
+      await this.client.execute(`CREATE TABLE IF NOT EXISTS avatar_profiles (
+        owner_id TEXT PRIMARY KEY NOT NULL,
+        avatar TEXT NOT NULL
+      )`);
       this.markHealthy();
     } catch (error) {
       this.markFailed(error);
@@ -114,6 +119,22 @@ export class LibSqlWorldRepository implements WorldRepository {
       this.markFailed(error);
       throw error;
     }
+  }
+
+  async loadAvatarProfiles(): Promise<Array<{ ownerId: string; avatar: AvatarConfig }>> {
+    const result = await this.requireClient().execute('SELECT owner_id, avatar FROM avatar_profiles');
+    return result.rows.map(row => {
+      const avatar = parseAvatarConfig(JSON.parse(String(row.avatar)));
+      if (!avatar) throw new Error('Stored avatar profile is invalid');
+      return { ownerId: String(row.owner_id), avatar };
+    });
+  }
+
+  async saveAvatarProfile(ownerId: string, avatar: AvatarConfig): Promise<void> {
+    await this.requireClient().execute({
+      sql: 'INSERT INTO avatar_profiles (owner_id, avatar) VALUES (?, ?) ON CONFLICT(owner_id) DO UPDATE SET avatar = excluded.avatar',
+      args: [ownerId, JSON.stringify(avatar)],
+    });
   }
 
   status(): PersistenceStatus {

@@ -3,6 +3,7 @@ import { CONTROL_WORLD_BOUNDS, GRAB_POINTER_BOUNDS } from '../shared/constants.j
 import { randomUUID } from 'node:crypto';
 import type {
   AgentSession,
+  AvatarConfig,
   ChatMessage,
   EffectType,
   EnvironmentType,
@@ -86,6 +87,7 @@ export class StateManager {
   private windowVisitors = new Set<string>();
   private rpsReadyAt = new Map<string, number>();
   private restoringWorkReservations = new Map<number, string>();
+  private avatarResolver: ((ownerId: string) => AvatarConfig | undefined) | undefined;
 
   constructor(
     private environment: EnvironmentType = 'arcade',
@@ -106,6 +108,21 @@ export class StateManager {
 
   onStateChange(cb: StateChangeCallback) {
     this.onChange = cb;
+  }
+
+  setAvatarResolver(resolve: (ownerId: string) => AvatarConfig | undefined) {
+    this.avatarResolver = resolve;
+  }
+
+  updateOwnerAvatar(ownerId: string, avatar: AvatarConfig) {
+    const changes: WorldChange[] = [];
+    for (const session of this.sessions.values()) {
+      if (session.ownerId !== ownerId || JSON.stringify(session.avatar) === JSON.stringify(avatar)) continue;
+      session.avatar = clone(avatar);
+      changes.push({ kind: 'agent_upsert', agent: clone(session) });
+    }
+    // Appearance updates preserve activity timestamps, positions and control leases.
+    this.commit(changes, true);
   }
 
   getAll(): WorldAgent[] {
@@ -537,6 +554,8 @@ export class StateManager {
   }
 
   handleHookEvent(payload: HookPayload): void {
+    const savedAvatar = payload.ownerId && this.avatarResolver?.(payload.ownerId);
+    if (savedAvatar) payload = { ...payload, avatar: clone(savedAvatar) };
     const { hook_event_name, session_id } = payload;
 
     switch (hook_event_name) {

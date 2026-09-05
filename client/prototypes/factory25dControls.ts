@@ -8,6 +8,7 @@ import { GrabManager } from '../grab/GrabManager';
 import { FactoryControlState } from './factory25dControlState';
 import { factoryHost, forgetFactoryLogin, onFactoryConnection, onFactoryMessage, sendFactoryCommand, type BoardData } from './factory25dBoardData';
 import type { createLiveAgents } from './factory25dLiveAgents';
+import { createAvatarEditor } from './factory25dAvatarEditor';
 
 export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnType<typeof createLiveAgents>,
   camera: () => THREE.Camera, available: () => boolean, visit: (patio: boolean) => void) {
@@ -31,7 +32,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   const emotes = panel.querySelector<HTMLSelectElement>('.factory-emote')!;
   for (const emote of VALID_EMOTES) { const option = document.createElement('option'); option.value = option.textContent = emote; emotes.add(option); }
   const auth = new AuthManager();
-  let signature = '', connectionError = '';
+  let signature = '', connectionError = '', avatarNotice = '';
   let placement: { sessionId: string; x: number; y: number; workstationSlot: number } | undefined;
   const stationPicker = panel.querySelector<HTMLSelectElement>('.factory-station')!;
   const placeButton = panel.querySelector<HTMLButtonElement>('.factory-place')!;
@@ -55,6 +56,14 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
       workstationDropSlot: target => { const pointer = held.get(target.sessionId); return pointer && data.world ? nearestWorkstationSlot(data.world.environment, pointer, 36) : undefined; },
       showGrabHint: (_target, text) => { status.textContent = text; },
     });
+  const avatarEditor = createAvatarEditor(
+    () => factoryHost() === location.origin ? data.principal : undefined,
+    () => { state.release(); grab.release(); avatarNotice = ''; paint(); },
+    () => { avatarNotice = 'avatar saved for your agents'; paint(); });
+  const editAvatar = document.createElement('button'); editAvatar.textContent = 'edit avatar';
+  editAvatar.className = 'factory-edit-avatar';
+  panel.querySelector('.factory-session-actions')!.append(editAvatar);
+  editAvatar.addEventListener('click', () => { void avatarEditor.open(); }, options);
   function paint() {
     panel.querySelector('.factory-connection')!.textContent = data.connected ? `${data.agents.length} live` : 'reconnecting';
     panel.querySelector('.factory-auth')!.textContent = data.principal ? `connected as ${data.principal.username}` : 'watching the shared factory';
@@ -76,6 +85,9 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     for (const button of panel.querySelectorAll<HTMLButtonElement>('.factory-movement button, .factory-shoot, .factory-express')) button.disabled = !state.active;
     status.textContent = connectionError || state.error || (state.active ? 'you’re in control' : data.principal && list.length === 0 ? 'your agents will appear here when they connect' : '');
     panel.classList.toggle('is-controlling', !!state.active);
+    editAvatar.disabled = !data.principal || factoryHost() !== location.origin;
+    editAvatar.title = editAvatar.disabled ? 'Connect this browser at the factory to edit your avatar' : 'Customize the look of your agents';
+    if (avatarNotice && !connectionError && !state.error) status.textContent = avatarNotice;
   }
   function findAgent() {
     const entry = agents.entries.get(state.active ?? picker.value); if (entry) visit(entry.mesh.position.x > 8);
@@ -154,6 +166,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   const logout = document.createElement('button'); logout.textContent = 'disconnect'; logout.hidden = true; sessionActions.append(logout);
   async function logOut() {
     if (factoryHost() !== location.origin) return false;
+    avatarEditor.invalidate();
     state.release(); grab.handleLoggedOut(); held.clear();
     try {
       const response = await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
@@ -198,7 +211,8 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     },
     sync(next: BoardData) {
       if (next === data) return;
-      data = next; state.sync(next.world?.agents ?? [], next.principal?.ownerId);
+      if (data.principal?.ownerId !== next.principal?.ownerId) avatarNotice = '';
+      data = next; state.sync(next.world?.agents ?? [], next.principal?.ownerId); avatarEditor.sync();
       login.hidden = !!next.principal; logout.hidden = !next.principal; paint();
     },
     update() {
@@ -209,6 +223,6 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
         const target = fromFactoryWorld(pointer); agents.placeOverride(id, target);
       }
     },
-    dispose() { stop(); state.release(); grab.destroy(); clearInterval(heartbeat); stopMessages(); stopConnection(); abort.abort(); panel.remove(); },
+    dispose() { avatarEditor.dispose(); stop(); state.release(); grab.destroy(); clearInterval(heartbeat); stopMessages(); stopConnection(); abort.abort(); panel.remove(); },
   };
 }
