@@ -12,12 +12,6 @@ export default defineConfig({
   build: {
     outDir: resolve(__dirname, 'dist/client'),
     emptyOutDir: true,
-    rollupOptions: {
-      input: {
-        main: resolve(__dirname, 'client/index.html'),
-        prototype25dSlice: resolve(__dirname, 'client/prototype-25d-slice.html'),
-      },
-    },
   },
   server: {
     port: 5173,

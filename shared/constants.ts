@@ -121,7 +121,7 @@ export const VALID_EMOTES: import('./types.js').EmoteType[] = ['dance', 'jump', 
 
 export const DEFAULT_SERVER_CONFIG: import('./types.js').ServerConfig = {
   title: 'AGENT FACTORY',
-  environment: 'factory25d',
+  environment: 'arcade',
 };
 
 // Map tool names to agent activities

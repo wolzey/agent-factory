@@ -85,6 +85,7 @@ export class StateManager {
   private idleExcursionCount = new Map<string, number>();
   private windowVisitors = new Set<string>();
   private rpsReadyAt = new Map<string, number>();
+  private restoringWorkReservations = new Map<number, string>();
 
   constructor(
     private environment: EnvironmentType = 'arcade',
@@ -209,28 +210,123 @@ export class StateManager {
     this.events = new Map(snapshot.events.map(event => [event.id, clone(event)]));
 
     const timestamp = this.now();
+    this.pruneWorld(timestamp, false);
+    if (snapshot.environment !== this.environment) {
+      this.restoreDifferentLayout(snapshot, timestamp);
+      return;
+    }
+    this.restoringWorkReservations = new Map(snapshot.agents.filter(session => !session.manualControl && session.activity !== 'stopped'
+      && session.world.zone === 'work' && session.world.slotIndex !== undefined).map(session => [session.world.slotIndex!, session.sessionId]));
     for (const stored of snapshot.agents) {
       const session = scrubLegacyAgentFields(clone(stored));
       this.knownSessions.add(session.sessionId);
       delete session.manualControl;
-      if (snapshot.environment !== this.environment) {
-        const zone = zoneForActivity(session.activity);
-        const slotIndex = session.world.slotIndex ?? 0;
-        session.world = { zone, slotIndex, position: slotPosition(this.environment, zone, slotIndex), facing: 'up' };
-      }
       if (session.activity === 'stopped') {
         this.createTombstone(session, timestamp);
         continue;
       }
       this.sessions.set(session.sessionId, session);
+      // A settled, explicitly dropped workstation assignment survives a restart,
+      // including an idle avatar placed there by its owner.
+      if (!stored.manualControl && !session.world.movement && session.world.zone === 'work'
+        && this.layoutSlotValid('work', session.world.slotIndex)) continue;
       this.syncWorld(session, timestamp);
     }
-    if (snapshot.environment !== this.environment) {
-      for (const tombstone of this.tombstones.values()) tombstone.position = tombstone.slotIndex === undefined
-        ? { ...WORLD_LAYOUTS[this.environment].entrance }
-        : slotPosition(this.environment, 'work', tombstone.slotIndex);
-    }
+    this.restoringWorkReservations.clear();
     this.pruneWorld(timestamp, false);
+  }
+
+  private layoutSlotValid(zone: 'work' | 'waiting' | 'idle', index: number | undefined): index is number {
+    if (index === undefined || !Number.isInteger(index) || index < 0) return false;
+    if (zone === 'work' && index >= WORLD_LAYOUTS[this.environment].workSlots.length) return false;
+    const point = slotPosition(this.environment, zone, index), bounds = this.worldBounds;
+    return Number.isFinite(point.x) && Number.isFinite(point.y) && point.x >= bounds.minX && point.x <= bounds.maxX
+      && point.y >= bounds.minY && point.y <= bounds.maxY;
+  }
+
+  private boundedLayoutSlots(zone: 'work' | 'waiting' | 'idle'): number[] {
+    const indices: number[] = [], positions = new Set<string>();
+    // The layout's overflow formulas can extend offscreen or repeat. Enumerate a
+    // fixed search window and retain only distinct, usable destination points.
+    const limit = zone === 'work' ? WORLD_LAYOUTS[this.environment].workSlots.length : 256;
+    for (let index = 0; index < limit; index++) {
+      if (!this.layoutSlotValid(zone, index)) continue;
+      const point = slotPosition(this.environment, zone, index), key = `${point.x}:${point.y}`;
+      if (!positions.has(key)) { positions.add(key); indices.push(index); }
+    }
+    return indices;
+  }
+
+  private boundedEntrance(): Position {
+    const point = WORLD_LAYOUTS[this.environment].entrance, bounds = this.worldBounds;
+    return { x: Math.max(bounds.minX, Math.min(bounds.maxX, point.x)), y: Math.max(bounds.minY, Math.min(bounds.maxY, point.y)) };
+  }
+
+  private restoreDifferentLayout(snapshot: WorldSnapshot, timestamp: number): void {
+    const sessions = snapshot.agents.map(stored => {
+      const session = scrubLegacyAgentFields(clone(stored));
+      delete session.manualControl; this.knownSessions.add(session.sessionId); return session;
+    });
+    this.sessions.clear();
+    const claimed = { work: new Set<number>(), waiting: new Set<number>(), idle: new Set<number>() };
+    const available = { work: this.boundedLayoutSlots('work'), waiting: this.boundedLayoutSlots('waiting'), idle: this.boundedLayoutSlots('idle') };
+    const placed = new Set<string>();
+    const claim = (zone: 'work' | 'waiting' | 'idle', preferred?: number) => {
+      const index = preferred !== undefined && available[zone].includes(preferred) && !claimed[zone].has(preferred)
+        ? preferred : available[zone].find(index => !claimed[zone].has(index));
+      if (index !== undefined) claimed[zone].add(index);
+      return index;
+    };
+    const place = (session: WorldAgent, zone: 'work' | 'waiting' | 'idle', index: number | undefined) => {
+      session.world = { zone, ...(index === undefined ? {} : { slotIndex: index }),
+        position: index === undefined ? this.boundedEntrance() : slotPosition(this.environment, zone, index), facing: zone === 'work' ? 'up' : 'down' };
+      placed.add(session.sessionId);
+    };
+
+    // Convert unfinished session endings before remapping zones, preserving their
+    // work reservation and the original removal/gravestone deadline.
+    for (const session of sessions) if (session.activity === 'stopped' && !this.tombstones.has(session.sessionId)) {
+      const removalAt = session.lastEventAt + STOPPED_REMOVAL_DELAY_MS;
+      if (removalAt + TOMBSTONE_DURATION_MS <= timestamp) continue;
+      this.tombstones.set(session.sessionId, { sessionId: session.sessionId, username: session.username, avatar: clone(session.avatar),
+        position: this.boundedEntrance(), ...(session.world.zone === 'work' && session.world.slotIndex !== undefined ? { slotIndex: session.world.slotIndex } : {}),
+        createdAt: Math.min(timestamp, removalAt), expiresAt: removalAt + TOMBSTONE_DURATION_MS });
+    }
+    for (const session of sessions) if (session.activity !== 'stopped') this.tombstones.delete(session.sessionId);
+
+    // Existing valid reservations win regardless of snapshot insertion order.
+    // Removed patio slots become memorials; they cannot reserve nonexistent machines.
+    for (const stone of this.tombstones.values()) {
+      if (this.layoutSlotValid('work', stone.slotIndex) && !claimed.work.has(stone.slotIndex)) {
+        claimed.work.add(stone.slotIndex); stone.position = slotPosition(this.environment, 'work', stone.slotIndex);
+      } else delete stone.slotIndex;
+    }
+    for (const session of sessions) {
+      if (session.activity === 'stopped' || session.world.zone !== 'work' || !this.layoutSlotValid('work', session.world.slotIndex)
+        || claimed.work.has(session.world.slotIndex)) continue;
+      claimed.work.add(session.world.slotIndex); place(session, 'work', session.world.slotIndex);
+    }
+    for (const session of sessions) {
+      if (session.activity === 'stopped' || placed.has(session.sessionId)) continue;
+      const zone = zoneForActivity(session.activity);
+      if (zone === 'work' || session.world.zone !== zone || !this.layoutSlotValid(zone, session.world.slotIndex) || !available[zone].includes(session.world.slotIndex)
+        || claimed[zone].has(session.world.slotIndex)) continue;
+      claimed[zone].add(session.world.slotIndex); place(session, zone, session.world.slotIndex);
+    }
+    for (const session of sessions) {
+      if (session.activity === 'stopped') continue;
+      if (!placed.has(session.sessionId)) {
+        let zone = zoneForActivity(session.activity), index = claim(zone);
+        if (zone === 'work' && index === undefined) { zone = 'waiting'; index = claim(zone); }
+        // No usable slot: keep the session visible at the bounded entrance rather
+        // than inventing an offscreen slot or discarding it.
+        place(session, zone, index);
+      }
+      this.sessions.set(session.sessionId, session);
+    }
+    for (const stone of this.tombstones.values()) if (stone.slotIndex === undefined) {
+      const index = claim('waiting'); stone.position = index === undefined ? this.boundedEntrance() : slotPosition(this.environment, 'waiting', index);
+    }
   }
 
   private advanceFactoryRoaming(timestamp: number): void {
@@ -292,6 +388,10 @@ export class StateManager {
 
     const changes: WorldChange[] = [];
     for (const session of this.sessions.values()) {
+      if (session.world.zone === 'waiting' && zoneForActivity(session.activity) === 'work' && !session.manualControl
+        && this.allocateSlot(session.sessionId, 'work') < WORLD_LAYOUTS[this.environment].workSlots.length) {
+        this.syncWorld(session, timestamp); changes.push({ kind: 'agent_upsert', agent: clone(session) });
+      }
       if (session.activity !== 'idle' || session.manualControl) {
         this.idleRoamAt.delete(session.sessionId);
         this.windowVisitors.delete(session.sessionId);
@@ -1124,11 +1224,23 @@ export class StateManager {
 
     let zone = zoneForActivity(session.activity);
     let slotIndex = this.allocateSlot(session.sessionId, zone, session.world.zone === zone ? session.world.slotIndex : undefined);
-    if (this.environment === 'factory25d' && zone === 'work' && slotIndex >= WORLD_LAYOUTS.factory25d.workSlots.length) {
+    if ((this.environment === 'factory25d' || session.world.zone === 'waiting') && zone === 'work'
+      && slotIndex >= WORLD_LAYOUTS[this.environment].workSlots.length) {
       zone = 'waiting';
-      slotIndex = this.allocateSlot(session.sessionId, zone, session.world.zone === zone ? session.world.slotIndex : undefined);
+      const occupied = new Set(Array.from(this.sessions.values()).filter(candidate => candidate.sessionId !== session.sessionId && candidate.world.zone === zone)
+        .map(candidate => candidate.world.slotIndex));
+      const candidates = this.boundedLayoutSlots(zone), preferred = session.world.zone === zone ? session.world.slotIndex : undefined;
+      const available = preferred !== undefined && candidates.includes(preferred) && !occupied.has(preferred)
+        ? preferred : candidates.find(index => !occupied.has(index));
+      if (available === undefined) {
+        session.world = { zone, position: this.boundedEntrance(), facing: 'down' }; return;
+      }
+      slotIndex = available;
     }
     const target = slotPosition(this.environment, zone, slotIndex);
+    if (Math.hypot(target.x - current.x, target.y - current.y) < 1) {
+      session.world = { zone, slotIndex, position: { ...target }, facing: session.world.facing }; return;
+    }
     const existingMovement = session.world.movement;
     if (existingMovement
       && session.world.zone === zone
@@ -1185,6 +1297,7 @@ export class StateManager {
       }
     }
     if (zone === 'work') {
+      for (const [index, owner] of this.restoringWorkReservations) if (owner !== sessionId) occupied.add(index);
       for (const tombstone of this.tombstones.values()) {
         if (tombstone.sessionId !== sessionId && tombstone.slotIndex !== undefined) {
           occupied.add(tombstone.slotIndex);
