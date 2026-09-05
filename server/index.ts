@@ -27,6 +27,8 @@ import { loadSessions } from './session-store.js';
 import { LibSqlWorldRepository } from './persistence/libsql-world-repository.js';
 import { WorldPersistence } from './persistence/world-persistence.js';
 import { normalizeBundledClientEnvironment } from './client-environment.js';
+import { AvatarProfiles } from './avatar-profiles.js';
+import { registerAvatarRoutes } from './routes/avatar.js';
 import type { ServerConfig, EmoteType } from '../shared/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -113,6 +115,8 @@ async function main() {
       console.log(`[startup] Imported ${legacySessions.length} session(s) from the legacy JSON store`);
     }
   }
+  const avatarProfiles = new AvatarProfiles(repository, state);
+  await avatarProfiles.initialize();
   const persistence = new WorldPersistence(repository);
   const broadcast = new BroadcastManager();
   const controls = new ControlManager(state, broadcast);
@@ -121,6 +125,7 @@ async function main() {
   // HTTP routes
   registerHookRoutes(app, state, broadcast, serverConfig, auth, () => persistence.status());
   registerAuthRoutes(app, auth, authHandoffs);
+  registerAvatarRoutes(app, auth, avatarProfiles);
 
   // WebSocket endpoint
   app.get('/ws', { websocket: true }, (socket, request) => {
