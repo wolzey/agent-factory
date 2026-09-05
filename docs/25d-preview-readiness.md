@@ -20,8 +20,20 @@ environment override should be updated with the release.
 The deployment manifest still points at `wolzey/agent-factory` main. A push to
 `britonbakerfluid/agent-factory` on `codex/factory-25d-preview` does not deploy or
 replace that service. No production deployment or live chat message was sent.
-The health endpoint does not report the deployed commit, so that exact revision
-remains unverified.
+The health endpoint does not report the deployed commit. A production WebSocket
+snapshot verified the live build as `c05e2af3c80d45c96faea954e2be76fc2ea22847`.
+The live service reports the `arcade` environment and healthy durable persistence.
+GitHub's recorded upstream deployment points at `agent-factory-coqw.onrender.com`,
+not the target `fluid-factory.onrender.com`; confirm the existing service's actual
+publishing configuration with its owner before changing either deployment.
+
+The compatible arcade recovery build is commit `fb0a2ba` on
+`codex/factory-25d-compatible-rollback` in the fork. Deploy it successfully with
+`ENVIRONMENT=arcade` before switching to this release, and retain its deploy ID.
+The original c05e2af build cannot parse a factory25d save. The compatible build
+preserves valid reservations, moves workers beyond twelve arcade desks into
+bounded waiting positions, and retains conversations and ownership. Follow the
+[release handoff](25d-release-handoff.md) for the exact rollout order.
 
 The original dirty checkout and its unrelated production scene/server changes
 are preserved. They are not included in this branch.
@@ -97,7 +109,7 @@ old scene, not reasons to discard the shared authentication or world protocol.
 
 - Full client/server production build passes. Vite still reports its existing
   large-landscape-chunk advisory.
-- All **397 tests across 59 files** pass, including world migration, all 18
+- All **403 tests across 60 files** pass, including world migration, all 18
   assignments, overflow waiting, patio vacancies, collision and doorway routes,
   owner-only controls, authenticated grab placement, takeover, chat reconnects,
   customized-avatar/subagent deltas, and live weather recovery.
@@ -105,6 +117,12 @@ old scene, not reasons to discard the shared authentication or world protocol.
   immediate logout revocation and stale authentication races, deployment refresh,
   title recovery, all effect poses and cleanup, same-batch arrival/effect races,
   RPS timing, vortex reconnects, grave expiry and station feedback isolation.
+- Both release and compatible recovery images build for Linux amd64 using the
+  production Dockerfile and frozen lockfile. As the non-root application user,
+  the release image migrated a private copy of the live world into 2.5D and saved
+  it. The recovery image then opened that actual flushed database, restored the
+  arcade room, and retained all agents, owners, avatars and chat. Health and
+  persistence passed on both; browser QA confirmed the restored arcade room.
 - The exact production client runs with an isolated local backend and database.
   Browser checks cover login handoff, selecting an owned agent, patio placement,
   quick movement taps reflected in server state, release, takeover in a second
