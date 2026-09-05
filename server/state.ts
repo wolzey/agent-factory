@@ -178,6 +178,7 @@ export class StateManager {
       effect: 'rps',
       effectData: {
         opponentSessionId: secondSessionId,
+        startedAt: timestamp,
         firstChoice: round.firstChoice,
         secondChoice: round.secondChoice,
         firstOutcome: round.firstOutcome,

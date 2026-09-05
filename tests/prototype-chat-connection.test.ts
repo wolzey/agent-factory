@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { watchBoardData, sendFactoryChat, type BoardData } from '../client/prototypes/factory25dBoardData';
+import { watchBoardData, sendFactoryChat, forgetFactoryLogin, type BoardData } from '../client/prototypes/factory25dBoardData';
 import { StateManager } from '../server/state';
 import { DEFAULT_AVATAR } from '../shared/constants';
 
@@ -107,5 +107,53 @@ it('keeps customized agents, children and station changes in the same revision s
   vi.advanceTimersByTime(1000);
   FactorySocket.instances[1].receive({type:'world_snapshot',snapshot:state.getSnapshot()});
   expect(latest().world?.agents).toEqual(state.getSnapshot().agents);
+  expect(latest().chat).toEqual([chat]);
+});
+
+it('refreshes once when a same-origin reconnect announces a new build, preserving a draft first', () => {
+  const reload = vi.fn(), saveDraft = vi.fn();
+  vi.stubGlobal('location', { hostname:'factory.example',origin:'https://factory.example',reload });
+  window.addEventListener('factory-before-refresh', saveDraft);
+  stop = watchBoardData(data => changes.push(data));
+  const first = FactorySocket.instances[0];
+  first.receive({type:'world_snapshot',snapshot:snapshot(1),buildId:'build-a'});
+  first.receive({type:'world_snapshot',snapshot:snapshot(2)});
+  first.close(); vi.advanceTimersByTime(1000);
+  const second = FactorySocket.instances[1];
+  second.receive({type:'world_snapshot',snapshot:snapshot(3),buildId:'build-a'});
+  expect(reload).not.toHaveBeenCalled();
+  second.receive({type:'world_snapshot',snapshot:snapshot(4),buildId:'build-b'});
+  second.receive({type:'world_snapshot',snapshot:snapshot(5),buildId:'build-b'});
+  expect(reload).toHaveBeenCalledTimes(1); expect(saveDraft).toHaveBeenCalledTimes(1);
+  expect(saveDraft.mock.invocationCallOrder[0]).toBeLessThan(reload.mock.invocationCallOrder[0]);
+  expect(latest().chat).toEqual([chat]);
+});
+
+it('does not refresh a local preview when its public remote feed is deployed', () => {
+  const reload = vi.fn();
+  vi.stubGlobal('location', {hostname:'localhost',origin:'http://localhost:5173',reload});
+  stop = watchBoardData(data => changes.push(data));
+  const socket=FactorySocket.instances[0];
+  socket.receive({type:'world_snapshot',snapshot:snapshot(1),buildId:'old'});
+  socket.receive({type:'world_snapshot',snapshot:snapshot(2),buildId:'new'});
+  expect(reload).not.toHaveBeenCalled(); expect(latest().connected).toBe(true);
+});
+
+it('revokes local send access immediately after logout even if an older login check finishes later', async () => {
+  stop=watchBoardData(data=>changes.push(data));
+  const socket=FactorySocket.instances[0];
+  socket.receive({type:'world_snapshot',snapshot:snapshot(1)});
+  socket.receive({type:'auth_result',success:true,username:'Ada',ownerId:'ada'});
+  let finish!: (response: Response) => void;
+  vi.mocked(fetch).mockImplementationOnce(()=>new Promise<Response>(resolve=>{finish=resolve;}));
+  window.dispatchEvent(new Event('focus'));
+  forgetFactoryLogin();
+  expect(latest().canChat).toBe(false); expect(latest().principal).toBeUndefined();
+  expect(sendFactoryChat('must stay local')).toBe(false);
+  socket.receive({type:'auth_result',success:true,username:'Ada',ownerId:'ada'});
+  finish({ok:true,json:async()=>({authenticated:true,username:'Ada',ownerId:'ada'})} as Response);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(latest().canChat).toBe(false);
+  expect(FactorySocket.instances).toHaveLength(2);
   expect(latest().chat).toEqual([chat]);
 });

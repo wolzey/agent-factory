@@ -2,13 +2,15 @@
 import * as THREE from 'three';
 import { createLiveAgents } from './factory25dLiveAgents';
 import { createFactoryControls } from './factory25dControls';
+import { createActivityFeedback, type StationFeedback } from './factory25dActivityFeedback';
 import { watchLiveWeather, liveSunAt } from './factory25dLiveWeather';
 import { resolveSkyClock } from '../sky/clock';
 import { WORKSTATIONS } from './factory25dWorkstations';
 import { createMountainView } from './factory25dMountains';
 import { requireElement } from './dom';
 import { signTexture } from './factory25dLabels';
-import { createDeskCard, createWallClock } from './factory25dSigns';
+import { createDeskCard, createWallClock, factoryTitleTexture } from './factory25dSigns';
+import { watchFactoryTitle } from './factory25dSite';
 import { installWeatherShortcut } from './factory25dDebug';
 import { createWindowWeather } from './factory25dWeather';
 import { createWhiteboardInteraction } from './factory25dWhiteboard';
@@ -284,6 +286,16 @@ function textPlane(
 const factorySign = textPlane('FLUID', 2.8, 0.3, '#ff52de', '#080b1a');
 factorySign.position.set(0, glassTop + 0.22, -4.255);
 scene.add(factorySign);
+let configuredTitle = '', titleDisposed = false;
+function applyFactoryTitle(title: string) {
+  if (titleDisposed) return;
+  configuredTitle = title; document.title = title;
+  canvas.setAttribute('aria-label', `${title} · live agent workspace`);
+  const material = factorySign.material as THREE.MeshBasicMaterial;
+  material.map?.dispose(); material.map = factoryTitleTexture(title); material.needsUpdate = true;
+}
+const stopTitle = watchFactoryTitle(applyFactoryTitle);
+void document.fonts.ready.then(() => { if (configuredTitle) applyFactoryTitle(configuredTitle); });
 const wallClock = createWallClock(scene, glassTop + 0.22);
 for (const x of [-4.65, 4.65]) {
   box([5.9, 0.025, 0.012], [x, glassTop + 0.21, -4.26], standard('#452555', 1, '#1c0c2b'), false, false);
@@ -342,7 +354,7 @@ const screenMaterials = [false, true].map((active) => {
 const workstationScale = 0.66;
 const machinePositions = INDOOR_COLUMNS;
 
-const stationVisuals = new Map<string, { setActive(active: boolean): void }>();
+const stationVisuals = new Map<string, { setFeedback(state?: StationFeedback): void }>();
 function workstation(x: number, z: number, active: boolean): void {
   const cabinet = new THREE.Group();
   propPart(cabinet, [0.88, 0.13, 0.56], [0, 0.12, 0.015], cabinetFoot);
@@ -353,12 +365,14 @@ function workstation(x: number, z: number, active: boolean): void {
     propPart(cabinet, [0.12, 0.08, 0.14], [side * 0.33, 0.04, 0.18], cabinetFoot);
   }
   propPart(cabinet, [0.84, 0.47, 0.08], [0, 0.85, 0.175], cabinetBezel);
-  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.68, 0.34), screenMaterials[Number(active)]);
+  const screenMaterial = screenMaterials[Number(active)].clone();
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.68, 0.34), screenMaterial);
   screen.position.set(0, 0.86, 0.221);
   cabinet.add(screen);
   propPart(cabinet, [1.02, 0.095, 0.54], [0, 1.145, -0.015], cabinetSide);
-  const marquee = propPart(cabinet, [0.86, 0.065, 0.035], [0, 1.145, 0.274], active ? activeMarquee : idleMarquee);
-  propPart(cabinet, [0.86, 0.018, 0.15], [0, 1.202, 0.18], active ? activeMarquee : idleMarquee);
+  const marqueeMaterial = (active ? activeMarquee : idleMarquee).clone();
+  propPart(cabinet, [0.86, 0.065, 0.035], [0, 1.145, 0.274], marqueeMaterial);
+  propPart(cabinet, [0.86, 0.018, 0.15], [0, 1.202, 0.18], marqueeMaterial);
   const deck = propPart(cabinet, [0.98, 0.09, 0.33], [0, 0.565, 0.24], cabinetDeck);
   deck.rotation.x = 0.12;
   propPart(cabinet, [0.045, 0.095, 0.045], [-0.22, 0.65, 0.26], cabinetBezel);
@@ -376,7 +390,17 @@ function workstation(x: number, z: number, active: boolean): void {
     glow.position.set(x, 0.84 * workstationScale, z + 0.56 * workstationScale);
     interior.add(glow);
     const id = WORKSTATIONS.find(station => station.x === x && Math.abs(station.z - (z + 1.95)) < 0.01)?.id;
-    if (id) stationVisuals.set(id, { setActive(on) { screen.material = screenMaterials[Number(on)]; marquee.material = on ? activeMarquee : idleMarquee; glow.intensity = on ? 1.1 : 0; } });
+    if (id) stationVisuals.set(id, { setFeedback(state) {
+      const on = state?.active ?? false, error = state?.error ?? 0, pulse = reducedSceneMotion.matches ? 0 : state?.pulse ?? 0, heat = state?.heat ?? 0;
+      const color = state?.color ?? '#66b9be';
+      screenMaterial.map = screenMaterial.emissiveMap = on ? activeScreenTexture : idleScreenTexture;
+      screenMaterial.emissive.set(on || error ? color : '#263455');
+      screenMaterial.emissiveIntensity = on ? 0.9 + heat * 0.15 + pulse * 0.15 : 0.15;
+      marqueeMaterial.color.set(on || error ? color : '#592563');
+      marqueeMaterial.emissive.set(on || error ? color : '#160720');
+      marqueeMaterial.emissiveIntensity = on ? 0.35 + pulse * 0.15 : error * 0.4;
+      glow.color.set(color); glow.intensity = on ? 1.1 + heat * 0.2 + pulse * 0.2 : error * 0.4;
+    } });
   }
 }
 
@@ -384,6 +408,7 @@ for (const x of machinePositions) workstation(x, INDOOR_ROWS[0], false);
 for (const x of machinePositions) workstation(x, INDOOR_ROWS[1], false);
 
 const liveAgents = createLiveAgents(scene, sideRoomScene, canvas);
+const activityFeedback = createActivityFeedback(canvas.parentElement!);
 
 // Small, uneven groups sit on the room floor, with a walking strip behind the desks.
 const indoorPlants = createIndoorPlants(interior);
@@ -513,6 +538,14 @@ let currentViewCamera: THREE.Camera = camera;
 const factoryControls = createFactoryControls(canvas, liveAgents, () => currentViewCamera,
   () => whiteboardInteraction.isRoomView() && !windowInteraction.isOpen() && !loungeDetails.chat.isActive() && !document.body.classList.contains('inspect-open'),
   outside => sideRoom.visit(outside));
+loungeDetails.chat.configureCommands({
+  getTargetSessionId: () => factoryControls.getTargetSessionId(),
+  logout: () => factoryControls.logout(),
+  requestRoom() {
+    if (!whiteboardInteraction.isRoomView() || windowInteraction.isOpen() || document.body.classList.contains('inspect-open')) return false;
+    factoryControls.state.stop(); sideRoom.visit(false); return true;
+  },
+});
 const floorKeyboard = createFloorKeyboard(interior, canvas, camera, () => factoryControls.guideMovement());
 const basketball = createBasketball(interior, canvas, [], {
   tap: () => sceneAudio.ballTap(), swish: () => sceneAudio.ballSwish(), bounce: energy => sceneAudio.ballBounce(energy),
@@ -722,8 +755,9 @@ function animate(): void {
   activeScreenTexture.offset.x = (Math.floor(elapsed * 4) % 4) * 0.25;
   const factoryData = whiteboardInteraction.getData();
   liveAgents.sync(factoryData.world); factoryControls.sync(factoryData);
+  activityFeedback.sync(factoryData.world, liveAgents.entries.values());
   const eligible = [...liveAgents.entries.values()].filter(entry => entry.session.activity === 'idle' && !entry.session.manualControl
-    && entry.mesh.position.x < 8).slice(0, 2);
+    && !liveAgents.isPerforming(entry.session.sessionId) && entry.mesh.position.x < 8).slice(0, 2);
   const roster = eligible.map(entry => entry.session.sessionId).join('|');
   if (roster !== basketballRoster) {
     basketballRoster = roster;
@@ -739,9 +773,9 @@ function animate(): void {
     player.home = {x: player.position.x, z: player.position.z};
   }
   basketball.update(dt, camera, mainRoomVisible, !factoryControls.state.active, reducedSceneMotion.matches);
-  const occupied = liveAgents.occupied();
-  for (const [id, station] of stationVisuals) station.setActive(occupied.has(id));
-  patio.stations.setOccupied(occupied);
+  const stationFeedback = activityFeedback.stationStates();
+  for (const [id, station] of stationVisuals) station.setFeedback(stationFeedback.get(id));
+  patio.stations.setFeedback(stationFeedback, reducedSceneMotion.matches);
   const feet = [...liveAgents.entries.values()].filter(entry => entry.mesh.position.x < 8).map(entry => ({ x: entry.mesh.position.x, z: entry.mesh.position.z - 1.95 }));
   floorKeyboard.update(dt, feet, mainRoomVisible);
   indoorPlants.update(elapsed, reducedSceneMotion.matches);
@@ -757,6 +791,7 @@ function animate(): void {
     if (entry) liveAgents.placeOverride(player.id, { x: player.position.x, z: player.position.z + 1.95 }, basketball.jump);
   }
   factoryControls.update();
+  activityFeedback.update();
   duckHunt.update(dt, viewCamera, sideRoom.isActive() && !sideRoom.showsFactory());
   // Keep a square sky image in both the tilted room view and the straight-on window view.
   // Its plane stays behind mountains/clouds instead of rotating through those layers.
@@ -790,4 +825,4 @@ function animate(): void {
 
 animate();
 
-if (import.meta.hot) import.meta.hot.dispose(() => { sceneAudio.dispose(); stopWeather(); factoryControls.dispose(); liveAgents.dispose(); });
+if (import.meta.hot) import.meta.hot.dispose(() => { titleDisposed = true; stopTitle(); sceneAudio.dispose(); stopWeather(); factoryControls.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.chat.dispose(); });

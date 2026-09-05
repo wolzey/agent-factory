@@ -65,7 +65,7 @@ export function createPointerZoom(canvas: HTMLCanvasElement) {
     if (document.body.classList.contains('board-dragging')) return;
     if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input:not([type="range"]), textarea, select, [role="textbox"]'))) return;
     if (document.body.classList.contains('chat-open')) return;
-    if (event.key.toLowerCase() === 'c' || (active && event.key === 'Escape')) {
+    if (event.key.toLowerCase() === 'i' || (active && event.key === 'Escape')) {
       event.preventDefault();
       event.stopImmediatePropagation();
       if (active) close(); else open();

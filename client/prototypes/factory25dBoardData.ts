@@ -111,6 +111,8 @@ export function factoryHost() {
 }
 let chatSocket: WebSocket | null = null;
 let maySendChat = false;
+let invalidateLogin: (() => void) | undefined;
+export function forgetFactoryLogin() { maySendChat = false; invalidateLogin?.(); }
 const messageListeners = new Set<(message: WSMessageToClient) => void>();
 const connectionListeners = new Set<(connected: boolean) => void>();
 export function onFactoryMessage(listener: (message: WSMessageToClient) => void) {
@@ -136,6 +138,8 @@ export function watchBoardData(onChange: (data: BoardData) => void) {
   let previous: BoardData = { agents: [], merges: null, connected: false, chat: [] };
   let request: AbortController | null = null, socket: WebSocket | null = null;
   let stopped = false, revision: number | null = null, generation = 0;
+  let serverBuildId: string | undefined, refreshingBuild = false;
+  let authenticationGeneration = 0, revokedSocket: WebSocket | null = null;
   let identity = '', checkingLogin = false;
   let principal: BoardData['principal'];
   const world = new WorldStore();
@@ -147,6 +151,11 @@ export function watchBoardData(onChange: (data: BoardData) => void) {
   };
   let retry = 0, delay = 1000;
   const publish = () => { if (!stopped) onChange({ ...previous, canChat: maySendChat, principal: maySendChat ? principal : undefined }); };
+  const clearLogin = () => {
+    authenticationGeneration++; identity = ''; principal = undefined; maySendChat = false;
+    revokedSocket = socket; publish(); socket?.close();
+  };
+  invalidateLogin = clearLogin;
   async function refresh() {
     if (document.hidden || request || stopped || (socket?.readyState === WebSocket.OPEN && revision !== null)) return;
     const controller = new AbortController(), start = generation;
@@ -168,9 +177,10 @@ export function watchBoardData(onChange: (data: BoardData) => void) {
     if (stopped) return;
     const url = new URL('/ws', host); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     socket = new WebSocket(url); chatSocket = socket;
+    const peer = socket;
     socket.onopen = () => { delay = 1000; connectionListeners.forEach(listener => listener(true)); };
     socket.onmessage = event => {
-      if (stopped) return;
+      if (stopped || refreshingBuild || peer !== socket || peer === revokedSocket) return;
       try {
         const message = JSON.parse(event.data);
         if (message.type === 'auth_result') {
@@ -178,6 +188,18 @@ export function watchBoardData(onChange: (data: BoardData) => void) {
           identity = maySendChat ? `${message.ownerId}:${message.username}` : '';
           principal = maySendChat && message.ownerId && message.username ? { ownerId: message.ownerId, username: message.username } : undefined;
         } else if (message.type === 'world_snapshot') {
+          // Only this origin serves our bundle. A public remote feed changing
+          // must not refresh a developer's local preview or discard their work.
+          const buildId = typeof message.buildId === 'string' ? message.buildId.trim() : '';
+          if (host === location.origin && buildId) {
+            if (serverBuildId && serverBuildId !== buildId) {
+              refreshingBuild = true;
+              window.dispatchEvent(new Event('factory-before-refresh'));
+              location.reload();
+              return;
+            }
+            serverBuildId = buildId;
+          }
           receiveSnapshot(message.snapshot);
           revision = count(message.snapshot.revision); generation++;
         } else if (message.type === 'world_delta') {
@@ -206,11 +228,12 @@ export function watchBoardData(onChange: (data: BoardData) => void) {
     // Local previews never copy or proxy the live site's browser session.
     if (host !== location.origin || document.hidden || stopped || checkingLogin) return;
     checkingLogin = true;
+    const authenticationAtStart = authenticationGeneration;
     try {
       const response = await fetch('/api/auth/session', { credentials: 'same-origin', cache: 'no-store' });
-      if (stopped || (!response.ok && response.status !== 401)) return;
+      if (stopped || authenticationAtStart !== authenticationGeneration || (!response.ok && response.status !== 401)) return;
       const session = await response.json();
-      if (stopped) return;
+      if (stopped || authenticationAtStart !== authenticationGeneration) return;
       const next = response.ok && session.authenticated ? `${session.ownerId}:${session.username}` : '';
       if (next !== identity) {
         identity = next; maySendChat = false; publish();
@@ -227,6 +250,7 @@ export function watchBoardData(onChange: (data: BoardData) => void) {
   return () => {
     stopped = true; request?.abort(); clearTimeout(retry); clearInterval(timer);
     maySendChat = false; socket?.close(); chatSocket = null;
+    if (invalidateLogin === clearLogin) invalidateLogin = undefined;
     connectionListeners.forEach(listener => listener(false));
     document.removeEventListener('visibilitychange', visible);
     window.removeEventListener('focus', visible);

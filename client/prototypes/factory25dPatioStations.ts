@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PATIO_STATIONS } from './factory25dWorkstations';
 import { propPart, standard } from './factory25dProps';
 import { contactShadow } from './factory25dContactShadows';
+import type { StationFeedback } from './factory25dActivityFeedback';
 
 export function createPatioStations(parent: THREE.Group) {
   const oak = standard('#a58254', 1), teal = standard('#447d76', 1), iron = standard('#303f47', 1);
@@ -37,6 +38,14 @@ export function createPatioStations(parent: THREE.Group) {
   propPart(parent, [4.15, 0.07, 0.28], [13.65, 0.24, 3.22], teal);
   for (const x of [11.95, 15.35]) propPart(parent, [0.075, 0.21, 0.25], [x, 0.105, 3.22], iron);
   return {
+    setFeedback(states: Map<string, StationFeedback>, reducedMotion = false) {
+      for (const [id, material] of screens) {
+        const state = states.get(id), on = state?.active ?? false;
+        material.color.set(on || state?.error ? state!.color : '#27454b');
+        material.emissive.set(on || state?.error ? state!.color : '#10272a');
+        material.emissiveIntensity = on ? 0.55 + state!.heat * 0.15 + (reducedMotion ? 0 : state!.pulse * 0.15) : (state?.error ?? 0) * 0.35;
+      }
+    },
     setOccupied(ids: Set<string>) {
       for (const [id, material] of screens) {
         material.color.set(ids.has(id) ? '#69e5bf' : '#27454b');

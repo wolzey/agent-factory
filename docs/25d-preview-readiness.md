@@ -55,6 +55,23 @@ are preserved. They are not included in this branch.
 - Basketball uses available live idle agents, keeps scores by session ID on this
   device, and routes local game movement around the real room geometry. The
   floor keyboard responds to actual agents walking over it using shared controls.
+- Lounge chat supports `/help`, `/chat`, `/emote`, `/vortex` and `/logout`, with
+  command completion, history and unsent draft recovery. Help and command errors
+  stay local; shared messages still appear only through the server echo. C opens
+  chat from indoors or the patio; I opens the separate close-up view.
+- All twelve emotes, server-targeted shots and hits, synchronized rock-paper-scissors,
+  commit confetti, merge celebrations and timed vortex events render in 2.5D.
+  Effects reconcile with the latest roster before playing, retain their original
+  timing, and release their resources when they finish. Reduced motion removes
+  large avatar movement and projectiles.
+- Personalized gravestones use the server's station reservations and expiration;
+  returning sessions replace their marker with a return animation. Thinking,
+  permission, planning, compaction, notifications and actual tool failures appear
+  beside the agent. Indoor and patio stations warm with tool use and show errors
+  only for the affected station.
+- The wall sign and browser title follow server configuration. A changed build
+  ID refreshes same-origin clients once, preserving the chat draft. Changes to a
+  remote public feed do not reload a local development preview.
 
 ## Audio
 
@@ -71,8 +88,6 @@ including attribution for the CC BY 4.0 wind recording.
 ## Scope limits
 
 Basketball and duck scores remain local game state, not shared competitions.
-Server effect commands are connected, but the old scene's individual celebration,
-vortex, projectile and tombstone animations have not all been recreated in 3D.
 Avatar appearance comes from existing installation configuration; the prototype
 does not add an avatar editor. Merge totals remain unavailable when the server
 snapshot does not provide them. These are visual/product differences from the
@@ -82,15 +97,26 @@ old scene, not reasons to discard the shared authentication or world protocol.
 
 - Full client/server production build passes. Vite still reports its existing
   large-landscape-chunk advisory.
-- All **361 tests across 55 files** pass, including world migration, all 18
+- All **397 tests across 59 files** pass, including world migration, all 18
   assignments, overflow waiting, patio vacancies, collision and doorway routes,
   owner-only controls, authenticated grab placement, takeover, chat reconnects,
   customized-avatar/subagent deltas, and live weather recovery.
+- Additional regression coverage includes command authorization/completion/history,
+  immediate logout revocation and stale authentication races, deployment refresh,
+  title recovery, all effect poses and cleanup, same-batch arrival/effect races,
+  RPS timing, vortex reconnects, grave expiry and station feedback isolation.
 - The exact production client runs with an isolated local backend and database.
   Browser checks cover login handoff, selecting an owned agent, patio placement,
   quick movement taps reflected in server state, release, takeover in a second
   tab, existing lounge history and a server-echoed local QA message. No real
   installation credentials or production messages are used.
+- The final feature pass checks C/I keyboard navigation, command completion and
+  history, private help/errors, signed-out send rejection, and patio-to-chat
+  navigation in the browser. Restarting the isolated backend with a new build ID
+  refreshed the client while retaining chat history and its draft. Screenshots
+  confirm guitar/dance props, permission/thinking/error/notification indicators,
+  a personalized grave, patio activity feedback and a vortex surviving a reload.
+  The configured `Rain & Research` title appears in the tab and wall sign.
 - The 390-by-844 CSS viewport keeps the expanded controls within its width and
   height without horizontal overflow. Desktop screenshots show actual indoor
   and patio agents and their subagents. Real touch drag/hold and keyboard input

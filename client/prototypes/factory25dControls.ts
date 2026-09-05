@@ -6,7 +6,7 @@ import { nearestWorkstationSlot, slotPosition } from '@shared/world-layouts';
 import { AuthManager } from '../auth/AuthManager';
 import { GrabManager } from '../grab/GrabManager';
 import { FactoryControlState } from './factory25dControlState';
-import { factoryHost, onFactoryConnection, onFactoryMessage, sendFactoryCommand, type BoardData } from './factory25dBoardData';
+import { factoryHost, forgetFactoryLogin, onFactoryConnection, onFactoryMessage, sendFactoryCommand, type BoardData } from './factory25dBoardData';
 import type { createLiveAgents } from './factory25dLiveAgents';
 
 export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnType<typeof createLiveAgents>,
@@ -152,13 +152,28 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   const sessionActions = panel.querySelector('.factory-session-actions')!;
   const login = document.createElement('button'); login.textContent = 'connect this browser'; sessionActions.append(login);
   const logout = document.createElement('button'); logout.textContent = 'disconnect'; logout.hidden = true; sessionActions.append(logout);
+  async function logOut() {
+    if (factoryHost() !== location.origin) return false;
+    state.release(); grab.handleLoggedOut(); held.clear();
+    try {
+      const response = await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+      if (!response.ok) throw new Error('Logout failed');
+      connectionError = '';
+      sendFactoryCommand({ type: 'logout' });
+      forgetFactoryLogin();
+      return true;
+    } catch {
+      connectionError = 'Couldn’t disconnect. Check your connection and try again.'; paint();
+      return false;
+    }
+  }
   login.addEventListener('click', () => {
     if (factoryHost() !== location.origin) {
       const link = document.createElement('a'); link.href = new URL('/', factoryHost()).href; link.target = '_blank'; link.rel = 'noopener'; link.textContent = 'connect at the live factory ↗';
       sessionActions.append(link); login.hidden = true;
     } else status.textContent = 'Run agent-factory login on the machine whose agents you want to control, then return here.';
   }, options);
-  logout.addEventListener('click', async () => { state.release(); grab.handleLoggedOut(); await auth.logout(); window.dispatchEvent(new Event('focus')); }, options);
+  logout.addEventListener('click', () => { void logOut(); }, options);
   const exchangeHandoff = () => {
     if (factoryHost() !== location.origin) return;
     const fragment = new URLSearchParams(location.hash.slice(1)), code = fragment.get('handoff');
@@ -171,6 +186,11 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   paint();
   return {
     state,
+    getTargetSessionId() {
+      const target = state.active ?? picker.value;
+      return state.owned().some(agent => agent.sessionId === target) ? target : null;
+    },
+    logout: logOut,
     guideMovement() {
       panel.open = true;
       if (state.active) { (document.activeElement as HTMLElement)?.blur(); return 'Use W/A/S/D or the arrow buttons to step onto a key'; }

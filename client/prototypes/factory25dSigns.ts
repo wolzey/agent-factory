@@ -4,6 +4,21 @@ import { contactShadow } from './factory25dContactShadows';
 import { signTexture } from './factory25dLabels';
 import { propPart, standard } from './factory25dProps';
 
+export function factoryTitleTexture(title: string) {
+  const canvas = document.createElement('canvas'); canvas.width = 448; canvas.height = 48;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#080b1a'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.font = '32px "Geist Pixel", monospace';
+  const fontSize = Math.min(32, 32 * 420 / Math.max(1, ctx.measureText(title).width));
+  ctx.font = `${fontSize}px "Geist Pixel", monospace`;
+  ctx.fillStyle = '#ff52de'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(title, 224, 24);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = texture.magFilter = THREE.NearestFilter; texture.generateMipmaps = false;
+  return texture;
+}
+
 export function createDeskCard(parent: THREE.Group) {
   const card = new THREE.Group();
   const width = 1.15;
