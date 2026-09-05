@@ -338,7 +338,7 @@ export function paintSkyline(
 export function paintWindowWeather(
   pixels: PixelBuffer,
   geometry: SkylineGeometry,
-  state: SkyState,
+  state: Pick<SkyState, 'palette'>,
   weather: WeatherVisualState,
   motionPhase: number,
 ): void {
