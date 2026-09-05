@@ -519,7 +519,7 @@ export function createWhiteboardInteraction({
   resize.observe(navigation);
 
   const boardDragging = installBoardDragging(board, openBoard, canvas, camera,
-    () => view === 'room' && !transition && !document.body.matches('.weather-open, .secondary-room, .inspect-open'),
+    () => view === 'room' && !transition && !document.body.matches('.weather-open, .secondary-room, .inspect-open, .team-open'),
     () => { layoutDirty = true; },
   );
 

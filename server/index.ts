@@ -1,3 +1,6 @@
+import { TeamRoster } from './team-roster.js';
+import { registerTeamRoutes } from './routes/team.js';
+import { watchPresenceConnection } from './ws/presence-heartbeat.js';
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import cors from '@fastify/cors';
@@ -117,6 +120,10 @@ async function main() {
   }
   const avatarProfiles = new AvatarProfiles(repository, state);
   await avatarProfiles.initialize();
+  const team = new TeamRoster(repository, () => state.getAll(), ownerId => {
+    const profile = avatarProfiles.get(ownerId); return profile.saved ? profile.avatar : undefined;
+  });
+  await team.initialize();
   const persistence = new WorldPersistence(repository);
   const broadcast = new BroadcastManager();
   const controls = new ControlManager(state, broadcast);
@@ -126,6 +133,7 @@ async function main() {
   registerHookRoutes(app, state, broadcast, serverConfig, auth, () => persistence.status());
   registerAuthRoutes(app, auth, authHandoffs);
   registerAvatarRoutes(app, auth, avatarProfiles);
+  registerTeamRoutes(app, team);
 
   // WebSocket endpoint
   app.get('/ws', { websocket: true }, (socket, request) => {
@@ -136,8 +144,9 @@ async function main() {
     }
 
     broadcast.add(socket);
+    watchPresenceConnection(socket);
     const principal = readBrowserPrincipal(request, auth);
-    if (principal) broadcast.authenticateSocket(socket, principal);
+    if (principal) { broadcast.authenticateSocket(socket, principal); team.connect(socket, principal); }
 
     // Send one complete, revisioned world and any active grab leases on connect.
     broadcast.sendWorldSnapshot(socket, state.getSnapshot());
@@ -152,6 +161,7 @@ async function main() {
     }
 
     const dropSocket = (reason: string) => {
+      team.disconnect(socket);
       controls.releaseSocket(socket, reason);
       grabs.releaseSocket(socket, reason);
     };
@@ -265,6 +275,7 @@ async function main() {
 
   // Await first poll so the cache is populated before we restore sessions
   await registry.start();
+  state.getSnapshot().agents.forEach(agent => team.observe(agent));
 
   // Broadcast revisioned deltas and checkpoint the complete world.
   state.onStateChange((notification) => {
@@ -279,6 +290,7 @@ async function main() {
 
     // Publish and checkpoint this revision before lifecycle callbacks can synchronously
     // create a later revision (for example, clearing a stopped control lease).
+    team.sync(notification.delta);
     persistence.schedule(state.getSnapshot(), notification.immediatePersistence);
     broadcast.broadcastWorldDelta(notification.delta);
     for (const change of notification.delta.changes) {
@@ -301,6 +313,7 @@ async function main() {
 
   // Start stale cleanup, lifecycle pruning, and manual-control simulation.
   const staleTimer = startStaleReaper(state);
+  const teamTimer = setInterval(() => void team.flush(), 5_000);
   const worldTimer = setInterval(() => state.advanceWorld(), 1_000);
   controls.start();
   grabs.start();
@@ -316,9 +329,11 @@ async function main() {
   app.addHook('onClose', async () => {
     clearInterval(staleTimer);
     clearInterval(worldTimer);
+    clearInterval(teamTimer);
     registry.stop();
     controls.stop();
     grabs.stop();
+    await team.flush();
     await persistence.close();
   });
 

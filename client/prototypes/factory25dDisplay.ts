@@ -8,7 +8,7 @@ type DisplayLook = 'clean' | 'crt' | 'phosphor';
 export function createDisplayStudy(renderer: THREE.WebGLRenderer) {
   const controls = requireElement<HTMLElement>('#display-study');
   const buttons = [...controls.querySelectorAll<HTMLButtonElement>('[data-display]')];
-  const params = new URLSearchParams(location.search);
+  const params = new URLSearchParams(import.meta.env.DEV ? location.search : '');
   const query = params.get('display');
   let look: DisplayLook = query === 'crt' || query === 'phosphor' ? query : 'clean';
   let dof = params.get('dof') === 'on';

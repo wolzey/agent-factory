@@ -64,7 +64,7 @@ export function createPointerZoom(canvas: HTMLCanvasElement) {
     if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
     if (document.body.classList.contains('board-dragging')) return;
     if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input:not([type="range"]), textarea, select, [role="textbox"]'))) return;
-    if (document.body.classList.contains('chat-open')) return;
+    if (document.body.matches('.chat-open, .team-open')) return;
     if (event.key.toLowerCase() === 'i' || (active && event.key === 'Escape')) {
       event.preventDefault();
       event.stopImmediatePropagation();

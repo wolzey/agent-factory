@@ -88,7 +88,7 @@ export function createFloorKeyboard(
   const hit = new THREE.Vector3();
   const worldPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -KEY_TOP);
   let hover = -1;
-  let selected = 30;
+  let selected = FLOOR_KEYS.findIndex(key => key.label === 'space');
   let lastActive = '';
   function pointer(event: MouseEvent) {
     const rect = canvas.getBoundingClientRect();

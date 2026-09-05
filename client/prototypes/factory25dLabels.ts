@@ -87,7 +87,7 @@ export function createNameTag(name: string, working: boolean, parent: HTMLElemen
   activity.className = 'agent-activity';
   activity.textContent = working ? 'working at the station' : 'relaxing in the lounge';
   const source = document.createElement('small');
-  source.textContent = 'preview character · live task details aren’t connected yet';
+  source.textContent = 'task details are not available';
   details.append(title, activity, source);
   details.hidden = true;
   element.append(button, details);

@@ -119,7 +119,7 @@ describe('sky clock override', () => {
     expect(resolveSkyClock('?skyTime=1782151200000', fallback)()).toBe(1782151200000);
     expect(parseSkyTime(null)).toBeNull();
     expect(parseSkyTime('  ')).toBeNull();
-    expect(formatMountainClock(Date.parse('2026-09-03T09:15:00-06:00'))).toBe('09:15');
+    expect(formatMountainClock(Date.parse('2026-09-03T09:15:00-06:00'))).toBe('9:15 am');
   });
 
   it('can accelerate a frozen instant for solar-arc QA', async () => {

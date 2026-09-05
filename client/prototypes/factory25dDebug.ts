@@ -6,6 +6,8 @@ export function installWeatherShortcut() {
   const room = requireElement<HTMLDetailsElement>('.scene-settings');
   const windowSettings = requireElement<HTMLDetailsElement>('.window-settings');
   const announcement = requireElement<HTMLElement>('#weather-shortcut-status');
+  // Comparison controls belong to local development, never the shared room.
+  if (!import.meta.env.DEV) { room.hidden = windowSettings.hidden = true; return; }
   let storage: Storage | undefined;
   try {
     storage = window.localStorage;
