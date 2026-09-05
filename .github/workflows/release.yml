@@ -4,6 +4,17 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (vMAJOR.MINOR.PATCH, e.g. v0.22.0)"
+        required: true
+        type: string
+
+# Do not overlap publishers or cancel an upload already in progress.
+concurrency:
+  group: cli-release
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -11,16 +22,52 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # Manual releases must use main; tag pushes keep their original behavior.
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Validate manual version
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ ! "$VERSION" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo 'Version must be vMAJOR.MINOR.PATCH without leading zeros.' >&2
+            exit 1
+          fi
+          if git show-ref --verify --quiet "refs/tags/$VERSION"; then
+            if [[ "$(git rev-list -n 1 "$VERSION")" != "$(git rev-parse HEAD)" ]]; then
+              echo 'Version already tags a different commit; choose a new version.' >&2
+              exit 1
+            fi
+          fi
+
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
 
+      - name: Test CLI
+        working-directory: cli
+        run: go test ./...
+
+      - name: Create release tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! git show-ref --verify --quiet "refs/tags/$VERSION"; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git tag -a "$VERSION" -m "Release $VERSION"
+          fi
+          git push origin "refs/tags/$VERSION"
+          git checkout --detach "$VERSION"
+
+      # GITHUB_TOKEN-created tags do not start another workflow. Publish here.
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: latest

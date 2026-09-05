@@ -175,6 +175,26 @@ agent-factory update && agent-factory login
 
 The first command run by the new binary repairs the installed hook. `login` also creates the persistent installation identity and opens the browser handoff. Later upgrades refresh hooks directly from the newly installed binary.
 
+### Publishing a CLI release
+
+Pushing `main` runs CI and deploys the hosted app, but does **not** publish CLI
+binaries. After CI passes, open **Actions → Release → Run workflow**, select
+`main`, and enter the next version (for example `v0.22.0`). From a terminal:
+
+```bash
+gh workflow run release.yml --ref main -f version=v0.22.0
+```
+
+The workflow tests the CLI, creates an immutable version tag, and uses GoReleaser
+to publish macOS/Linux archives and checksums. Existing `v*` tag pushes remain
+supported. Once the release succeeds, users can run `agent-factory update`.
+
+If publication fails after tagging, rerun the failed workflow at its original
+commit; do not move or delete the tag. A manual run refuses to reuse a version
+that points to another commit. Releases are serialized to avoid overlapping
+uploads. To undo the workflow change, revert it; already published tags and
+binaries are unaffected.
+
 ### What Gets Sent
 
 This applies to every sender: the shell hook used by Claude and Codex, and the pi extension, which posts to the same endpoint.
