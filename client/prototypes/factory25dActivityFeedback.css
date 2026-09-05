@@ -1,0 +1,53 @@
+.agent-status-bubble {
+  position: absolute;
+  bottom: calc(100% + clamp(16px, 2.3cqw, 30px));
+  left: calc(50% + 11px);
+  display: block;
+  min-width: 20px;
+  padding: 3px 4px;
+  border: 2px solid #b9c9ce;
+  background: #20303cec;
+  color: #e1eeeb;
+  font: 12px/1 'Geist Pixel', monospace;
+  text-align: center;
+  text-shadow: none;
+  box-shadow: 2px 2px 0 #0b172580;
+  pointer-events: none;
+}
+.agent-status-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 3px;
+  width: 3px;
+  height: 3px;
+  background: #b9c9ce;
+}
+.agent-status-bubble[data-kind='waiting'] { color: #f7dfa3; border-color: #c7ae70; }
+.agent-status-bubble[data-kind='compacting'], .agent-status-bubble[data-kind='planning'] { color: #d8c5ea; border-color: #a48bbc; }
+.agent-status-bubble[data-kind='error'] { color: #ffcabd; border-color: #cc8178; }
+.agent-status-bubble[data-kind='thinking'] { animation: factory-thought 2.4s ease-in-out infinite; }
+.agent-status-bubble[data-kind='working'] { color: #b5dfd0; border-color: #86ada0; }
+.agent-event-notice {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + clamp(48px, 5.2cqw, 67px));
+  transform: translateX(-50%);
+  max-width: min(190px, 55vw);
+  padding: 5px 7px;
+  border: 1px solid #83978fa6;
+  background: #17252cef;
+  color: #dce6dd;
+  font: 11px/1.4 'Geist Pixel', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.agent-event-notice[data-kind='error'] { color: #f3c0b3; border-color: #bf776db0; }
+.agent-event-notice[data-kind='permission'] { color: #ead09c; border-color: #b69f69a6; }
+.agent-feedback-detail { border-top: 1px solid #65788d50; padding-top: 7px; color: #c7d5d3; }
+.agent-status-bubble[hidden], .agent-event-notice[hidden] { display: none; }
+.factory-activity-announcer { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@keyframes factory-thought { 0%, 100% { color: #a9bbc5; } 50% { color: #e1eeeb; } }
+@media (prefers-reduced-motion: reduce) { .agent-status-bubble { animation: none; } }

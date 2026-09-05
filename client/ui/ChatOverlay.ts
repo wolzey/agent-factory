@@ -1,7 +1,7 @@
 import type { ChatMessage } from '@shared/types';
+import { createChatMessage } from './chatMessage';
 
 const MAX_DOM_MESSAGES = 100;
-const USER_COLORS = 8;
 
 export class ChatOverlay {
   private container: HTMLDivElement;
@@ -73,36 +73,8 @@ export class ChatOverlay {
     // Hide empty placeholder
     this.emptyEl.style.display = 'none';
 
-    const el = document.createElement('div');
-    el.className = 'chat-msg';
-
-    const isSystem = chat.username === 'system';
-
-    if (isSystem) {
-      el.classList.add('system-msg');
-      el.textContent = chat.message;
-    } else {
-      // Timestamp
-      const time = document.createElement('span');
-      time.className = 'chat-time';
-      const d = new Date(chat.timestamp);
-      time.textContent = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-      el.appendChild(time);
-
-      // Username with consistent color
-      const nameSpan = document.createElement('span');
-      nameSpan.className = `chat-name user-color-${this.getUserColor(chat.username)}`;
-      nameSpan.textContent = chat.username;
-      el.appendChild(nameSpan);
-
-      el.appendChild(document.createTextNode(': '));
-
-      // Message with syntax highlights
-      const textSpan = document.createElement('span');
-      textSpan.className = 'chat-text';
-      textSpan.innerHTML = this.highlightMessage(chat.message);
-      el.appendChild(textSpan);
-    }
+    const atBottom = this.messageList.scrollHeight - this.messageList.scrollTop - this.messageList.clientHeight < 30;
+    const el = createChatMessage(chat);
 
     this.messageList.appendChild(el);
 
@@ -111,26 +83,9 @@ export class ChatOverlay {
       this.messageList.removeChild(this.messageList.children[1]!);
     }
 
-    const { scrollHeight, scrollTop, clientHeight } = this.messageList;
-    if (scrollHeight - scrollTop - clientHeight < 30) {
-      this.messageList.scrollTop = scrollHeight;
+    if (atBottom) {
+      this.messageList.scrollTop = this.messageList.scrollHeight;
     }
-  }
-
-  private getUserColor(username: string): number {
-    let hash = 0;
-    for (let index = 0; index < username.length; index++) {
-      hash = ((hash << 5) - hash + username.charCodeAt(index)) | 0;
-    }
-    return Math.abs(hash) % USER_COLORS;
-  }
-
-  private highlightMessage(text: string): string {
-    let safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    safe = safe.replace(/(\/\w+)/g, '<span class="hl-cmd">$1</span>');
-    safe = safe.replace(/:(\w+):/g, '<span class="hl-emote">:$1:</span>');
-    safe = safe.replace(/@(\w+)/g, '<span class="hl-mention">@$1</span>');
-    return safe;
   }
 
   private createDOM(): HTMLDivElement {

@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fluid Factory</title>
+    <link rel="preload" href="/fonts/geist-pixel/GeistPixel-Square.woff2" as="font" type="font/woff2" crossorigin />
+    <style>
+      @font-face { font-family: 'Geist Pixel'; src: url('/fonts/geist-pixel/GeistPixel-Square.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+      @font-face { font-family: 'Board Marker'; src: url('/fonts/kalam/Kalam-Bold.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+      * { box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+      body {
+        display: block;
+        background: #050611;
+        color: #d8e8ff;
+        font-family: 'Geist Pixel', ui-monospace, monospace;
+      }
+      .factory-page {
+        width: 100vw;
+        height: 100dvh;
+        display: grid;
+        grid-template-rows: minmax(0, 1fr);
+        gap: 0;
+      }
+      .slice-viewport { min-height: 0; container-type: size; display: grid; place-items: center; }
+      .slice-shell {
+        position: relative;
+        width: min(100cqw, calc(100cqh * 200 / 141));
+        aspect-ratio: 200 / 141;
+        overflow: hidden;
+        border: 1px solid #252b4c;
+        background: #08091a;
+        box-shadow: 0 24px 90px rgba(0, 0, 0, 0.62);
+      }
+      #slice-canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+        cursor: default;
+        touch-action: none;
+      }
+      [hidden] { display: none !important; }
+      .display-study { position: fixed; z-index: 60; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 5px; max-width: calc(100vw - 16px); background: #0a101bea; border: 1px solid #60778e; box-shadow: 0 4px 0 #03071180; }
+      .display-study button { min-width: 44px; min-height: 44px; padding: 8px 12px; border: 0; background: transparent; color: #b7c6d7; white-space: nowrap; font: 12px 'Geist Pixel', monospace; cursor: pointer; }
+      .display-study button[aria-pressed="true"] { color: #e9fff4; background: #294d43; }
+      .display-study button:hover { background: #334355; }
+      .display-study button:focus-visible { outline: 2px solid #b2ecdc; outline-offset: -2px; }
+      .display-study { flex-wrap: wrap; justify-content: center; width: max-content; }
+      .study-row { display: flex; align-items: center; gap: 4px; }
+      .study-row + .study-row { border-left: 1px solid #60778e60; padding-left: 5px; }
+      #display-study-status { flex-basis: 100%; margin: 0; text-align: center; font: 11px/1.4 'Geist Pixel', monospace; }
+      #display-study-status:empty { display: none; }
+      @media (max-width: 740px) {
+        .display-study { max-width: 300px; gap: 0; }
+        .study-row + .study-row { border-left: 0; padding-left: 0; }
+        .display-study button { padding-inline: 10px; }
+      }
+      .board-hotspot {
+        position: absolute;
+        z-index: 1;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        cursor: zoom-in;
+        touch-action: manipulation;
+      }
+      .board-hotspot:focus-visible {
+        outline: 2px solid #82d8ef;
+        outline-offset: 3px;
+      }
+      .window-hotspot { position: absolute; z-index: 1; padding: 0; border: 0; background: transparent; cursor: zoom-in; touch-action: manipulation; }
+      .window-hotspot:hover { box-shadow: inset 0 0 0 1px #aecde34d; }
+      .window-hotspot:focus-visible { outline: 2px solid #a1d7e7; outline-offset: -3px; }
+      .weather-open .slice-shell { position: fixed; inset: 0; width: 100vw; height: 100dvh; aspect-ratio: auto; z-index: 20; border: 0; }
+      .board-open .slice-shell { position: fixed; inset: 0; width: 100vw; height: 100dvh; aspect-ratio: auto; z-index: 20; border: 0; }
+      .board-open .scene-settings { display: none; }
+      #board-notes { position: absolute; inset: 0; pointer-events: none; }
+      .board-note { cursor: pointer; pointer-events: auto; }
+      .board-note:hover { outline: 1px solid #355e7e70; outline-offset: -2px; }
+      .board-note-details { position: absolute; z-index: 5; left: 50%; bottom: calc(var(--board-dock-height, 80px) + max(32px, env(safe-area-inset-bottom))); transform: translateX(-50%); width: min(440px, calc(100% - 24px)); max-height: 42%; overflow: auto; padding: 16px 60px 16px 16px; border: 1px solid #657790; background: #111c2af5; box-shadow: 0 8px 24px #0005; }
+      #board-note-title { margin: 0 0 8px; font: 400 16px/1.4 'Geist Pixel', monospace; overflow-wrap: anywhere; }
+      #board-note-description { margin: 0; color: #becddd; font: 13px/1.6 ui-sans-serif, system-ui, sans-serif; overflow-wrap: anywhere; }
+      #board-note-close { position: absolute; top: 5px; right: 5px; width: 44px; height: 44px; border: 0; background: none; color: #e1ebef; font-size: 18px; cursor: pointer; }
+      #board-note-close:focus-visible { outline: 2px solid #a1d7e7; }
+      .mobile-explore { display: none; }
+      @media (max-width: 600px) {
+        .mobile-explore { position: fixed; z-index: 4; bottom: max(24px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; gap: 10px; width: min(340px, calc(100vw - 32px)); }
+        .mobile-explore button { flex: 1; min-height: 44px; padding: 10px; border: 1px solid #61718b60; border-radius: 5px; background: #141e2d; color: #d8e8ff; font: 12px 'Geist Pixel', monospace; }
+        .mobile-explore button:focus-visible { outline: 2px solid #a1d7e7; outline-offset: 2px; }
+        .board-open .mobile-explore, .weather-open .mobile-explore { display: none; }
+      }
+      .weather-open .board-hotspot,
+      .weather-open #board-navigation { display: none !important; }
+      .window-view-ui { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
+      .window-view-dock { position: absolute; left: 12px; right: 12px; bottom: max(20px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+      .window-settings summary { cursor: pointer; color: #d4e4e9; font-size: 10px; text-align: center; padding: 7px; }
+      #window-controls { pointer-events: auto; max-width: 100%; }
+      #window-controls .slice-controls { justify-content: center; margin: 0; background: #101d2ac9; border-color: #a6c9d547; padding: 10px 13px; }
+      #keyboard-walk { cursor: pointer; }
+      .board-cell { cursor: pointer; }
+      .board-cell[aria-disabled="true"] { cursor: default; }
+      .pixel-island {
+        position: fixed;
+        z-index: 32;
+        left: 50%;
+        bottom: max(20px, env(safe-area-inset-bottom));
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: max-content;
+        max-width: calc(100vw - 24px);
+        padding: 10px 16px;
+        color: #e2e9eb;
+        background: #080b12f5;
+        border-top: 1px solid #53616a85;
+        clip-path: polygon(16px 0, calc(100% - 16px) 0, calc(100% - 16px) 4px, calc(100% - 8px) 4px, calc(100% - 8px) 8px, calc(100% - 4px) 8px, calc(100% - 4px) 16px, 100% 16px, 100% calc(100% - 16px), calc(100% - 4px) calc(100% - 16px), calc(100% - 4px) calc(100% - 8px), calc(100% - 8px) calc(100% - 8px), calc(100% - 8px) calc(100% - 4px), calc(100% - 16px) calc(100% - 4px), calc(100% - 16px) 100%, 16px 100%, 16px calc(100% - 4px), 8px calc(100% - 4px), 8px calc(100% - 8px), 4px calc(100% - 8px), 4px calc(100% - 16px), 0 calc(100% - 16px), 0 16px, 4px 16px, 4px 8px, 8px 8px, 8px 4px, 16px 4px);
+        animation: island-enter 230ms cubic-bezier(0.23, 1, 0.32, 1);
+      }
+      @keyframes island-enter { from { opacity: 0; translate: 0 8px; scale: 0.96; } to { opacity: 1; translate: 0 0; scale: 1; } }
+      .pixel-island[data-instant="true"] { animation: none; }
+      .pixel-island button, .mobile-explore button {
+        --pixel-face: #1b232b; --pixel-edge: #46545e;
+        position: relative; isolation: isolate;
+        flex-shrink: 0; min-height: 44px; padding: 8px 12px;
+        border: 0; border-radius: 0; background: var(--pixel-edge);
+        clip-path: polygon(6px 0, calc(100% - 6px) 0, calc(100% - 6px) 3px, calc(100% - 3px) 3px, calc(100% - 3px) 6px, 100% 6px, 100% calc(100% - 6px), calc(100% - 3px) calc(100% - 6px), calc(100% - 3px) calc(100% - 3px), calc(100% - 6px) calc(100% - 3px), calc(100% - 6px) 100%, 6px 100%, 6px calc(100% - 3px), 3px calc(100% - 3px), 3px calc(100% - 6px), 0 calc(100% - 6px), 0 6px, 3px 6px, 3px 3px, 6px 3px);
+        color: #dce7e9; font: 400 14px/20px 'Geist Pixel', monospace;
+        white-space: nowrap; cursor: pointer;
+        transition: transform 100ms ease;
+      }
+      .pixel-island button::before, .mobile-explore button::before { content: ''; position: absolute; z-index: -1; inset: 2px; clip-path: inherit; background: var(--pixel-face); }
+      .pixel-island button:hover:not(:disabled), .mobile-explore button:hover { --pixel-face: #2e3b45; --pixel-edge: #718692; }
+      .pixel-island button:active:not(:disabled), .mobile-explore button:active { transform: translateY(2px); }
+      .pixel-island button:focus-visible, .mobile-explore button:focus-visible { outline: none; --pixel-edge: #b4f3e4; --pixel-face: #2e3b45; }
+      .scene-sound.pixel-island { top:max(16px,env(safe-area-inset-top)); right:16px; left:auto; bottom:auto; transform:none; gap:10px; padding:8px 10px; z-index:45; animation:none; pointer-events:auto; flex-wrap:wrap; justify-content:flex-end; }
+      #scene-sound-credits { color:#a7bab5; font-size:11px; padding:12px 2px; }
+      #scene-sound-credits:focus-visible { outline:2px solid #b4f3e4; }
+      #scene-sound-level { display:flex; align-items:center; gap:8px; }
+      #scene-volume { width:76px; height:44px; margin:0; appearance:none; background:transparent; cursor:pointer; }
+      #scene-volume::-webkit-slider-runnable-track { height:3px; background:#71828a; }
+      #scene-volume::-webkit-slider-thumb { appearance:none; width:10px; height:14px; margin-top:-5px; border-radius:0; background:#c3dbd1; }
+      #scene-volume::-moz-range-track { height:3px; background:#71828a; }
+      #scene-volume::-moz-range-thumb { width:10px; height:14px; border:0; border-radius:0; background:#c3dbd1; }
+      #scene-volume:focus-visible { outline:2px solid #b4f3e4; outline-offset:2px; }
+      #scene-volume-value { width:4ch; color:#a7bab5; font-size:12px; }
+      #board-close { display: none; }
+      .board-heading { min-width: 150px; max-width: 260px; }
+      #board-view-title, .room-view-title { display: block; font-size: 11px; letter-spacing: 0.035em; }
+      #board-view-title::before, .room-view-title::before { content: ''; display: inline-block; width: 5px; height: 5px; margin: 0 8px 1px 0; background: #a3cdbb; box-shadow: 0 0 6px #a3cdbb30; }
+      #board-status, .room-view-status { display: block; margin-top: 5px; color: #a5b3be; font-size: 10px; line-height: 1.4; }
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+      @media (max-width: 600px) {
+        .board-navigation { gap: 6px; padding: 10px 14px; flex-wrap: wrap; width: min(380px, calc(100vw - 24px)); }
+        .board-heading { order: -1; flex-basis: 100%; max-width: none; padding: 1px 2px 3px; }
+        .board-navigation button { padding: 8px 10px; }
+        #board-flip { margin-left: auto; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .pixel-island { animation: none; }
+        .pixel-island button { transition: none; }
+      }
+      .secondary-room .board-hotspot, .secondary-room .window-hotspot,
+      .secondary-room .agent-label:not(.patio-agent), .secondary-room .scene-settings,
+      .secondary-room .mobile-explore { display: none !important; }
+      .inspect-open .board-hotspot, .inspect-open .window-hotspot,
+      .inspect-open .agent-label, .inspect-open .room-doorway,
+      .inspect-open #board-notes, .inspect-open #board-note-details,
+      .inspect-open #board-navigation, .inspect-open #room-navigation,
+      .inspect-open #window-view-ui, .inspect-open .scene-settings,
+      .inspect-open .mobile-explore { display: none !important; }
+      #board-open { cursor: grab; z-index: 6; }
+      #board-game { z-index: 7; }
+      .board-dragging #board-open { cursor: grabbing; }
+      .board-dragging #board-game { pointer-events: none; }
+      .board-dragging .agent-label { pointer-events: none; }
+      .basket-call {position:absolute;width:44px;height:44px;z-index:8;background:transparent;border:0;cursor:pointer;touch-action:manipulation;}
+      .basket-call:hover,.basket-call:focus-visible {outline:1px dashed #ffb76c;}
+      .lounge-chat { position:absolute; width:80px; height:44px; background:none; border:0; cursor:pointer; z-index:3; }
+      .lounge-chat:hover, .lounge-chat:focus-visible { outline:1px dashed #c4e4cc; }
+      @media (max-width: 480px) {
+        #room-navigation {flex-wrap:wrap;justify-content:center;gap:6px;width:min(310px,calc(100vw - 20px));}
+        #room-navigation > div {flex:1;min-width:140px;}
+        #room-navigation button {padding:8px 10px;}
+      }
+      .chat-open .slice-shell { position:fixed; inset:0; width:100vw; height:100dvh; aspect-ratio:auto; z-index:20; border:0; }
+      .chat-open .board-hotspot, .chat-open .window-hotspot, .chat-open .scene-settings, .chat-open .mobile-explore, .chat-open .basket-call { display:none !important; }
+      .lounge-chat-view { position:absolute; inset:0; z-index:30; pointer-events:none; }
+      .lounge-chat-sheet { position:absolute; left:0; top:0; transform-origin:0 0; display:flex; flex-direction:column; padding:clamp(10px, 2vw, 24px); background:#293e3f; color:#e4ecdc; overflow:hidden; pointer-events:auto; }
+      .lounge-chat-sheet[inert] { pointer-events:none; }
+      .lounge-chat-sheet h2 { flex:none; margin:0 0 8px; padding-bottom:6px; border-bottom:1px solid #66847b; color:#efd7aa; font:700 clamp(20px, 3vw, 36px)/1.1 'Board Marker',cursive; }
+      .lounge-messages { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; overflow-wrap:anywhere; font:14px/1.6 ui-sans-serif,system-ui,sans-serif; scrollbar-color:#708f80 #293e3f; }
+      .lounge-messages:focus-visible { outline:1px solid #b6d5be; outline-offset:2px; }
+      .lounge-messages .chat-msg { padding:7px 0; }
+      .lounge-messages .chat-time { font-size:11px; color:#a4b9ad; margin-right:9px; }
+      .lounge-messages .chat-name { color:#a9dac2; font-weight:600; }
+      .lounge-messages .user-color-1, .lounge-messages .user-color-5 { color:#ead5a0; }
+      .lounge-messages .user-color-2, .lounge-messages .user-color-6 { color:#bfc8f0; }
+      .lounge-messages .user-color-3, .lounge-messages .user-color-7 { color:#e3b4c7; }
+      .lounge-messages .hl-mention { color:#eec7a5; }
+      .lounge-messages .hl-cmd, .lounge-messages .hl-emote { color:#a8d5df; }
+      .lounge-messages .system-msg { color:#b9cabb; font-style:italic; }
+      .lounge-chat-count { flex:none; padding-top:8px; font:11px/1.4 ui-sans-serif,system-ui,sans-serif; color:#a4b9ad; }
+      .lounge-chat-dock { pointer-events:auto; flex-wrap:wrap; gap:8px; width:min(720px,calc(100vw - 24px)); padding:14px 18px; }
+      .lounge-chat-dock form { display:flex; gap:6px; flex:1; min-width:150px; }
+      .lounge-chat-dock input { flex:1; width:0; min-width:0; min-height:44px; border:2px solid #61796e; border-radius:0; padding:10px; background:#172b2c; color:#ecf2e4; font:14px/20px 'Geist Pixel',monospace; }
+      .lounge-chat-dock input:focus-visible { outline:2px solid #a6d8d9; }
+      .lounge-chat-dock input:disabled, .lounge-chat-dock button:disabled { opacity:.5; cursor:default; }
+      .lounge-chat-status { color:#a4b9ad; font:12px/16px 'Geist Pixel',monospace; }
+      .lounge-chat-dock a { color:#c2dcbe; font:12px/16px 'Geist Pixel',monospace; padding:8px; min-height:32px; }
+      @media (max-width:600px) { .lounge-chat-dock { padding:12px 16px; } .lounge-chat-dock input { font-size:16px; } .lounge-chat-status { flex-basis:100%; } }
+
+      .duck-target { position: absolute; width: 44px; height: 44px; padding: 0; border: 0; background: transparent; z-index: 4; cursor: crosshair; touch-action: manipulation; }
+      .duck-target:hover, .duck-target:focus-visible { outline: 1px dashed #fce2a9; outline-offset: -6px; }
+      .inspect-open .duck-target { display: none; }
+      .room-doorway { position: absolute; z-index: 3; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #c9e3dc; font: 15px 'Geist Pixel', monospace; cursor: pointer; touch-action: manipulation; }
+      .room-doorway::before { content: ''; position: absolute; inset: 8px; border-radius: 3px; background: #172b30c4; z-index: -1; }
+      .room-doorway:hover::before { background: #38534de8; }
+      .room-doorway:focus-visible { outline: 2px solid #a6d8d9; outline-offset: -2px; }
+      .scene-settings { position: fixed; right: 16px; top: 86px; z-index: 12; }
+      .scene-settings summary { list-style: none; cursor: pointer; padding: 9px 12px; border: 1px solid #61718b60; border-radius: 6px; background: #111a2bdb; font-size: 11px; color: #cbd6e4; }
+      .scene-settings summary::-webkit-details-marker { display: none; }
+      .scene-settings summary:focus-visible { outline: 2px solid #9cd7e0; outline-offset: 3px; }
+      .scene-settings[open] summary { margin-bottom: 7px; }
+      .scene-settings:not([open]) .slice-controls { display: none; }
+      .weather-open .scene-settings { display: none; }
+      .agent-label { position: absolute; left: 0; top: 0; z-index: 2; width: max-content; padding-bottom: 4px; }
+      .agent-label:hover, .agent-label:focus-within { z-index: 5; }
+      .agent-name { position: relative; display: block; max-width: 150px; min-height: 24px; padding: 0 4px; border: 0; background: none; color: #f0f2eb; font: 400 clamp(10px, 1.4cqw, 14px)/1.25 'Geist Pixel', monospace; white-space: nowrap; text-shadow: 0 2px 1px #000b, 1px 0 1px #1119, -1px 0 1px #1119; cursor: help; touch-action: manipulation; }
+      .agent-name::before { content: ''; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); width: clamp(16px, 2.8cqw, 36px); height: clamp(18px, 3.5cqw, 45px); }
+      .agent-name:hover { color: #fff; }
+      .agent-name:focus-visible { outline: 1px solid #e0e9ed; outline-offset: 2px; }
+      .agent-details { position: absolute; top: calc(100% - 1px); left: 50%; transform: translateX(calc(-50% + var(--detail-shift, 0px))); display: grid; gap: 7px; width: min(230px, 85vw); padding: 12px; border: 1px solid #67738b80; border-radius: 4px; background: #111827f7; color: #e5e9ed; font: 12px/1.4 'Geist Pixel', monospace; box-shadow: 0 5px 14px #0005; overflow-wrap: anywhere; }
+      .agent-details[data-above="true"] { top: auto; bottom: calc(100% - 1px); }
+      .agent-details strong { font-weight: 400; color: #fff; }
+      .agent-activity { color: #a6d8c9; }
+      .agent-details small { color: #a2adbb; font: 11px/1.45 ui-sans-serif, system-ui, sans-serif; }
+      .weather-open #slice-canvas { cursor: grab; }
+      .weather-open #slice-canvas:active { cursor: grabbing; }
+      .window-navigation.pixel-island { position: relative; left: auto; bottom: auto; transform: none; max-width: 100%; pointer-events: auto; }
+      .window-heading { min-width: 112px; }
+      .cloud-options { display: flex; gap: 3px; border-left: 1px solid #53616a85; padding-left: 10px; }
+      .cloud-options button { padding: 6px 10px; color: #9eabb6; }
+      .cloud-options button[aria-pressed="true"] { --pixel-face: #29433e; --pixel-edge: #749c8d; color: #d7f0e5; }
+      .window-scroll { display: flex; align-items: center; gap: 4px; width: 204px; }
+      @media (max-width: 600px) {
+        .window-navigation.pixel-island { flex-wrap: wrap; gap: 8px; width: min(380px, calc(100vw - 24px)); padding: 10px 14px; }
+        .window-heading { order: -1; flex-basis: 100%; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 1px 2px 3px; }
+        .window-heading .room-view-status { margin-top: 0; }
+        .window-scroll { flex: 1; min-width: 0; width: auto; }
+        .cloud-options { flex-basis: 100%; justify-content: center; border-left: 0; border-top: 1px solid #53616a50; padding: 6px 0 0; }
+      }
+      .window-scroll button { color: #dcebf0; flex-shrink: 0; width: 44px; height: 44px; padding: 8px; cursor: pointer; }
+      .window-scroll input { min-width: 0; flex: 1; height: 44px; appearance: none; background: transparent; cursor: ew-resize; }
+      .window-scroll input::-webkit-slider-runnable-track { height: 2px; background: #9eb0bb; }
+      .window-scroll input::-webkit-slider-thumb { appearance: none; width: 10px; height: 10px; margin-top: -4px; border-radius: 0; background: #d3e1e7; }
+      .window-scroll input:focus-visible { outline: 2px solid #a1d7e7; outline-offset: 3px; }
+      .window-scroll button:active { transform: translateY(2px); }
+      .window-scroll button:disabled { opacity: 0.3; cursor: default; }
+      .slice-controls {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-left: auto;
+        max-width: min(450px, calc(100vw - 32px));
+        padding: 10px; border: 1px solid #61718b60; border-radius: 6px; background: #111a2bf5;
+      }
+      .slice-controls label {
+        color: #78e8ff;
+        font-size: 9px;
+        text-transform: uppercase;
+      }
+      .slice-controls input { width: 104px; accent-color: #ff35dc; }
+      .slice-controls select {
+        border: 1px solid #46517e;
+        background: #10132a;
+        color: #d8e8ff;
+        padding: 5px 8px;
+        font: inherit;
+        font-size: 9px;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      .slice-controls select:hover,
+      .slice-controls select:focus-visible {
+        border-color: #ff35dc;
+        outline: none;
+      }
+
+      .factory-controls { display:block; transform:none; padding:0; animation:none; pointer-events:auto; position:fixed; left:18px; bottom:18px; z-index:20; max-width:min(330px,calc(100vw - 36px)); color:#d2e0de; font:12px 'Geist Pixel',monospace; background:#101821f2; }
+      .factory-controls summary { cursor:pointer; padding:12px 14px; list-style:none; }
+      .factory-controls summary::-webkit-details-marker { display:none; }
+      .factory-connection { color:#99bfb5; margin-left:12px; }
+      .factory-control-content { padding:0 14px 14px; max-height:65dvh; overflow:auto; }
+      .factory-control-content p { line-height:1.6; margin:9px 0; }
+      .factory-control-content label { display:grid; gap:6px; margin:12px 0; }
+      .factory-controls button,.factory-controls select { font:inherit; color:inherit; background:#24323c; border:1px solid #657e80; border-radius:0; padding:9px; }
+      .factory-controls button { cursor:pointer; clip-path:polygon(3px 0,calc(100% - 3px) 0,calc(100% - 3px) 3px,100% 3px,100% calc(100% - 3px),calc(100% - 3px) calc(100% - 3px),calc(100% - 3px) 100%,3px 100%,3px calc(100% - 3px),0 calc(100% - 3px),0 3px,3px 3px); }
+      .factory-controls :disabled { opacity:.42; cursor:default; }
+      .factory-controls :focus-visible { outline:2px solid #a9e4d6; outline-offset:3px; }
+      .factory-action-row,.factory-session-actions,.factory-movement { display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
+      .factory-movement button { min-width:44px; min-height:44px; touch-action:none; }
+      .factory-controls:not(.is-controlling) .factory-movement,.factory-controls:not(.is-controlling) .factory-key-help { display:none; }
+      .factory-controls a { color:#c3e7dc; }
+      .board-open .factory-controls,.chat-open .factory-controls,.weather-open .factory-controls,.inspect-open .factory-controls { display:none; }
+      .live-weather-status { color:#adcbc5; font:11px 'Geist Pixel',monospace; }
+      @media(max-width:600px) { .factory-controls { left:12px; bottom:74px; max-width:calc(100vw - 24px); } }
+    </style>
+  </head>
+  <body>
+    <nav id="display-study" class="display-study" aria-label="Compare screen effects" hidden>
+      <div class="study-row" role="group" aria-label="Screen effect">
+      <button type="button" data-display="clean" aria-pressed="true">clean</button>
+      <button type="button" data-display="crt" aria-pressed="false">soft CRT</button>
+      <button type="button" data-display="phosphor" aria-pressed="false">phosphor</button>
+      <button id="display-study-close" type="button" aria-label="End screen comparison" title="Return to the clean view">×</button>
+      </div>
+      <div class="study-row" role="group" aria-label="Mountain landscape">
+        <button type="button" data-landscape="current" aria-pressed="true">current</button>
+        <button type="button" data-landscape="blender" aria-pressed="false">Blender</button>
+        <button id="display-focus" type="button" aria-pressed="false">depth of field</button>
+      </div>
+      <p id="display-study-status" role="status" aria-live="polite"></p>
+    </nav>
+    <main class="factory-page" aria-label="Fluid Factory">
+      <details class="scene-settings"><summary>weather & light</summary>
+        <div class="slice-controls">
+          <label for="slice-light">sun arc</label>
+          <input id="slice-light" type="range" aria-label="Sun arc" min="-7" max="7" step="0.1" value="-3" />
+          <select id="slice-time" aria-label="Time of day"><option value="live">Live daylight</option><option value="day">Daylight</option><option value="night">Night</option></select>
+          <select id="slice-moon" aria-label="Moon phase" hidden></select>
+          <select id="slice-weather" aria-label="Weather"></select>
+        </div>
+      </details>
+      <span id="weather-shortcut-status" class="sr-only" role="status" aria-live="polite"></span>
+      <div class="slice-viewport">
+      <div class="slice-shell">
+        <canvas id="slice-canvas"></canvas>
+        <button id="room-doorway" class="room-doorway" type="button" aria-label="Enter the patio" hidden>→</button>
+        <button id="window-open" class="window-hotspot" type="button" aria-label="Open full-screen weather view"></button>
+        <button id="board-open" class="board-hotspot" type="button" aria-label="Open whiteboard"></button>
+        <span id="board-drag-help" class="sr-only">Click to read the whiteboard. Drag to roll it around the room, or use Shift and the arrow keys while focused. Escape cancels a drag.</span>
+        <button id="board-game" class="board-hotspot" type="button" aria-label="Zoom into tic-tac-toe"></button>
+        <button id="keyboard-walk" class="board-hotspot" type="button" aria-label="Walk on the floor keyboard" aria-describedby="keyboard-help" title="control your agent with W/A/S/D or the movement buttons to light the keys"></button>
+        <span id="keyboard-help" class="sr-only">Open agent controls, choose your agent, then use W/A/S/D or the movement buttons to step onto the keys.</span>
+        <span id="keyboard-status" class="sr-only" role="status" aria-live="polite"></span>
+        <div id="board-cells" role="group" aria-label="Tic-tac-toe squares" hidden></div>
+        <div id="board-notes" role="group" aria-label="Live session notes" hidden></div>
+        <aside id="board-note-details" class="board-note-details" aria-labelledby="board-note-title" hidden>
+          <h2 id="board-note-title"></h2>
+          <p id="board-note-description"></p>
+          <button id="board-note-close" type="button" aria-label="Close session details">×</button>
+        </aside>
+        <div id="board-navigation" class="board-navigation pixel-island" hidden>
+          <button id="board-back" type="button">← room</button>
+          <div class="board-heading">
+            <span id="board-view-title">WHITEBOARD</span>
+            <span id="board-status" role="status" aria-live="polite"></span>
+            <p id="board-stats" class="sr-only"></p>
+          </div>
+          <button id="board-flip" type="button" hidden>↻ leaderboard</button>
+          <button id="board-page" type="button" hidden>more notes</button>
+          <button id="board-reset" type="button" hidden>new game</button>
+          <button id="board-close" type="button" aria-label="Return to factory">✕</button>
+        </div>
+      </div>
+      </div>
+
+    </main>
+    <nav class="mobile-explore" aria-label="Explore the factory">
+      <button id="mobile-board" type="button">whiteboard</button>
+      <button id="mobile-chat" type="button">chat</button>
+      <button id="mobile-window" type="button">window</button>
+      <button id="mobile-room" type="button">patio</button>
+    </nav>
+    <nav id="room-navigation" class="pixel-island" aria-label="Room navigation" hidden>
+      <button id="room-return" type="button">← factory</button>
+      <div><span class="room-view-title">the patio</span><span class="room-view-status" id="duck-status" aria-live="polite">open sky · string lights</span></div>
+      <button id="duck-play" type="button">duck hunt</button>
+      <button id="duck-reload" type="button" hidden>reload</button>
+    </nav>
+    <nav id="inspect-navigation" class="pixel-island" aria-label="Close-up navigation" hidden>
+      <button id="inspect-back" type="button">← view</button>
+      <div><span class="room-view-title">2.5× close-up</span><span class="room-view-status">i or esc to return</span></div>
+    </nav>
+    <div id="window-view-ui" class="window-view-ui" hidden>
+      <div class="window-view-dock">
+        <details id="window-controls" class="window-settings" hidden><summary>weather & light</summary></details>
+        <nav class="window-navigation pixel-island" aria-label="Window view">
+          <button id="window-back" type="button" title="Return to the room (Escape)">← room</button>
+          <div class="window-heading"><span class="room-view-title">the valley</span><span class="room-view-status">scroll or drag</span></div>
+          <div class="window-scroll">
+            <button id="window-left" type="button" aria-label="Look left">←</button>
+            <input id="window-position" type="range" min="0" max="100" step="0.1" value="50" aria-label="Window position" />
+            <button id="window-right" type="button" aria-label="Look right">→</button>
+          </div>
+          <div class="cloud-options" role="group" aria-label="Cloud style">
+            <button id="cloud-painted" type="button" aria-pressed="true">painted</button>
+            <button id="cloud-volume" type="button" aria-pressed="false">volumetric</button>
+          </div>
+        </nav>
+      </div>
+    </div>
+    <div class="scene-sound pixel-island" role="group" aria-label="Scene sound">
+      <button id="scene-sound-toggle" type="button" aria-pressed="false" aria-describedby="scene-sound-help">sound off</button>
+      <label id="scene-sound-level" hidden>
+        <span class="sr-only">Scene volume</span>
+        <input id="scene-volume" type="range" min="0" max="100" step="1" value="40" aria-label="Scene volume" />
+        <output id="scene-volume-value" for="scene-volume" aria-hidden="true">40%</output>
+      </label>
+      <span id="scene-sound-help" class="sr-only">Quiet ambience follows the weather and your room. This control also mutes game sounds.</span>
+      <span id="scene-sound-status" class="sr-only" role="status"></span>
+      <a id="scene-sound-credits" href="/audio/factory/credits.html" target="_blank" rel="noopener">credits</a>
+    </div>
+    <script type="module" src="/prototypes/factory25dSlice.ts"></script>
+  </body>
+</html>

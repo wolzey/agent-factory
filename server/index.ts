@@ -26,6 +26,7 @@ import { DEFAULT_PORT, DEFAULT_SERVER_CONFIG, VALID_EMOTES, CHAT_MESSAGE_MAX_LEN
 import { loadSessions } from './session-store.js';
 import { LibSqlWorldRepository } from './persistence/libsql-world-repository.js';
 import { WorldPersistence } from './persistence/world-persistence.js';
+import { normalizeBundledClientEnvironment } from './client-environment.js';
 import type { ServerConfig, EmoteType } from '../shared/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -56,12 +57,12 @@ function loadServerConfig(): ServerConfig {
     config.graphicDeath = process.env.GRAPHIC_DEATH === 'true' || process.env.GRAPHIC_DEATH === '1';
   }
 
-  // Env var override: ENVIRONMENT=arcade|farm|office|mining
+  // Read a preferred environment, then constrain it to the bundled renderer.
   if (process.env.ENVIRONMENT) {
     config.environment = process.env.ENVIRONMENT as import('../shared/types.js').EnvironmentType;
   }
 
-  return config;
+  return normalizeBundledClientEnvironment(config, DEFAULT_SERVER_CONFIG.environment ?? 'arcade');
 }
 
 async function main() {
