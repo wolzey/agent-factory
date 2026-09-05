@@ -175,6 +175,21 @@ agent-factory update && agent-factory login
 
 The first command run by the new binary repairs the installed hook. `login` also creates the persistent installation identity and opens the browser handoff. Later upgrades refresh hooks directly from the newly installed binary.
 
+#### macOS reports `Killed: 9` after updating
+
+Versions through `v0.22.0` overwrite the running executable in place. On macOS,
+this can leave stale code-signing state and kill the CLI before it starts;
+Linux may instead reject the write as `text file busy`. Starting with `v0.22.1`,
+updates stage a fresh file and atomically rename it into place.
+
+If affected, download your platform archive from the latest GitHub release,
+verify it against `checksums.txt`, and extract it into a temporary directory.
+Move the extracted executable to a **new temporary filename beside the installed
+binary**, then rename that file over the installed binary. Do not copy directly
+over the old executable. Your `~/.config/agent-factory` settings and identity
+should be left untouched. This one-time recovery is necessary because the first
+upgrade still runs the old updater code.
+
 ### Publishing a CLI release
 
 Pushing `main` runs CI and deploys the hosted app, but does **not** publish CLI

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -100,13 +101,13 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	// Resolve symlinks
 	resolvedPath, err := resolveSymlinks(execPath)
 	if err != nil {
-		resolvedPath = execPath
+		return fmt.Errorf("resolve executable path: %w", err)
 	}
 
-	// Write new binary over the old one
+	// Replace the directory entry, never overwrite the running executable.
 	ui.Info("Installing to " + resolvedPath + "...")
 
-	if err := os.WriteFile(resolvedPath, binary, 0o755); err != nil {
+	if err := replaceBinary(resolvedPath, binary); err != nil {
 		ui.Error("Failed to write binary: " + err.Error())
 		ui.Info("You may need to run with sudo or check file permissions.")
 		return err
@@ -162,15 +163,35 @@ func extractBinaryFromTarGz(r io.Reader, name string) ([]byte, error) {
 	return nil, fmt.Errorf("binary %q not found in archive", name)
 }
 
-func resolveSymlinks(path string) (string, error) {
-	resolved, err := os.Readlink(path)
+// replaceBinary stages a fresh inode beside the executable, then atomically
+// renames it into place. In-place writes can leave macOS's cached code signature
+// stale (SIGKILL on launch) and fail with ETXTBSY on Linux for a running binary.
+func replaceBinary(path string, binary []byte) error {
+	staged, err := os.CreateTemp(filepath.Dir(path), ".agent-factory-update-*")
 	if err != nil {
-		return path, nil // Not a symlink
+		return fmt.Errorf("stage executable: %w", err)
 	}
-	if !strings.HasPrefix(resolved, "/") {
-		// Relative symlink — resolve relative to the original dir
-		dir := path[:strings.LastIndex(path, "/")+1]
-		resolved = dir + resolved
+	defer os.Remove(staged.Name())
+	defer staged.Close()
+
+	if _, err := staged.Write(binary); err != nil {
+		return fmt.Errorf("write staged executable: %w", err)
 	}
-	return resolved, nil
+	if err := staged.Chmod(0o755); err != nil {
+		return fmt.Errorf("set executable permissions: %w", err)
+	}
+	if err := staged.Sync(); err != nil {
+		return fmt.Errorf("sync staged executable: %w", err)
+	}
+	if err := staged.Close(); err != nil {
+		return fmt.Errorf("close staged executable: %w", err)
+	}
+	if err := os.Rename(staged.Name(), path); err != nil {
+		return fmt.Errorf("replace executable: %w", err)
+	}
+	return nil
+}
+
+func resolveSymlinks(path string) (string, error) {
+	return filepath.EvalSymlinks(path)
 }
