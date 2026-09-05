@@ -1,40 +1,42 @@
-# Fluid Factory 2.5D release handoff
+# Fluid Factory 2.5D release procedure
 
-Target the existing **https://fluid-factory.onrender.com/** service. Its live
-WebSocket build ID was `c05e2af3c80d45c96faea954e2be76fc2ea22847`, with environment
-`arcade`, title `Fluid`, and healthy durable persistence on 2026-09-05.
+Target the existing **https://fluid-factory.onrender.com/** service. Before this
+rollout its WebSocket build ID was `c05e2af3c80d45c96faea954e2be76fc2ea22847`,
+with environment `arcade`, title `Fluid`, and healthy persistence.
 
-Both builds are in **britonbakerfluid/agent-factory**:
+Publish using the existing GitHub contributor access to `wolzey/agent-factory`.
+Do not create another hosting service or database. Preserve service settings,
+including database credentials, `AF_TOKEN_SECRET` and the title.
 
-| Purpose | Branch | Environment |
-| --- | --- | --- |
-| Compatible old-room baseline | `codex/factory-25d-compatible-rollback` at `fb0a2ba` | `arcade` |
-| 2.5D release | `codex/factory-25d-preview` | `factory25d` |
+1. Merge `codex/factory-25d-compatible-rollback` into main using a merge commit.
+   This deploys the classic room with a server that accepts both saved layouts.
+   Verify the actual Fluid service's build ID and healthy persistence, then record
+   the successful baseline commit/deployment before continuing.
+2. Merge `codex/factory-25d-preview` into main using a merge commit. The release
+   branch must include the compatible baseline in its ancestry while retaining
+   its 2.5D client tree. Check the PR diff to confirm the root changes to 2.5D.
+3. Confirm the Fluid WebSocket build ID matches the release commit, `/api/health`
+   reports healthy persistence, `/api/state` reports `factory25d`, and the root
+   page renders the 2.5D room. Check the patio and existing lounge history without
+   sending test messages or shared effects.
 
-1. Confirm the service's linked source and current successful deployment in Render.
-   GitHub's upstream deployment record refers to `agent-factory-coqw.onrender.com`,
-   a different URL; pushing upstream main has not been verified as the publishing
-   route for the Fluid service. Preserve the existing database credentials,
-   `AF_TOKEN_SECRET`, title and other settings. Do not create a new service/database.
-2. Deploy the compatible baseline with `ENVIRONMENT=arcade`. Verify healthy
-   persistence and existing agents/chat, then record its successful Render deploy ID.
-3. Deploy the exact current commit from the 2.5D release branch with
-   `ENVIRONMENT=factory25d`. Deploy these as separate exact commits; merging both
-   sibling branches in sequence does not implement the intended client switch.
-4. Confirm `/api/health` is healthy, `/api/state` reports `factory25d`, the WebSocket
-   build ID matches the selected commit, and the root page shows the 2.5D room.
-   Check the patio, existing lounge conversation and an existing browser login.
-   Avoid test messages or global effects in the shared room.
+The bundled renderer determines its compatible environment after existing file
+and environment overrides. A stale `ENVIRONMENT=arcade` is normalized to
+`factory25d` in the release; the compatible classic build maps a newer
+`factory25d` override back to `arcade`. No dashboard setting change is needed.
 
-If recovery is needed, roll back to the compatible baseline recorded in step 2.
-Do not roll back directly to c05e2af: its parser rejects `factory25d` saved worlds.
-The compatible server maps saved workers into the arcade's twelve real desks and
-available waiting positions, while retaining chat, identity, avatars and deadlines.
-Render reuses the selected deployment's build and service environment variables;
-see [Render rollback behavior](https://render.com/docs/rollbacks).
+GitHub's deployment records currently identify `agent-factory-coqw.onrender.com`,
+a second service. Its success alone does not prove that Fluid updated. Verify
+`fluid-factory.onrender.com` directly at each stage.
 
-Validation: 403 tests across 60 files; client/server builds; both Linux amd64
-Docker images; a production database round trip from arcade to 2.5D and back;
-browser checks of the new room, chat/controls/effects and restored arcade room.
+If recovery is needed, revert the second release merge (first-parent revert),
+which restores the compatible baseline through the same publishing route, or
+redeploy the recorded successful baseline artifact. Do not restore c05e2af:
+its parser rejects `factory25d` saved worlds. The compatible server maps workers
+into the classic room's twelve desks and bounded waiting positions while
+retaining chat, identities, avatars and deadlines.
 
-No live configuration or deployment was changed during preparation.
+Validation: 407 tests across 61 files; client/server builds; production Linux
+amd64 Docker images; a saved database round trip from arcade to 2.5D and back;
+stale environment overrides in both directions; browser checks of the new room,
+chat, controls, effects and restored classic room.

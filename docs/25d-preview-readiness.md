@@ -11,29 +11,27 @@ Prepared on 2026-09-05 from upstream `main` at
 upstream commits. This includes atomic CLI executable replacement and validated
 manual CLI publishing, the two fixes missing from the original prototype checkout.
 
-`render.yaml` and the server default select `factory25d`. Existing persisted
-worlds migrate their agent positions to this layout while retaining session IDs,
-ownership, customized avatars and chat history. The running service must use
-`ENVIRONMENT=factory25d` when this branch is deployed; an existing dashboard
-environment override should be updated with the release.
+`render.yaml` and the bundled server default select `factory25d`. The server
+normalizes file and environment overrides to the shipped renderer, so a retained
+`ENVIRONMENT=arcade` setting cannot put the new room on the old coordinates.
+Existing persisted worlds migrate while retaining session IDs, ownership,
+customized avatars and chat history. Other service settings are preserved.
 
-The deployment manifest still points at `wolzey/agent-factory` main. A push to
-`britonbakerfluid/agent-factory` on `codex/factory-25d-preview` does not deploy or
-replace that service. No production deployment or live chat message was sent.
-The health endpoint does not report the deployed commit. A production WebSocket
-snapshot verified the live build as `c05e2af3c80d45c96faea954e2be76fc2ea22847`.
-The live service reports the `arcade` environment and healthy durable persistence.
-GitHub's recorded upstream deployment points at `agent-factory-coqw.onrender.com`,
-not the target `fluid-factory.onrender.com`; confirm the existing service's actual
-publishing configuration with its owner before changing either deployment.
+Publish through pull requests into `wolzey/agent-factory` main. The repository's
+existing deployment integration follows main; pushing only to the fork does not
+publish the app. Verify the target **https://fluid-factory.onrender.com/** directly:
+GitHub's deployment status currently names a second service,
+`agent-factory-coqw.onrender.com`. The WebSocket `world_snapshot.buildId` identifies
+the running commit; `/api/health` reports persistence health.
 
-The compatible arcade recovery build is commit `fb0a2ba` on
-`codex/factory-25d-compatible-rollback` in the fork. Deploy it successfully with
-`ENVIRONMENT=arcade` before switching to this release, and retain its deploy ID.
-The original c05e2af build cannot parse a factory25d save. The compatible build
-preserves valid reservations, moves workers beyond twelve arcade desks into
-bounded waiting positions, and retains conversations and ownership. Follow the
-[release handoff](25d-release-handoff.md) for the exact rollout order.
+First merge and verify `codex/factory-25d-compatible-rollback`, the compatible
+classic-room baseline. Then merge this release with the baseline already in its
+ancestry. Retain merge commits so a revert of the second release restores the
+compatible baseline. The original c05e2af build cannot parse a factory25d save.
+The compatible build preserves valid reservations, moves workers beyond twelve
+arcade desks into bounded waiting positions, and retains conversations and
+ownership. It also maps a retained `ENVIRONMENT=factory25d` override back to its
+bundled classic layout. See the [release procedure](25d-release-handoff.md).
 
 The original dirty checkout and its unrelated production scene/server changes
 are preserved. They are not included in this branch.
@@ -109,7 +107,7 @@ old scene, not reasons to discard the shared authentication or world protocol.
 
 - Full client/server production build passes. Vite still reports its existing
   large-landscape-chunk advisory.
-- All **403 tests across 60 files** pass, including world migration, all 18
+- All **407 tests across 61 files** pass, including world migration, all 18
   assignments, overflow waiting, patio vacancies, collision and doorway routes,
   owner-only controls, authenticated grab placement, takeover, chat reconnects,
   customized-avatar/subagent deltas, and live weather recovery.
@@ -123,6 +121,7 @@ old scene, not reasons to discard the shared authentication or world protocol.
   it. The recovery image then opened that actual flushed database, restored the
   arcade room, and retained all agents, owners, avatars and chat. Health and
   persistence passed on both; browser QA confirmed the restored arcade room.
+  Additional container checks exercise stale environment overrides in both directions.
 - The exact production client runs with an isolated local backend and database.
   Browser checks cover login handoff, selecting an owned agent, patio placement,
   quick movement taps reflected in server state, release, takeover in a second
