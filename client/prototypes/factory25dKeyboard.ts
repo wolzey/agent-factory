@@ -18,7 +18,7 @@ export function createFloorKeyboard(
   parent: THREE.Group,
   canvas: HTMLCanvasElement,
   camera: THREE.Camera,
-  onWalk: (point: FloorPoint) => void,
+  onWalk: (point: FloorPoint) => string | void,
 ) {
   const group = new THREE.Group();
   group.position.set(KEYBOARD_ORIGIN.x, FLOOR_Y, KEYBOARD_ORIGIN.z);
@@ -107,8 +107,7 @@ export function createFloorKeyboard(
     if (index < 0) return;
     selected = index;
     const key = FLOOR_KEYS[index];
-    onWalk({ x: KEYBOARD_ORIGIN.x + key.x, z: KEYBOARD_ORIGIN.z + key.z });
-    status.textContent = `Walking to ${key.label.toUpperCase()}`;
+    status.textContent = onWalk({ x: KEYBOARD_ORIGIN.x + key.x, z: KEYBOARD_ORIGIN.z + key.z }) || `Walking to ${key.label.toUpperCase()}`;
   }
   button.addEventListener('pointermove', (event) => {
     hover = pointer(event);
@@ -120,8 +119,7 @@ export function createFloorKeyboard(
   button.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       event.preventDefault();
-      onWalk({ x: KEYBOARD_ORIGIN.x, z: KEYBOARD_ORIGIN.z - 1.1 });
-      status.textContent = 'Walking off keyboard';
+      status.textContent = onWalk({ x: KEYBOARD_ORIGIN.x, z: KEYBOARD_ORIGIN.z - 1.1 }) || 'Walking off keyboard';
       return;
     }
     const directions: Record<string, FloorPoint> = {

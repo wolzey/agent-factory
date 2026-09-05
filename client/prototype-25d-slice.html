@@ -291,6 +291,25 @@
         border-color: #ff35dc;
         outline: none;
       }
+
+      .factory-controls { display:block; transform:none; padding:0; animation:none; pointer-events:auto; position:fixed; left:18px; bottom:18px; z-index:20; max-width:min(330px,calc(100vw - 36px)); color:#d2e0de; font:12px 'Geist Pixel',monospace; background:#101821f2; }
+      .factory-controls summary { cursor:pointer; padding:12px 14px; list-style:none; }
+      .factory-controls summary::-webkit-details-marker { display:none; }
+      .factory-connection { color:#99bfb5; margin-left:12px; }
+      .factory-control-content { padding:0 14px 14px; max-height:65dvh; overflow:auto; }
+      .factory-control-content p { line-height:1.6; margin:9px 0; }
+      .factory-control-content label { display:grid; gap:6px; margin:12px 0; }
+      .factory-controls button,.factory-controls select { font:inherit; color:inherit; background:#24323c; border:1px solid #657e80; border-radius:0; padding:9px; }
+      .factory-controls button { cursor:pointer; clip-path:polygon(3px 0,calc(100% - 3px) 0,calc(100% - 3px) 3px,100% 3px,100% calc(100% - 3px),calc(100% - 3px) calc(100% - 3px),calc(100% - 3px) 100%,3px 100%,3px calc(100% - 3px),0 calc(100% - 3px),0 3px,3px 3px); }
+      .factory-controls :disabled { opacity:.42; cursor:default; }
+      .factory-controls :focus-visible { outline:2px solid #a9e4d6; outline-offset:3px; }
+      .factory-action-row,.factory-session-actions,.factory-movement { display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
+      .factory-movement button { min-width:44px; min-height:44px; touch-action:none; }
+      .factory-controls:not(.is-controlling) .factory-movement,.factory-controls:not(.is-controlling) .factory-key-help { display:none; }
+      .factory-controls a { color:#c3e7dc; }
+      .board-open .factory-controls,.chat-open .factory-controls,.weather-open .factory-controls,.inspect-open .factory-controls { display:none; }
+      .live-weather-status { color:#adcbc5; font:11px 'Geist Pixel',monospace; }
+      @media(max-width:600px) { .factory-controls { left:12px; bottom:74px; max-width:calc(100vw - 24px); } }
     </style>
   </head>
   <body>
@@ -309,13 +328,13 @@
       <p id="display-study-status" role="status" aria-live="polite"></p>
     </nav>
     <main class="factory-page" aria-label="Fluid Factory">
-      <details class="scene-settings" hidden><summary>weather & light</summary>
+      <details class="scene-settings"><summary>weather & light</summary>
         <div class="slice-controls">
           <label for="slice-light">sun arc</label>
           <input id="slice-light" type="range" aria-label="Sun arc" min="-7" max="7" step="0.1" value="-3" />
-          <select id="slice-time" aria-label="Time of day"><option value="day">Daylight</option><option value="night">Night</option></select>
+          <select id="slice-time" aria-label="Time of day"><option value="live">Live daylight</option><option value="day">Daylight</option><option value="night">Night</option></select>
           <select id="slice-moon" aria-label="Moon phase" hidden></select>
-          <select id="slice-weather" aria-label="Weather preview"></select>
+          <select id="slice-weather" aria-label="Weather"></select>
         </div>
       </details>
       <span id="weather-shortcut-status" class="sr-only" role="status" aria-live="polite"></span>
@@ -327,8 +346,8 @@
         <button id="board-open" class="board-hotspot" type="button" aria-label="Open whiteboard"></button>
         <span id="board-drag-help" class="sr-only">Click to read the whiteboard. Drag to roll it around the room, or use Shift and the arrow keys while focused. Escape cancels a drag.</span>
         <button id="board-game" class="board-hotspot" type="button" aria-label="Zoom into tic-tac-toe"></button>
-        <button id="keyboard-walk" class="board-hotspot" type="button" aria-label="Walk on the floor keyboard" aria-describedby="keyboard-help" title="click a key to walk onto it · arrow keys move between keys · esc steps off"></button>
-        <span id="keyboard-help" class="sr-only">Click a key to walk the lounge agent onto it. Arrow keys move between keys. Escape steps off.</span>
+        <button id="keyboard-walk" class="board-hotspot" type="button" aria-label="Walk on the floor keyboard" aria-describedby="keyboard-help" title="control your agent with W/A/S/D or the movement buttons to light the keys"></button>
+        <span id="keyboard-help" class="sr-only">Open agent controls, choose your agent, then use W/A/S/D or the movement buttons to step onto the keys.</span>
         <span id="keyboard-status" class="sr-only" role="status" aria-live="polite"></span>
         <div id="board-cells" role="group" aria-label="Tic-tac-toe squares" hidden></div>
         <div id="board-notes" role="group" aria-label="Live session notes" hidden></div>

@@ -1,3 +1,4 @@
+import { WORKSTATIONS, toFactoryWorld, factory25dWaypoints } from './factory25d-layout.js';
 import type { AgentActivity, EnvironmentType, Position, WorldMovement, WorldZone } from './types.js';
 
 export interface WorldLayoutSpec {
@@ -78,6 +79,12 @@ function cloneLayout(layout: WorldLayoutSpec): WorldLayoutSpec {
 }
 
 export const WORLD_LAYOUTS: Record<EnvironmentType, WorldLayoutSpec> = {
+  factory25d: {
+    entrance: toFactoryWorld({ x: 6.7, z: 12.8 }),
+    workSlots: WORKSTATIONS.map(station => { const p = toFactoryWorld({ x: station.x, z: station.z + 0.55 }); return { x: p.x, y: p.y - 24 }; }),
+    waitingSlots: [-6.4, -5.1, -3.8, -2.5].map(x => toFactoryWorld({ x, z: 7.5 })),
+    idleSlots: [1.4, 2.7, 4, 5.3, 6.6].flatMap(x => [7.3, 10.7].map(z => toFactoryWorld({ x, z }))),
+  },
   arcade: cloneLayout(STANDARD_LAYOUT),
   farm: cloneLayout(STANDARD_LAYOUT),
   office: cloneLayout(STANDARD_LAYOUT),
@@ -117,6 +124,11 @@ export function slotPosition(
     return zone === 'work'
       ? { x: configured.x, y: configured.y + 24 }
       : { ...configured };
+  }
+  if (environment === 'factory25d') {
+    // Overflow waits on the open patio, clear of the six physical workstations.
+    const overflow = Math.max(0, index - slots.length);
+    return toFactoryWorld({ x: 10.5 + (overflow % 12) * 0.95, z: 10 + (Math.floor(overflow / 12) % 6) * 0.6 });
   }
 
   const base = slots[0] ?? (zone === 'work'
@@ -373,6 +385,7 @@ export function workstationWaypoints(
   fromSlot?: number,
   toSlot?: number,
 ): Position[] {
+  if (environment === 'factory25d') return factory25dWaypoints(from, to);
   const layout = WORLD_LAYOUTS[environment];
   const points: Position[] = [];
   const isLowerRoom = (point: Position) => point.y > ROOM_WALL_Y;

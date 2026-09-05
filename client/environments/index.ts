@@ -6,6 +6,7 @@ import { MINING_THEME } from './MiningTheme';
 import { OFFICE_THEME } from './OfficeTheme';
 
 const THEMES: Record<EnvironmentType, EnvironmentTheme> = {
+  factory25d: ARCADE_THEME,
   arcade: ARCADE_THEME,
   farm: FARM_THEME,
   mining: MINING_THEME,

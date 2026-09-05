@@ -2,7 +2,6 @@ import type { WebSocket } from '@fastify/websocket';
 import type { AgentSession, GrabState, GrabTarget } from '../shared/types.js';
 import {
   CONTROL_TICK_INTERVAL_MS,
-  GRAB_POINTER_BOUNDS,
   GRAB_INPUT_TIMEOUT_MS,
   MAX_BROADCAST_RATE_MS,
 } from '../shared/constants.js';
@@ -98,8 +97,8 @@ export class GrabManager {
       socket,
       username,
       sessionId: target.sessionId,
-      x: clamp(x, GRAB_POINTER_BOUNDS.minX, GRAB_POINTER_BOUNDS.maxX),
-      y: clamp(y, GRAB_POINTER_BOUNDS.minY, GRAB_POINTER_BOUNDS.maxY),
+      x: clamp(x, this.state.grabBounds.minX, this.state.grabBounds.maxX),
+      y: clamp(y, this.state.grabBounds.minY, this.state.grabBounds.maxY),
       lastInputAt: timestamp,
       lastBroadcastAt: timestamp,
       dirty: false,
@@ -119,8 +118,8 @@ export class GrabManager {
     lease.lastInputAt = timestamp;
     if (!Number.isFinite(x) || !Number.isFinite(y)) return true; // heartbeat only
 
-    lease.x = clamp(x, GRAB_POINTER_BOUNDS.minX, GRAB_POINTER_BOUNDS.maxX);
-    lease.y = clamp(y, GRAB_POINTER_BOUNDS.minY, GRAB_POINTER_BOUNDS.maxY);
+    lease.x = clamp(x, this.state.grabBounds.minX, this.state.grabBounds.maxX);
+    lease.y = clamp(y, this.state.grabBounds.minY, this.state.grabBounds.maxY);
     lease.dirty = true;
     if (timestamp - lease.lastBroadcastAt >= MAX_BROADCAST_RATE_MS) this.flush(lease, timestamp);
     return true;
@@ -138,8 +137,8 @@ export class GrabManager {
     if (!lease) return this.reject(socket, 'end', 'You are not holding that avatar', target);
 
     if (Number.isFinite(x) && Number.isFinite(y)) {
-      lease.x = clamp(x, GRAB_POINTER_BOUNDS.minX, GRAB_POINTER_BOUNDS.maxX);
-      lease.y = clamp(y, GRAB_POINTER_BOUNDS.minY, GRAB_POINTER_BOUNDS.maxY);
+      lease.x = clamp(x, this.state.grabBounds.minX, this.state.grabBounds.maxX);
+      lease.y = clamp(y, this.state.grabBounds.minY, this.state.grabBounds.maxY);
     }
     const drop = { x: lease.x, y: lease.y };
     const workstationAccepted = workstationSlot === undefined

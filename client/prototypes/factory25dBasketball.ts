@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { propPart, standard } from "./factory25dProps";
 import { contactShadow } from "./factory25dContactShadows";
 import { stepToward, type FloorPoint } from "./factory25dKeyboardState";
+import { routeToStation, INTERIOR_Z } from './factory25dWorkstations';
 
 const BALL_RADIUS = 0.073;
 
@@ -48,7 +49,7 @@ function miniBall(parent: THREE.Object3D) {
   return group;
 }
 
-type Player = { name: string; position: THREE.Vector3; home: FloorPoint };
+type Player = { id: string; name: string; position: THREE.Vector3; home: FloorPoint };
 interface BasketballSounds {
   tap?: () => void;
   swish?: () => void;
@@ -152,24 +153,23 @@ export function createBasketball(
   tally.position.set(1.35, 0.86, -6.245);
   tally.rotation.z = -0.018;
   parent.add(tally);
-  let scores = players.map(() => 0);
+  const savedScores: Record<string, number> = Object.create(null);
   try {
-    const saved = JSON.parse(
-      localStorage.getItem("factory-window-hoops-v1") ?? "null",
-    );
-    if (Array.isArray(saved) && saved.length === scores.length)
-      scores = saved.map((v) =>
-        Number.isSafeInteger(v) && v >= 0 && v < 100000 ? v : 0,
-      );
+    const saved = JSON.parse(localStorage.getItem('factory-window-hoops-v2') ?? '{}');
+    if (saved && typeof saved === 'object' && !Array.isArray(saved))
+      for (const [id, value] of Object.entries(saved))
+        if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value < 100000) savedScores[id] = value;
   } catch {
     /* Local game still works. */
   }
+  let scores = players.map(player => savedScores[player.id] ?? 0);
   const call = document.createElement("button");
   call.type = "button";
-  call.className = "basket-call";
+  call.className = "basket-call"; call.disabled = !players.length;
   call.title = "call an agent for a shot";
   canvas.parentElement!.append(call);
   function paintScore() {
+    call.title = players.length ? 'call an agent for a shot' : 'agents are busy · hoops will be available on their next break';
     ctx.clearRect(0, 0, 768, 384);
     ctx.fillStyle = '#24374a';
     ctx.strokeStyle = '#24374a';
@@ -191,6 +191,7 @@ export function createBasketball(
     ctx.font = '700 31px "Board Marker", cursive';
     ctx.fillText('scores on this window', 40, 333);
     ctx.globalAlpha = 1;
+    if (!players.length) { ctx.font = '700 38px "Board Marker", cursive'; ctx.fillText('back after work', 40, 162); }
     texture.needsUpdate = true;
     call.setAttribute(
       "aria-label",
@@ -214,29 +215,21 @@ export function createBasketball(
     impact = new THREE.Vector3(),
     previous = new THREE.Vector3();
   const project = new THREE.Vector3();
-  const aisle = [
-    { x: 6.5, z: 4.45 },
-    { x: 6.5, z: 2.85 },
-    { x: 7.45, z: 2.85 },
-    { x: 7.45, z: -4.93 },
-  ];
+  const localRoute = (from: FloorPoint, to: FloorPoint) => routeToStation(
+    {x: from.x, z: from.z + INTERIOR_Z}, {x: to.x, z: to.z + INTERIOR_Z},
+  ).map(point => ({x: point.x, z: point.z - INTERIOR_Z}));
   call.addEventListener("click", () => {
     queued = true;
     wait = 0;
   });
   function startTurn() {
+    if (!players.length) return;
     active = attempt % players.length;
     attempt++;
     const player = players[active];
-    const approach =
-      active === 0
-        ? [
-            { x: -2.5, z: -2.65 },
-            { x: -2.5, z: -5.03 },
-          ]
-        : aisle;
-    route = [...approach, { x: 1.3, z: -5.02 }];
-    returnRoute = [...approach].reverse().concat(player.home);
+    const shootingSpot = { x: 1.3, z: -5.02 };
+    route = localRoute(player.position, shootingSpot);
+    returnRoute = localRoute(shootingSpot, player.home);
     stage = "walk";
     time = 0;
     jump = 0;
@@ -248,6 +241,12 @@ export function createBasketball(
     time = 0;
   }
   return {
+    setPlayers(next: Player[]) {
+      active = -1; queued = false; wait = 38; jump = 0; time = 0;
+      ball.position.set(0.7, BALL_RADIUS, -5.65);
+      ballShadow.position.x = 0.7; ballShadow.position.z = -5.65;
+      players = next; scores = players.map(player => savedScores[player.id] ?? 0); call.disabled = !players.length; paintScore();
+    },
     get active() {
       return active >= 0;
     },
@@ -283,6 +282,7 @@ export function createBasketball(
       )
         return;
       dt = Math.min(0.1, Math.max(0, dt));
+      if (!players.length) return;
       if (active < 0) {
         if (free && (!reduced || queued)) wait -= dt;
         if (wait <= 0 && free) startTurn();
@@ -342,11 +342,12 @@ export function createBasketball(
           scored = true;
           sounds.swish?.();
           scores[active]++;
+          savedScores[players[active].id] = scores[active];
           paintScore();
           try {
             localStorage.setItem(
-              "factory-window-hoops-v1",
-              JSON.stringify(scores),
+              "factory-window-hoops-v2",
+              JSON.stringify(savedScores),
             );
           } catch {
             /* Session score stays available. */

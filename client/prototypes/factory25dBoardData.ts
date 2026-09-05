@@ -1,7 +1,8 @@
-import type { AvatarConfig, ChatMessage } from '@shared/types';
+import { WorldStore } from '../state/WorldStore';
+import type { AvatarConfig, ChatMessage, WorldSnapshot, WSMessageToClient, WSMessageToServer } from '@shared/types';
 import { readAvatar } from './factory25dAvatar';
 
-/** Only public display fields are retained; no credentials or agent controls. */
+/** Compact public fields for the wall board; the shared connection also retains world state. */
 export interface BoardAgent {
   id: string;
   name: string;
@@ -21,6 +22,8 @@ export interface BoardData {
   connected: boolean;
   chat?: ChatMessage[];
   canChat?: boolean;
+  world?: WorldSnapshot;
+  principal?: { username: string; ownerId: string };
 }
 const count = (value: unknown): number | null =>
   Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : null;
@@ -103,11 +106,24 @@ export function applyBoardChanges(data: BoardData, changes: unknown): BoardData 
 }
 
 export function factoryHost() {
-  return ['localhost', '127.0.0.1'].includes(location.hostname)
+  return ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).get('factoryServer') !== 'local'
     ? 'https://fluid-factory.onrender.com' : location.origin;
 }
 let chatSocket: WebSocket | null = null;
 let maySendChat = false;
+const messageListeners = new Set<(message: WSMessageToClient) => void>();
+const connectionListeners = new Set<(connected: boolean) => void>();
+export function onFactoryMessage(listener: (message: WSMessageToClient) => void) {
+  messageListeners.add(listener); return () => { messageListeners.delete(listener); };
+}
+export function onFactoryConnection(listener: (connected: boolean) => void) {
+  connectionListeners.add(listener); return () => { connectionListeners.delete(listener); };
+}
+export function sendFactoryCommand(message: WSMessageToServer) {
+  if (!maySendChat || chatSocket?.readyState !== WebSocket.OPEN) return false;
+  chatSocket.send(JSON.stringify(message)); return true;
+}
+
 export function sendFactoryChat(message: string): boolean {
   const text = message.trim().slice(0, 500);
   if (!text || !maySendChat || chatSocket?.readyState !== WebSocket.OPEN) return false;
@@ -121,8 +137,16 @@ export function watchBoardData(onChange: (data: BoardData) => void) {
   let request: AbortController | null = null, socket: WebSocket | null = null;
   let stopped = false, revision: number | null = null, generation = 0;
   let identity = '', checkingLogin = false;
+  let principal: BoardData['principal'];
+  const world = new WorldStore();
+  const receiveSnapshot = (snapshot: WorldSnapshot) => {
+    previous = boardDataFromSnapshot(snapshot);
+    if (Number.isSafeInteger(snapshot.serverTime) && snapshot.environment && Array.isArray(snapshot.tombstones) && Array.isArray(snapshot.events)) {
+      world.replace(snapshot); previous.world = world.snapshot!;
+    }
+  };
   let retry = 0, delay = 1000;
-  const publish = () => { if (!stopped) onChange({ ...previous, canChat: maySendChat }); };
+  const publish = () => { if (!stopped) onChange({ ...previous, canChat: maySendChat, principal: maySendChat ? principal : undefined }); };
   async function refresh() {
     if (document.hidden || request || stopped || (socket?.readyState === WebSocket.OPEN && revision !== null)) return;
     const controller = new AbortController(), start = generation;
@@ -133,8 +157,8 @@ export function watchBoardData(onChange: (data: BoardData) => void) {
         signal: controller.signal, credentials: 'omit', cache: 'no-store',
       });
       if (!response.ok) throw new Error('Factory unavailable');
-      const result = boardDataFromSnapshot(await response.json());
-      if (start === generation) previous = result;
+      const result = await response.json();
+      if (start === generation) receiveSnapshot(result);
     } catch {
       if (start === generation) previous = { ...previous, connected: false };
     } finally { clearTimeout(timeout); request = null; }
@@ -144,7 +168,7 @@ export function watchBoardData(onChange: (data: BoardData) => void) {
     if (stopped) return;
     const url = new URL('/ws', host); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     socket = new WebSocket(url); chatSocket = socket;
-    socket.onopen = () => { delay = 1000; };
+    socket.onopen = () => { delay = 1000; connectionListeners.forEach(listener => listener(true)); };
     socket.onmessage = event => {
       if (stopped) return;
       try {
@@ -152,22 +176,27 @@ export function watchBoardData(onChange: (data: BoardData) => void) {
         if (message.type === 'auth_result') {
           maySendChat = host === location.origin && message.success === true;
           identity = maySendChat ? `${message.ownerId}:${message.username}` : '';
+          principal = maySendChat && message.ownerId && message.username ? { ownerId: message.ownerId, username: message.username } : undefined;
         } else if (message.type === 'world_snapshot') {
-          previous = boardDataFromSnapshot(message.snapshot);
+          receiveSnapshot(message.snapshot);
           revision = count(message.snapshot.revision); generation++;
         } else if (message.type === 'world_delta') {
+          if (revision !== null && message.delta?.revision <= revision) return;
           if (revision === null || message.delta?.previousRevision !== revision) {
             socket?.send(JSON.stringify({ type: 'request_state' })); return;
           }
           previous = applyBoardChanges(previous, message.delta.changes);
+          if (world.snapshot && world.apply(message.delta) === 'applied') previous.world = world.snapshot!;
           revision = count(message.delta.revision); generation++;
-        } else return;
+        }
+        messageListeners.forEach(listener => listener(message));
         publish();
       } catch { /* An incomplete frame does not replace the last valid snapshot. */ }
     };
     socket.onerror = () => socket?.close();
     socket.onclose = () => {
-      maySendChat = false; revision = null;
+      maySendChat = false; principal = undefined; revision = null;
+      connectionListeners.forEach(listener => listener(false));
       previous = { ...previous, connected: false }; publish();
       if (!stopped) { retry = window.setTimeout(connect, delay); delay = Math.min(30000, delay * 2); }
     };
@@ -198,6 +227,7 @@ export function watchBoardData(onChange: (data: BoardData) => void) {
   return () => {
     stopped = true; request?.abort(); clearTimeout(retry); clearInterval(timer);
     maySendChat = false; socket?.close(); chatSocket = null;
+    connectionListeners.forEach(listener => listener(false));
     document.removeEventListener('visibilitychange', visible);
     window.removeEventListener('focus', visible);
   };

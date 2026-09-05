@@ -18,4 +18,4 @@ services:
       - key: TITLE
         value: AGENT FACTORY
       - key: ENVIRONMENT
-        value: arcade
+        value: factory25d

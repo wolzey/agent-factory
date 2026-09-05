@@ -35,7 +35,7 @@ export function parseWorldSnapshot(raw: string): WorldSnapshot {
     || !Array.isArray(snapshot.events)) {
     throw new Error('Stored world snapshot is missing collection fields');
   }
-  if (!['arcade', 'farm', 'office', 'mining'].includes(String(snapshot.environment))) {
+  if (!['arcade', 'farm', 'office', 'mining', 'factory25d'].includes(String(snapshot.environment))) {
     throw new Error('Stored world snapshot has an invalid environment');
   }
 

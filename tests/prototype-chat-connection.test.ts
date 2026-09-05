@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { watchBoardData, sendFactoryChat, type BoardData } from '../client/prototypes/factory25dBoardData';
+import { StateManager } from '../server/state';
+import { DEFAULT_AVATAR } from '../shared/constants';
 
 class FactorySocket {
   static OPEN = 1;
@@ -85,4 +87,25 @@ it('picks up a changed same-origin login on return to the tab', async () => {
   expect(latest().chat).toEqual([chat]);
   await vi.advanceTimersByTimeAsync(1000);
   expect(FactorySocket.instances).toHaveLength(2);
+});
+
+it('keeps customized agents, children and station changes in the same revision stream as chat', () => {
+  const state = new StateManager('factory25d', () => 1000);
+  state.handleHookEvent({hook_event_name:'SessionStart',session_id:'ada',username:'Ada',ownerId:'owner',cwd:'/work',avatar:{...DEFAULT_AVATAR,shirtColor:'#ff9900'}});
+  stop = watchBoardData(data => changes.push(data));
+  const socket = FactorySocket.instances[0], initial = state.getSnapshot();
+  socket.receive({type:'world_snapshot',snapshot:initial});
+  expect(latest().world?.agents[0].avatar.shirtColor).toBe('#ff9900');
+  state.onStateChange(event => { if(event.type==='delta') socket.receive({type:'world_delta',delta:event.delta}); });
+  state.handleHookEvent({hook_event_name:'SubagentStart',session_id:'ada',username:'Ada',cwd:'/work',agent_id:'child',agent_type:'research'});
+  state.assignWorkstation('ada',17);
+  state.appendChat(chat);
+  expect(latest().world?.agents[0].subagents[0].agentId).toBe('child');
+  expect(latest().world?.agents[0].world.slotIndex).toBe(17);
+  expect(latest().world?.chat).toEqual(latest().chat);
+  socket.close();
+  vi.advanceTimersByTime(1000);
+  FactorySocket.instances[1].receive({type:'world_snapshot',snapshot:state.getSnapshot()});
+  expect(latest().world?.agents).toEqual(state.getSnapshot().agents);
+  expect(latest().chat).toEqual([chat]);
 });

@@ -1,3 +1,5 @@
+import { FACTORY25D_BOUNDS, constrainFactoryStep, toFactoryWorld, factory25dWaypoints } from '../shared/factory25d-layout.js';
+import { CONTROL_WORLD_BOUNDS, GRAB_POINTER_BOUNDS } from '../shared/constants.js';
 import { randomUUID } from 'node:crypto';
 import type {
   AgentSession,
@@ -88,6 +90,10 @@ export class StateManager {
     private environment: EnvironmentType = 'arcade',
     private now: () => number = Date.now,
   ) {}
+
+  constrainStep(from: Position, to: Position) { return this.environment === 'factory25d' ? constrainFactoryStep(from, to) : to; }
+  get worldBounds() { return this.environment === 'factory25d' ? FACTORY25D_BOUNDS : CONTROL_WORLD_BOUNDS; }
+  get grabBounds() { return this.environment === 'factory25d' ? { ...FACTORY25D_BOUNDS, minY: -82 } : GRAB_POINTER_BOUNDS; }
 
   setSessionNameLookup(fn: (id: string) => string | undefined) {
     this.sessionNameLookup = fn;
@@ -206,6 +212,11 @@ export class StateManager {
       const session = scrubLegacyAgentFields(clone(stored));
       this.knownSessions.add(session.sessionId);
       delete session.manualControl;
+      if (snapshot.environment !== this.environment) {
+        const zone = zoneForActivity(session.activity);
+        const slotIndex = session.world.slotIndex ?? 0;
+        session.world = { zone, slotIndex, position: slotPosition(this.environment, zone, slotIndex), facing: 'up' };
+      }
       if (session.activity === 'stopped') {
         this.createTombstone(session, timestamp);
         continue;
@@ -213,7 +224,43 @@ export class StateManager {
       this.sessions.set(session.sessionId, session);
       this.syncWorld(session, timestamp);
     }
+    if (snapshot.environment !== this.environment) {
+      for (const tombstone of this.tombstones.values()) tombstone.position = tombstone.slotIndex === undefined
+        ? { ...WORLD_LAYOUTS[this.environment].entrance }
+        : slotPosition(this.environment, 'work', tombstone.slotIndex);
+    }
     this.pruneWorld(timestamp, false);
+  }
+
+  private advanceFactoryRoaming(timestamp: number): void {
+    const changes: WorldChange[] = [];
+    for (const session of this.sessions.values()) {
+      if (!session.manualControl && session.world.zone === 'waiting' && zoneForActivity(session.activity) === 'work'
+        && this.allocateSlot(session.sessionId, 'work') < WORLD_LAYOUTS.factory25d.workSlots.length) {
+        this.syncWorld(session, timestamp);
+        changes.push({ kind: 'agent_upsert', agent: clone(session) });
+      }
+      if (session.activity !== 'idle' || session.manualControl) { this.idleRoamAt.delete(session.sessionId); continue; }
+      if (session.world.movement && timestamp < session.world.movement.arrivesAt) continue;
+      const seed = Array.from(session.sessionId).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+      const ready = this.idleRoamAt.get(session.sessionId);
+      if (ready === undefined) { this.idleRoamAt.set(session.sessionId, timestamp + IDLE_ROAM_DELAY_MS + seed % 8000); continue; }
+      if (timestamp < ready) continue;
+      const visit = (this.idleExcursionCount.get(session.sessionId) ?? 0) + 1;
+      this.idleExcursionCount.set(session.sessionId, visit);
+      const slotIndex = session.world.slotIndex ?? this.allocateSlot(session.sessionId, 'idle');
+      const home = slotPosition(this.environment, 'idle', slotIndex);
+      const places = [home, toFactoryWorld({x:4.7 + seed % 3 * 0.55,z:9.4}),
+        toFactoryWorld({x:-3.8 + seed % 5 * 1.6,z:-3.7}), toFactoryWorld({x:10.4 + seed % 4 * 2.3,z:7.7})];
+      const target = places[visit % places.length], from = this.currentWorldPosition(session,timestamp);
+      const path = factory25dWaypoints(from,target), distance=routeDistance(from,path,target);
+      const arrivesAt=timestamp+Math.ceil(distance/WORLD_MOVE_SPEED*1000);
+      session.world={zone:'idle',slotIndex,position:from,facing:'down',movement:{from,to:target,waypoints:path,startedAt:timestamp,arrivesAt}};
+      this.idleRoamAt.set(session.sessionId,arrivesAt+IDLE_ROAM_DELAY_MS+seed%8000);
+      changes.push({kind:'agent_upsert',agent:clone(session)});
+    }
+    if(changes.length) this.commit(changes,false,timestamp);
+    this.maybeStartRockPaperScissors(timestamp);
   }
 
   appendChat(chat: ChatMessage): void {
@@ -239,6 +286,7 @@ export class StateManager {
 
   advanceWorld(timestamp = this.now()): void {
     this.pruneWorld(timestamp, true);
+    if (this.environment === 'factory25d') { this.advanceFactoryRoaming(timestamp); return; }
     if (this.environment !== 'arcade') return;
 
     const changes: WorldChange[] = [];
@@ -1073,8 +1121,12 @@ export class StateManager {
       return;
     }
 
-    const zone = zoneForActivity(session.activity);
-    const slotIndex = this.allocateSlot(session.sessionId, zone, session.world.zone === zone ? session.world.slotIndex : undefined);
+    let zone = zoneForActivity(session.activity);
+    let slotIndex = this.allocateSlot(session.sessionId, zone, session.world.zone === zone ? session.world.slotIndex : undefined);
+    if (this.environment === 'factory25d' && zone === 'work' && slotIndex >= WORLD_LAYOUTS.factory25d.workSlots.length) {
+      zone = 'waiting';
+      slotIndex = this.allocateSlot(session.sessionId, zone, session.world.zone === zone ? session.world.slotIndex : undefined);
+    }
     const target = slotPosition(this.environment, zone, slotIndex);
     const existingMovement = session.world.movement;
     if (existingMovement

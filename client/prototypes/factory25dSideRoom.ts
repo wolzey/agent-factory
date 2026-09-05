@@ -263,6 +263,7 @@ export function createSideRoomNavigation(
   });
   return {
     camera,
+    visit: (outside: boolean) => { if (outside !== open) move(outside, false); },
     isActive: () => open || Boolean(motion),
     showsFactory: () => !open || Boolean(motion),
     outdoorProgress: () => THREE.MathUtils.clamp((camera.position.x - homeCamera.position.x) / 16, 0, 1),

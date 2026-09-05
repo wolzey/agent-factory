@@ -5,7 +5,6 @@ import {
   CONTROL_MOVE_SPEED,
   CONTROL_SHOOT_COOLDOWN_MS,
   CONTROL_TICK_INTERVAL_MS,
-  CONTROL_WORLD_BOUNDS,
   MAX_BROADCAST_RATE_MS,
 } from '../shared/constants.js';
 import type { StateManager } from './state.js';
@@ -104,8 +103,8 @@ export class ControlManager {
       ownerId,
       sessionId,
       input: { ...STOPPED_INPUT },
-      x: safeCoordinate(canonicalPosition.x, 400, CONTROL_WORLD_BOUNDS.minX, CONTROL_WORLD_BOUNDS.maxX),
-      y: safeCoordinate(canonicalPosition.y, 240, CONTROL_WORLD_BOUNDS.minY, CONTROL_WORLD_BOUNDS.maxY),
+      x: safeCoordinate(canonicalPosition.x, 400, this.state.worldBounds.minX, this.state.worldBounds.maxX),
+      y: safeCoordinate(canonicalPosition.y, 240, this.state.worldBounds.minY, this.state.worldBounds.maxY),
       facing: 'down',
       moving: false,
       lastInputAt: timestamp,
@@ -202,19 +201,22 @@ export class ControlManager {
       const moving = dx !== 0 || dy !== 0;
 
       if (moving) {
+        const before = { x: lease.x, y: lease.y };
         const magnitude = Math.hypot(dx, dy);
         dx /= magnitude;
         dy /= magnitude;
         lease.x = clamp(
           lease.x + dx * CONTROL_MOVE_SPEED * dt,
-          CONTROL_WORLD_BOUNDS.minX,
-          CONTROL_WORLD_BOUNDS.maxX,
+          this.state.worldBounds.minX,
+          this.state.worldBounds.maxX,
         );
         lease.y = clamp(
           lease.y + dy * CONTROL_MOVE_SPEED * dt,
-          CONTROL_WORLD_BOUNDS.minY,
-          CONTROL_WORLD_BOUNDS.maxY,
+          this.state.worldBounds.minY,
+          this.state.worldBounds.maxY,
         );
+        const constrained = this.state.constrainStep(before, { x: lease.x, y: lease.y });
+        lease.x = constrained.x; lease.y = constrained.y;
         lease.facing = this.resolveFacing(lease.facing, dx, dy);
       }
 
