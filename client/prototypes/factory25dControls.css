@@ -1,0 +1,36 @@
+.factory-controls [hidden] { display:none !important; }
+.factory-controls { width:max-content; }
+.factory-control-content { width:292px; box-sizing:border-box; }
+.factory-step-help { color:#a6bcb8; }
+.factory-auth { font-size:13px; }
+.factory-controls .factory-session-actions { margin-bottom:10px; }
+.factory-controls .factory-connect-guide { padding:10px; margin-top:12px; background:#1c2931; }
+.factory-connect-guide code { display:block; margin:10px 0; font:inherit; color:#e3d4ac; user-select:all; }
+.factory-controls .factory-station-section { margin-top:16px; border-top:1px solid #34434c; }
+.factory-controls .factory-station-section summary { padding:12px 0 0; color:#aec3be; }
+.factory-controls .factory-station-section summary::after { content:' +'; }
+.factory-controls .factory-station-section[open] summary::after { content:' −'; }
+.factory-controls:not(.is-controlling) .factory-play-actions { display:none; }
+.factory-controls .factory-claim { background:#32534c; color:#def2e5; border-color:#80aaa0; }
+.factory-control-status:empty { display:none; }
+.factory-control-status { color:#e3c291; }
+.factory-emote-bar.pixel-island { display:block; padding:0; animation:none; pointer-events:auto; position:fixed; bottom:18px; left:50%; transform:translateX(-50%); z-index:21; color:#d2e0de; background:#101821f5; font:12px 'Geist Pixel',monospace; }
+.factory-emote-bar[hidden] { display:none !important; }
+.factory-controls[open] ~ .factory-emote-bar:not([open]) { display:none; }
+.factory-emote-bar summary { cursor:pointer; padding:12px 16px; list-style:none; }
+.factory-emote-bar summary::-webkit-details-marker { display:none; }
+.factory-emote-bar kbd { margin-left:12px; font:inherit; color:#93b3ab; border:1px solid #475d60; padding:2px 5px; }
+.factory-emote-choices { display:grid; grid-template-columns:repeat(6,minmax(52px,1fr)); gap:5px; padding:0 12px; }
+.factory-emote-choices button { display:grid; place-items:center; gap:6px; min-height:55px; padding:8px 4px; color:#c5d5d0; background:#22333c; border:1px solid #475f64; border-radius:0; cursor:pointer; font:10px 'Geist Pixel',monospace; }
+.factory-emote-choices button span { font-size:17px; color:#cde7db; }
+.factory-emote-choices button:is(:hover,:focus-visible) { outline:2px solid #a9e4d6; outline-offset:-2px; background:#35524d; }
+.factory-emote-bar p { padding:0 12px; color:#95aaa6; font-size:10px; }
+.factory-emote-bar[open] { max-width:calc(100vw - 24px); }
+.board-open .factory-emote-bar,.chat-open .factory-emote-bar,.weather-open .factory-emote-bar,.inspect-open .factory-emote-bar,.team-open .factory-emote-bar,.avatar-editor-open .factory-emote-bar { display:none; }
+@media(max-width:600px) {
+  .factory-controls { max-width:calc(100vw - 24px); }
+  .factory-control-content { max-width:calc(100vw - 24px); }
+  .factory-emote-bar.pixel-island { bottom:74px; left:auto; right:12px; transform:none; }
+  .secondary-room .factory-emote-bar { bottom:154px; }
+  .factory-emote-choices { grid-template-columns:repeat(6,minmax(40px,1fr)); padding:0 8px; gap:4px; }
+}

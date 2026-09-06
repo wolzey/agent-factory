@@ -112,6 +112,22 @@ export function factoryHost() {
 let chatSocket: WebSocket | null = null;
 let maySendChat = false;
 let invalidateLogin: (() => void) | undefined;
+export function isControlPreview() {
+  return import.meta.env.DEV && typeof location !== 'undefined'
+    && ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
+    && new URLSearchParams(location.search).has('controlsPreview');
+}
+let controlPreview: ReturnType<typeof import('./factory25dControlPreview').createControlPreview> | undefined;
+const previewListeners = new Set<(scenario: string, data: BoardData) => void>();
+export function onControlPreview(listener: (scenario: string, data: BoardData) => void) {
+  previewListeners.add(listener); return () => { previewListeners.delete(listener); };
+}
+export function connectControlPreview() { controlPreview?.connect(); }
+export function logoutControlPreview() { controlPreview?.logout(); }
+export async function previewAvatar(method: 'GET' | 'PUT', _signal: AbortSignal, avatar?: AvatarConfig) {
+  if (!isControlPreview() || !controlPreview) throw new Error('Local preview is still loading.');
+  return controlPreview.avatar(method, avatar);
+}
 export function forgetFactoryLogin() { maySendChat = false; invalidateLogin?.(); }
 const messageListeners = new Set<(message: WSMessageToClient) => void>();
 const connectionListeners = new Set<(connected: boolean) => void>();
@@ -122,18 +138,37 @@ export function onFactoryConnection(listener: (connected: boolean) => void) {
   connectionListeners.add(listener); return () => { connectionListeners.delete(listener); };
 }
 export function sendFactoryCommand(message: WSMessageToServer) {
+  if (isControlPreview()) return controlPreview?.send(message) ?? false;
   if (!maySendChat || chatSocket?.readyState !== WebSocket.OPEN) return false;
+  chatSocket.send(JSON.stringify(message)); return true;
+}
+
+/** Only the public ball channel skips sign-in. A dev preview never writes to live. */
+export function sendVisitorBall(message: import('@shared/visitor-basketball').VisitorBallInput) {
+  if (isControlPreview() || factoryHost() !== location.origin || chatSocket?.readyState !== WebSocket.OPEN) return false;
   chatSocket.send(JSON.stringify(message)); return true;
 }
 
 export function sendFactoryChat(message: string): boolean {
   const text = message.trim().slice(0, 500);
+  if (isControlPreview()) return !!text && sendFactoryCommand({ type: 'chat', message: text });
   if (!text || !maySendChat || chatSocket?.readyState !== WebSocket.OPEN) return false;
   chatSocket.send(JSON.stringify({ type: 'chat', message: text }));
   return true;
 }
 
 export function watchBoardData(onChange: (data: BoardData) => void) {
+  if (import.meta.env.DEV && isControlPreview()) {
+    let stopped = false;
+    void import('./factory25dControlPreview').then(({ createControlPreview }) => {
+      if (stopped) return;
+      controlPreview = createControlPreview(onChange,
+        message => messageListeners.forEach(listener => listener(message)),
+        connected => connectionListeners.forEach(listener => listener(connected)),
+        (scenario, data) => previewListeners.forEach(listener => listener(scenario, data)));
+    });
+    return () => { stopped = true; controlPreview?.dispose(); controlPreview = undefined; };
+  }
   const host = factoryHost();
   let previous: BoardData = { agents: [], merges: null, connected: false, chat: [] };
   let request: AbortController | null = null, socket: WebSocket | null = null;

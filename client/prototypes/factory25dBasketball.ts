@@ -24,7 +24,7 @@ export function crossedBasket(
   );
 }
 
-function miniBall(parent: THREE.Object3D) {
+export function miniBall(parent: THREE.Object3D) {
   const group = new THREE.Group();
   parent.add(group);
   const sphere = new THREE.Mesh(
@@ -109,8 +109,18 @@ export function createBasketball(
     netPoints.push(netPoint(row, i), netPoint(row + 1, i));
     netPoints.push(netPoint(row, i), netPoint(row + 1, i + (row % 2 ? 1 : -1)));
   }
-  hoop.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(netPoints),
-    new THREE.LineBasicMaterial({ color: '#e5e1cf' })));
+  // Real matte cord responds to moonlight and lamps. Unlit lines stayed white at night.
+  const net = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.003, 0.003, 1, 4),
+    standard('#d4cfbb', 1), netPoints.length / 2);
+  net.name = 'basketball-net'; net.receiveShadow = true;
+  const cord = new THREE.Object3D(), up = new THREE.Vector3(0, 1, 0), direction = new THREE.Vector3();
+  for (let i = 0; i < netPoints.length; i += 2) {
+    direction.subVectors(netPoints[i + 1], netPoints[i]);
+    cord.position.copy(netPoints[i]).add(netPoints[i + 1]).multiplyScalar(0.5);
+    cord.scale.set(1, direction.length(), 1); cord.quaternion.setFromUnitVectors(up, direction.normalize());
+    cord.updateMatrix(); net.setMatrixAt(i / 2, cord.matrix);
+  }
+  hoop.add(net);
   const ball = miniBall(parent),
     spare = miniBall(parent);
   spare.position.set(2.55, BALL_RADIUS, -5.72);
@@ -241,6 +251,7 @@ export function createBasketball(
     time = 0;
   }
   return {
+    pickups: [ball, spare],
     setPlayers(next: Player[]) {
       active = -1; queued = false; wait = 38; jump = 0; time = 0;
       ball.position.set(0.7, BALL_RADIUS, -5.65);

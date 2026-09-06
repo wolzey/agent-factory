@@ -582,7 +582,8 @@ export function drawCharacter(
     const lightColor = `rgb(${Math.min(255, r + 40)}, ${Math.min(255, g + 40)}, ${Math.min(255, b + 40)})`;
     const skinColor = colors.skinTone;
     const hairColor = colors.hairColor;
-    const facesAway = anim === 'work' || anim === 'walk_up';
+    const climbing = anim === 'climb';
+    const facesAway = anim === 'work' || anim === 'walk_up' || climbing;
 
     ctx.clearRect(x, y, size, size);
 
@@ -751,7 +752,16 @@ export function drawCharacter(
 
     // ── Arms ──
     ctx.fillStyle = darkColor;
-    if (anim === 'work') {
+    if (climbing) {
+      // Alternate reaching hands, keeping the same saved clothes and silhouette.
+      for (const [side, armX] of [5, 24].entries()) {
+        const reach = [3, 1, 0, 1][(frame + side * 2) % 4];
+        ctx.fillStyle = darkColor;
+        ctx.fillRect(x + armX, y + 12 - reach, 3, 7 + reach);
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x + armX, y + 7 - reach, 3, 5);
+      }
+    } else if (anim === 'work') {
       ctx.fillRect(x + 3, y + 16 + bounce, 4, 6);
       ctx.fillRect(x + 21, y + 16 + bounce, 4, 6);
       // Hands
@@ -779,7 +789,16 @@ export function drawCharacter(
 
     // ── Legs ──
     ctx.fillStyle = colors.pantsColor;
-    if (anim === 'sit') {
+    if (climbing) {
+      for (const [side, legX] of [9, 18].entries()) {
+        const lift = [3, 1, 0, 0][(frame + side * 2) % 4];
+        ctx.fillStyle = colors.pantsColor;
+        ctx.fillRect(x + legX, y + 25 - lift, 5, 5);
+        ctx.fillStyle = colors.shoeColor;
+        ctx.fillRect(x + legX - 1, y + 30 - lift, 6, 2);
+      }
+      return;
+    } else if (anim === 'sit') {
       ctx.fillRect(x + 10, y + 26, 4, 4);
       ctx.fillRect(x + 18, y + 26, 4, 4);
     } else {

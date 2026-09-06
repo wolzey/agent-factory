@@ -9,6 +9,7 @@ import { createUtahLandscape } from './factory25dLandscape';
 import { createRidgeBear } from './factory25dBear';
 import { createValleyBirds } from './factory25dBirds';
 import { createLandscapeFocus } from './factory25dFocus';
+import type { TeamMember } from '@shared/team';
 
 /** A solid, separately lit landscape viewed through the factory glass. */
 export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: number) {
@@ -81,6 +82,7 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
   const previousClearColor = new THREE.Color();
   return {
     texture: target.texture,
+    setVisitors(members: readonly TeamMember[]) { climbers.setVisitors(members); dirty = true; },
     async setLandscape(style: 'current' | 'blender') {
       requestedLandscape = style;
       let next = originalLandscape;
@@ -111,10 +113,12 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
       applyEnvironment();
     },
     render(elapsed = 0, visible = true) {
-      bear.update(elapsed - previousElapsed, !visible || reducedMotion.matches || document.hidden);
-      birds.update(elapsed - previousElapsed, currentWeather, isNight, !visible || reducedMotion.matches || document.hidden);
-      climbers.update(elapsed - previousElapsed, !visible || reducedMotion.matches || document.hidden);
+      const dt = elapsed - previousElapsed;
       previousElapsed = elapsed;
+      if (!visible || document.hidden) return;
+      bear.update(dt, reducedMotion.matches);
+      birds.update(dt, currentWeather, isNight, reducedMotion.matches);
+      climbers.update(dt, isNight, reducedMotion.matches);
       const windFrame = Math.floor(elapsed * 12);
       if (!reducedMotion.matches && windFrame !== lastWindFrame) {
         landscape.windTime.value = elapsed;

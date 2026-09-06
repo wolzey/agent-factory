@@ -16,18 +16,25 @@ export function readAvatar(value: unknown): AvatarConfig | undefined {
   return result;
 }
 export const AVATAR_ANIMATIONS = ['idle', 'walk_right', 'walk_left', 'walk_down', 'walk_up', 'work', 'sit'];
-export function avatarSheet(avatar: AvatarConfig) {
-  const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 224;
+// Painted sheets are immutable and shared by matching agents, companions and portraits.
+// Bound the cache so dragging a custom color never retains every intermediate look.
+const sheets = new Map<string, { canvas: HTMLCanvasElement; feet: number[][] }>();
+export function avatarSheet(avatar: AvatarConfig, animations: readonly string[] = AVATAR_ANIMATIONS) {
+  const colors = resolveAvatar(avatar), key = JSON.stringify([colors, animations]);
+  const cached = sheets.get(key);
+  if (cached) { sheets.delete(key); sheets.set(key, cached); return cached; }
+  const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = animations.length * 32;
   const ctx = canvas.getContext('2d')!;
-  const colors = resolveAvatar(avatar);
-  for (const [row, animation] of AVATAR_ANIMATIONS.entries()) for (let frame = 0; frame < 4; frame++)
+  for (const [row, animation] of animations.entries()) for (let frame = 0; frame < 4; frame++)
     drawCharacter(ctx, frame * 32, row * 32, 32, hexToInt(colors.shirtColor), animation, frame, colors);
   // Ground by visible pixels for each frame, including different shoes and strides.
-  const pixels = ctx.getImageData(0, 0, 128, 224).data;
-  const feet = AVATAR_ANIMATIONS.map((_, row) => Array.from({length:4}, (_, frame) => {
+  const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  const feet = animations.map((_, row) => Array.from({length:4}, (_, frame) => {
     for (let y = 31; y >= 0; y--) for (let x = 0; x < 32; x++)
       if (pixels[((row * 32 + y) * 128 + frame * 32 + x) * 4 + 3] >= 20) return y + 1;
     return 32;
   }));
-  return { canvas, feet };
+  const sheet = { canvas, feet }; sheets.set(key, sheet);
+  if (sheets.size > 32) sheets.delete(sheets.keys().next().value!);
+  return sheet;
 }

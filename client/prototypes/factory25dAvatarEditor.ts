@@ -1,10 +1,16 @@
 import type { AvatarConfig } from '@shared/types';
 import { AVATAR_STYLES, parseAvatarConfig } from '@shared/avatar-customization';
-import { avatarSheet, AVATAR_ANIMATIONS, readAvatar } from './factory25dAvatar';
+import { readAvatar } from './factory25dAvatar';
 import { resolveAvatar } from '../rendering/avatarPainter';
 import './factory25dAvatarEditor.css';
 
 type Context = { ownerId: string; username: string };
+export interface AvatarScenePreview {
+  open(context: Context): void;
+  setAvatar(avatar: AvatarConfig): void;
+  pose(direction: number, walking: boolean): void;
+  close(): void;
+}
 type StyleKey = keyof typeof AVATAR_STYLES;
 type ColorKey = 'hairColor' | 'skinTone' | 'shirtColor' | 'pantsColor' | 'shoeColor';
 const palettes = {
@@ -13,13 +19,15 @@ const palettes = {
   clothes: ['#4a90d9', '#ff6b6b', '#51cf66', '#ffd43b', '#cc5de8', '#ffa94d', '#eeeeee', '#2a2a3e'],
 };
 
-export function createAvatarEditor(getContext: () => Context | undefined, onOpen: () => void, onSaved: () => void) {
+export function createAvatarEditor(getContext: () => Context | undefined, onOpen: () => void, onSaved: () => void,
+  scenePreview: AvatarScenePreview,
+  previewApi?: (method: 'GET' | 'PUT', signal: AbortSignal, avatar?: AvatarConfig) => Promise<{ avatar: AvatarConfig }>) {
   const dialog = document.createElement('dialog'); dialog.className = 'avatar-editor';
   dialog.setAttribute('aria-labelledby', 'avatar-editor-title');
   dialog.innerHTML = `<form>
     <header><h2 id="avatar-editor-title">edit avatar</h2><button type="button" class="avatar-close" aria-label="Close avatar editor">×</button></header>
     <div class="avatar-editor-body">
-      <section class="avatar-preview" aria-label="Avatar preview"><canvas width="192" height="224" role="img" aria-label="Live preview of your avatar"></canvas>
+      <section class="avatar-preview" aria-label="Avatar preview">
         <p class="avatar-preview-name"></p><div class="avatar-turn"><button type="button" data-turn="-1" aria-label="Turn avatar left">←</button><span class="avatar-facing">front</span><button type="button" data-turn="1" aria-label="Turn avatar right">→</button></div>
         <button type="button" class="avatar-walk" aria-pressed="false">preview walking</button>
       </section>
@@ -30,17 +38,16 @@ export function createAvatarEditor(getContext: () => Context | undefined, onOpen
     <footer><p class="avatar-editor-status" role="status" aria-live="polite"></p><p class="avatar-save-help">one look for your agents, now and next time.</p><div class="avatar-save-actions"><button type="button" class="avatar-cancel">cancel</button><button type="submit" class="avatar-save">save avatar</button></div></footer>
   </form>`;
   document.body.append(dialog);
-  const form = dialog.querySelector('form')!, preview = dialog.querySelector('canvas')!, ctx = preview.getContext('2d')!;
+  const form = dialog.querySelector('form')!;
   const status = dialog.querySelector<HTMLElement>('.avatar-editor-status')!;
   const save = dialog.querySelector<HTMLButtonElement>('.avatar-save')!;
   const cancel = dialog.querySelector<HTMLButtonElement>('.avatar-cancel')!, closeButton = dialog.querySelector<HTMLButtonElement>('.avatar-close')!;
   const walking = dialog.querySelector<HTMLButtonElement>('.avatar-walk')!;
   const abort = new AbortController(), events = { signal: abort.signal };
   const fields = new Map<string, HTMLInputElement | HTMLSelectElement>();
-  let owner: string | undefined, draft: AvatarConfig | undefined, baseline = '', sheet: ReturnType<typeof avatarSheet> | undefined;
-  let loading = false, saving = false, direction = 0, walk = false, animation = 0, generation = 0;
+  let owner: string | undefined, draft: AvatarConfig | undefined, baseline = '';
+  let loading = false, saving = false, direction = 0, walk = false, generation = 0;
   let request: AbortController | undefined, returnFocus: HTMLElement | null = null;
-  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   const reconnectMessage = 'Reconnect this browser to save. Your preview is still here.';
   function current() { const context = getContext(); return dialog.open && !!owner && (!context || owner === context.ownerId); }
@@ -50,7 +57,7 @@ export function createAvatarEditor(getContext: () => Context | undefined, onOpen
     closeButton.disabled = cancel.disabled = saving;
     for (const element of dialog.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>('.avatar-options input, .avatar-options select, .avatar-options button')) element.disabled = loading || saving || !draft;
   }
-  function updatePreview() { if (draft) sheet = avatarSheet(draft); controls(); }
+  function updatePreview() { if (draft) scenePreview.setAvatar(draft); controls(); }
   function setField(key: StyleKey | ColorKey, value: number | string) {
     if (!draft || loading || saving) return;
     draft = { ...draft, [key]: value };
@@ -98,29 +105,13 @@ export function createAvatarEditor(getContext: () => Context | undefined, onOpen
   for (const button of dialog.querySelectorAll<HTMLButtonElement>('[data-turn]')) button.addEventListener('click', () => {
     direction = (direction + Number(button.dataset.turn) + 4) % 4;
     dialog.querySelector('.avatar-facing')!.textContent = ['front', 'right', 'back', 'left'][direction];
+    scenePreview.pose(direction, walk);
   }, events);
-  walking.addEventListener('click', () => { walk = !walk; walking.setAttribute('aria-pressed', String(walk)); walking.textContent = walk ? 'pause walking' : 'preview walking'; }, events);
-  function draw(now: number) {
-    if (!dialog.open) return;
-    if (!document.hidden) {
-      ctx.imageSmoothingEnabled = false; ctx.clearRect(0, 0, 192, 224);
-      ctx.fillStyle = '#243a3b'; ctx.fillRect(0, 0, 192, 224);
-      ctx.fillStyle = '#30494a'; ctx.fillRect(0, 0, 192, 151);
-      ctx.fillStyle = '#3b5553'; ctx.fillRect(0, 151, 192, 2);
-      ctx.strokeStyle = '#39504e';
-      for (let y = 172; y < 224; y += 22) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(192, y); ctx.stroke(); }
-      ctx.fillStyle = '#182d2c'; ctx.fillRect(51, 193, 90, 8); ctx.fillRect(62, 201, 68, 4);
-      if (sheet) {
-        const row = !walk && direction === 0 ? 0 : AVATAR_ANIMATIONS.indexOf(`walk_${['down', 'right', 'up', 'left'][direction]}`);
-        const frame = walk && !reduced.matches ? Math.floor(now / 160) % 4 : 0;
-        ctx.drawImage(sheet.canvas, frame * 32, row * 32, 32, 32, 16, 38, 160, 160);
-      }
-    }
-    animation = requestAnimationFrame(draw);
-  }
+  walking.addEventListener('click', () => { walk = !walk; walking.setAttribute('aria-pressed', String(walk)); walking.textContent = walk ? 'pause walking' : 'preview walking'; scenePreview.pose(direction, walk); }, events);
   function finish() {
-    generation++; request?.abort(); request = undefined; cancelAnimationFrame(animation);
-    owner = undefined; draft = undefined; sheet = undefined; loading = saving = false;
+    scenePreview.close();
+    generation++; request?.abort(); request = undefined;
+    owner = undefined; draft = undefined; loading = saving = false;
     document.body.classList.remove('avatar-editor-open');
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
   }
@@ -132,6 +123,7 @@ export function createAvatarEditor(getContext: () => Context | undefined, onOpen
   dialog.addEventListener('keydown', event => event.stopPropagation(), events);
   dialog.addEventListener('keyup', event => event.stopPropagation(), events);
   async function api(method: 'GET' | 'PUT', signal: AbortSignal, avatar?: AvatarConfig) {
+    if (previewApi) return previewApi(method, signal, avatar);
     let response: Response;
     try {
       response = await fetch('/api/avatar', { method, credentials: 'same-origin',
@@ -162,13 +154,15 @@ export function createAvatarEditor(getContext: () => Context | undefined, onOpen
     async open() {
       const context = getContext(); if (!context || dialog.open) return;
       onOpen(); owner = context.ownerId; const sequence = ++generation;
+      scenePreview.open(context);
       returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      loading = true; saving = false; draft = undefined; sheet = undefined; direction = 0; walk = false;
+      loading = true; saving = false; draft = undefined; direction = 0; walk = false;
+      scenePreview.pose(direction, walk);
       walking.textContent = 'preview walking'; walking.setAttribute('aria-pressed', 'false');
       dialog.querySelector('.avatar-facing')!.textContent = 'front';
       dialog.querySelector('.avatar-preview-name')!.textContent = context.username;
       status.textContent = 'loading your look…'; page('look'); controls();
-      document.body.classList.add('avatar-editor-open'); dialog.showModal(); animation = requestAnimationFrame(draw);
+      document.body.classList.add('avatar-editor-open'); dialog.showModal();
       request = new AbortController();
       try {
         const result = await api('GET', request.signal);

@@ -198,6 +198,7 @@ export interface ChatMessage {
 
 // === WebSocket Messages: Server -> Browser ===
 export type WSMessageToClient =
+  | import('./visitor-basketball.js').VisitorBallUpdate
   /** `buildId` identifies the running server build; a client that sees it change reloads once. */
   | { type: 'world_snapshot'; snapshot: WorldSnapshot; buildId?: string }
   | { type: 'world_delta'; delta: WorldDelta }
@@ -219,6 +220,7 @@ export type GlobalEffectType = 'vortex';
 
 // === WebSocket Messages: Browser -> Server ===
 export type WSMessageToServer =
+  | import('./visitor-basketball.js').VisitorBallInput
   | { type: 'identify'; username: string; avatar: AvatarConfig }
   | { type: 'request_state' }
   | { type: 'logout' }

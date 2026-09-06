@@ -1,0 +1,12 @@
+.factory-preview-tools.pixel-island { display:block; position:fixed; top:76px; right:18px; left:auto; bottom:auto; transform:none; animation:none; pointer-events:auto; z-index:25; width:235px; padding:16px; color:#d2e0de; background:#101821f5; font:12px 'Geist Pixel',monospace; }
+.factory-preview-tools p { color:#9ab2b0; line-height:1.5; }
+.factory-preview-tools summary { cursor:pointer; list-style:none; }
+.factory-preview-tools summary::-webkit-details-marker { display:none; }
+.factory-preview-tools summary::after { content:' +'; float:right; color:#9ab2b0; }
+.factory-preview-tools[open] summary::after { content:' −'; }
+.factory-preview-tools label { display:grid; gap:7px; }
+.factory-preview-tools select,.factory-preview-tools button { font:inherit; padding:9px; color:inherit; background:#24323c; border:1px solid #657e80; border-radius:0; }
+.factory-preview-tools .preview-actions { display:flex; gap:8px; margin:12px 0; }
+.factory-preview-tools a { color:#b1d4c8; }
+.factory-preview-tools [hidden] { display:none; }
+@media(max-width:600px) { .factory-preview-tools.pixel-island { top:74px; right:12px; width:calc(100vw - 24px); box-sizing:border-box; } .factory-preview-tools p { margin:6px 0; } }

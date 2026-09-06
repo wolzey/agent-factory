@@ -18,7 +18,8 @@ export function createWindowWeather(scene: THREE.Scene, renderer: THREE.WebGLRen
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const plane = new THREE.PlaneGeometry(width, height);
   const loader = new THREE.TextureLoader();
-  const clouds = CLOUD_LAYER_PLAN.map((spec, index) => {
+  const style = import.meta.env.DEV ? cloudStyleFromSearch(location.search) : 'volume';
+  const clouds = (style === 'painted' ? CLOUD_LAYER_PLAN : []).map((spec, index) => {
     const filename = spec.texture.replace('sky_', '').replaceAll('_', '-');
     const texture = loader.load(`/skyline/${filename}.png`);
     texture.colorSpace = THREE.SRGBColorSpace;
@@ -51,7 +52,6 @@ export function createWindowWeather(scene: THREE.Scene, renderer: THREE.WebGLRen
   const volumeMesh = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ map: volume.texture, transparent: true, depthWrite: false }));
   volumeMesh.position.set(0, centerY, -4.57);
   scene.add(volumeMesh);
-  const style = import.meta.env.DEV ? cloudStyleFromSearch(location.search) : 'volume';
   clouds.forEach(cloud => { cloud.mesh.visible = style === 'painted'; });
   volumeMesh.visible = style === 'volume';
 
@@ -101,6 +101,7 @@ export function createWindowWeather(scene: THREE.Scene, renderer: THREE.WebGLRen
       const motionScale = reducedMotion.matches ? 0.2 : 1;
       volume.update(step * motionScale, weather, palette, arc, night, style === 'volume' && visible && !document.hidden);
       motionTime += step * motionScale;
+      if (!visible || document.hidden) { accumulated = 1 / 30; return; }
       const weights = cloudLayerWeights(weather);
       for (const { spec, material, texture, snowLift, snowColor } of clouds) {
         texture.offset.x += spec.drift * (0.55 + weather.wind01 * 1.8) * step * motionScale / pixelWidth;

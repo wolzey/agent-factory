@@ -230,6 +230,8 @@ export function createSideRoomNavigation(
   const homeCamera = roomCamera.clone();
   const camera = homeCamera.clone();
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  const center = new THREE.Vector3(), projection = new THREE.Matrix4(), lastProjection = new THREE.Matrix4();
+  let lastWidth = 0, lastHeight = 0;
   let open = false;
   let available = true;
   let motion: { start: number; from: THREE.Vector3; to: THREE.Vector3 } | null =
@@ -286,24 +288,24 @@ export function createSideRoomNavigation(
           }
         }
       }
-      door.hidden = Boolean(motion) || (!open && !canOpen);
+      const hidden = Boolean(motion) || (!open && !canOpen);
+      if (door.hidden !== hidden) door.hidden = hidden;
       if (door.hidden) return;
       const activeCamera = open ? camera : roomCamera;
       activeCamera.updateMatrixWorld();
-      const center = new THREE.Vector3(
-        SIDE_DOOR.x,
-        0.08,
-        (SIDE_DOOR.near + SIDE_DOOR.far) / 2,
-      ).project(activeCamera);
-      const x = ((center.x + 1) * canvas.clientWidth) / 2;
-      const y = ((1 - center.y) * canvas.clientHeight) / 2;
-      door.style.left = `${Math.max(4, Math.min(canvas.clientWidth - 48, x - 22))}px`;
-      door.style.top = `${Math.max(4, Math.min(canvas.clientHeight - 48, y - 22))}px`;
-      door.textContent = open ? "←" : "→";
-      door.setAttribute(
-        "aria-label",
-        open ? "Return through doorway to the factory" : "Enter the patio",
-      );
+      const width = canvas.clientWidth, height = canvas.clientHeight;
+      const text = open ? '←' : '→';
+      if (door.textContent !== text) {
+        door.textContent = text;
+        door.setAttribute('aria-label', open ? 'Return through doorway to the factory' : 'Enter the patio');
+      }
+      projection.multiplyMatrices(activeCamera.projectionMatrix, activeCamera.matrixWorldInverse);
+      if (lastWidth === width && lastHeight === height && lastProjection.equals(projection)) return;
+      lastWidth = width; lastHeight = height; lastProjection.copy(projection);
+      center.set(SIDE_DOOR.x, .08, (SIDE_DOOR.near + SIDE_DOOR.far) / 2).applyMatrix4(projection);
+      const x = ((center.x + 1) * width) / 2, y = ((1 - center.y) * height) / 2;
+      door.style.left = `${Math.max(4, Math.min(width - 48, x - 22))}px`;
+      door.style.top = `${Math.max(4, Math.min(height - 48, y - 22))}px`;
     },
   };
 }

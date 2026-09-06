@@ -1,6 +1,9 @@
 /// <reference types="vite/client" />
 import { createTeamDesk } from './factory25dTeamDesk';
+import { createAvatarStage } from './factory25dAvatarStage';
+import { createVisitorBasketball } from './factory25dVisitorBasketball';
 import { createNatureTv } from './factory25dNatureTv';
+import { createCeilingLights } from './factory25dCeilingLights';
 import * as THREE from 'three';
 import { createLiveAgents } from './factory25dLiveAgents';
 import { createFactoryControls } from './factory25dControls';
@@ -255,6 +258,9 @@ for (const source of [backdrop, sun, mountainWindow]) {
   if (source === sun) copy.name = 'patio-sun';
 }
 windowWeather.mirrorOutside(sideRoomScene, 16);
+const patioSun = sideRoomScene.getObjectByName('patio-sun')!;
+const sceneryBounds = new THREE.Box3(new THREE.Vector3(-7.92, glassBottom, -4.64), new THREE.Vector3(7.92, glassTop, -4.4));
+const viewFrustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4();
 
 const mullionMaterial = standard('#1c2740', 1, '#060817');
 // At 50 render pixels per world unit, every upright is exactly four pixels
@@ -408,6 +414,7 @@ function workstation(x: number, z: number, active: boolean): void {
 
 for (const x of machinePositions) workstation(x, INDOOR_ROWS[0], false);
 for (const x of machinePositions) workstation(x, INDOOR_ROWS[1], false);
+const ceilingLights = createCeilingLights(interior, isNight);
 
 const liveAgents = createLiveAgents(scene, sideRoomScene, canvas);
 const activityFeedback = createActivityFeedback(canvas.parentElement!);
@@ -489,7 +496,7 @@ const counterLabel = new THREE.Mesh(new THREE.PlaneGeometry(1.65, 0.16), new THR
 }));
 counterLabel.position.set(counterCenter, 0.23, 4.878);
 interior.add(counterLabel);
-const teamDesk = createTeamDesk(interior, canvas, camera, renderer, () => factoryControls.state.stop());
+const teamDesk = createTeamDesk(interior, canvas, camera, renderer, () => factoryControls.state.stop(), mountainView.setVisitors);
 
 function cornerCouch(x: number, z: number): void {
   const group = new THREE.Group();
@@ -538,9 +545,11 @@ const natureTv = createNatureTv(interior);
 const loungeDetails = createLoungeDetails(interior, canvas, camera, renderer);
 
 let currentViewCamera: THREE.Camera = camera;
+const avatarStage = createAvatarStage(scene, sideRoomScene, liveAgents, canvas, renderer,
+  () => currentViewCamera as THREE.OrthographicCamera, () => factoryControls.getTargetSessionId() ?? undefined);
 const factoryControls = createFactoryControls(canvas, liveAgents, () => currentViewCamera,
-  () => whiteboardInteraction.isRoomView() && !windowInteraction.isOpen() && !loungeDetails.chat.isActive() && !teamDesk.isActive() && !document.body.classList.contains('inspect-open'),
-  outside => sideRoom.visit(outside));
+  () => !avatarStage.isActive() && whiteboardInteraction.isRoomView() && !windowInteraction.isOpen() && !loungeDetails.chat.isActive() && !teamDesk.isActive() && !document.body.classList.contains('inspect-open'),
+  outside => sideRoom.visit(outside), avatarStage);
 loungeDetails.chat.configureCommands({
   getTargetSessionId: () => factoryControls.getTargetSessionId(),
   logout: () => factoryControls.logout(),
@@ -553,6 +562,8 @@ const floorKeyboard = createFloorKeyboard(interior, canvas, camera, () => factor
 const basketball = createBasketball(interior, canvas, [], {
   tap: () => sceneAudio.ballTap(), swish: () => sceneAudio.ballSwish(), bounce: energy => sceneAudio.ballBounce(energy),
 });
+const visitorBasketball = createVisitorBasketball(interior, canvas, basketball.pickups, index => index > 0 || !basketball.active,
+  { swish: () => sceneAudio.ballSwish(), bounce: energy => sceneAudio.ballBounce(energy) });
 let basketballRoster = '';
 let basketballPlayers: { id: string; name: string; position: THREE.Vector3; home: FloorPoint }[] = [];
 
@@ -747,6 +758,7 @@ function animate(): void {
   windowInteraction.update(now, whiteboardInteraction.isRoomView() && !sideRoom.isActive() && !loungeDetails.chat.isActive() && !teamDesk.isActive());
   teamDesk.update(now, mainRoomVisible);
   natureTv.update(elapsed, reducedSceneMotion.matches, mainRoomVisible);
+  ceilingLights.update(dt, isNight);
   hangingPothos.update(elapsed, reducedSceneMotion.matches);
   if (!weatherSettled && now - lastWeatherUpdate >= 50) {
     weather = weatherTransition.at(now);
@@ -756,7 +768,6 @@ function animate(): void {
   }
   sceneAudio.update({ weather, patio01: sideRoom.outdoorProgress(), window01: windowInteraction.proximity(), night: isNight,
     reading: !whiteboardInteraction.isRoomView() || loungeDetails.chat.isActive() || teamDesk.isActive() });
-  windowWeather.update(dt, weather, currentPalette, sunArc, isNight, whiteboardInteraction.isRoomView());
   activeScreenTexture.offset.x = (Math.floor(elapsed * 4) % 4) * 0.25;
   const factoryData = whiteboardInteraction.getData();
   liveAgents.sync(factoryData.world); factoryControls.sync(factoryData);
@@ -775,20 +786,17 @@ function animate(): void {
   if (!basketball.active) for (const player of basketballPlayers) {
     const entry = liveAgents.entries.get(player.id)!;
     player.position.set(entry.mesh.position.x, 0, entry.mesh.position.z - 1.95);
-    player.home = {x: player.position.x, z: player.position.z};
+    player.home.x = player.position.x; player.home.z = player.position.z;
   }
-  basketball.update(dt, camera, mainRoomVisible, !factoryControls.state.active, reducedSceneMotion.matches);
+  basketball.update(dt, camera, mainRoomVisible, !factoryControls.state.active && !visitorBasketball.busy && !avatarStage.isActive(), reducedSceneMotion.matches);
   const stationFeedback = activityFeedback.stationStates();
   for (const [id, station] of stationVisuals) station.setFeedback(stationFeedback.get(id));
-  patio.stations.setFeedback(stationFeedback, reducedSceneMotion.matches);
   const feet = [...liveAgents.entries.values()].filter(entry => entry.mesh.position.x < 8).map(entry => ({ x: entry.mesh.position.x, z: entry.mesh.position.z - 1.95 }));
   floorKeyboard.update(dt, feet, mainRoomVisible);
   indoorPlants.update(elapsed, reducedSceneMotion.matches);
-  loungeDetails.update(elapsed, reducedSceneMotion.matches, whiteboardInteraction.getData(), camera, mainRoomVisible);
-  mountainView.setDepthOfField(displayStudy.depthOfField);
-  mountainView.render(elapsed, whiteboardInteraction.isRoomView());
-  const baseCamera = teamDesk.isActive() ? teamDesk.camera : loungeDetails.chat.isActive() ? loungeDetails.chat.camera : windowInteraction.isOpen() ? windowInteraction.camera : sideRoom.isActive() ? sideRoom.camera : camera;
-  const viewCamera = pointerZoom.cameraFor(baseCamera, now);
+  loungeDetails.update(elapsed, reducedSceneMotion.matches, factoryData, camera, mainRoomVisible);
+  const baseCamera = avatarStage.isActive() ? avatarStage.camera : teamDesk.isActive() ? teamDesk.camera : loungeDetails.chat.isActive() ? loungeDetails.chat.camera : windowInteraction.isOpen() ? windowInteraction.camera : sideRoom.isActive() ? sideRoom.camera : camera;
+  const viewCamera = avatarStage.isActive() ? baseCamera : pointerZoom.cameraFor(baseCamera, now);
   viewCamera.updateMatrixWorld(); currentViewCamera = viewCamera;
   liveAgents.update(elapsed, viewCamera, mainRoomVisible, sideRoom.isActive(), point => floorKeyboard.floorHeight(point), whiteboard);
   if (basketball.active) {
@@ -796,20 +804,33 @@ function animate(): void {
     if (entry) liveAgents.placeOverride(player.id, { x: player.position.x, z: player.position.z + 1.95 }, basketball.jump);
   }
   factoryControls.update();
+  avatarStage.update(now);
+  const editingAvatar = avatarStage.isActive();
+  const showFactory = editingAvatar ? avatarStage.scene() === scene : sideRoom.showsFactory();
+  const showPatio = editingAvatar ? avatarStage.scene() === sideRoomScene : sideRoom.isActive();
+  viewFrustum.setFromProjectionMatrix(viewProjection.multiplyMatrices(viewCamera.projectionMatrix, viewCamera.matrixWorldInverse));
+  // Patio puddles also need the panorama even when it is above the camera's view.
+  const sceneryVisible = showPatio || (showFactory && viewFrustum.intersectsBox(sceneryBounds));
+  windowWeather.update(dt, weather, currentPalette, sunArc, isNight, sceneryVisible);
+  mountainView.setDepthOfField(displayStudy.depthOfField);
+  mountainView.render(elapsed, sceneryVisible);
+  visitorBasketball.update(dt, viewCamera, !avatarStage.isActive() && whiteboardInteraction.isRoomView() && !sideRoom.isActive() && !loungeDetails.chat.isActive() && !teamDesk.isActive());
   activityFeedback.update();
   duckHunt.update(dt, viewCamera, sideRoom.isActive() && !sideRoom.showsFactory());
   // Keep a square sky image in both the tilted room view and the straight-on window view.
   // Its plane stays behind mountains/clouds instead of rotating through those layers.
   sun.scale.y = 1 / Math.max(0.5, Math.abs(viewCamera.matrixWorldInverse.elements[5]));
-  sideRoomAmbient.color.copy(ambient.color);
-  sideRoomAmbient.groundColor.copy(ambient.groundColor);
-  sideRoomAmbient.intensity = ambient.intensity;
-  patio.update(windowLight, weather.snow01, weather.rain01, isNight, elapsed*(reducedSceneMotion.matches?0.2:1), weather.wet01, reducedSceneMotion.matches);
-  const patioSun = sideRoomScene.getObjectByName('patio-sun')!;
-  patioSun.position.copy(sun.position).x += 16; patioSun.scale.copy(sun.scale);
-  const showFactory = sideRoom.showsFactory();
-  const boardCloseUp = !whiteboardInteraction.isRoomView() || loungeDetails.chat.isActive() || teamDesk.isActive();
-  if (teamDesk.isActive()) studyFocusPoint.copy(teamDesk.focusPoint());
+  if (showPatio) {
+    sideRoomAmbient.color.copy(ambient.color);
+    sideRoomAmbient.groundColor.copy(ambient.groundColor);
+    sideRoomAmbient.intensity = ambient.intensity;
+    patio.stations.setFeedback(stationFeedback, reducedSceneMotion.matches);
+    patio.update(windowLight, weather.snow01, weather.rain01, isNight, elapsed*(reducedSceneMotion.matches?0.2:1), weather.wet01, reducedSceneMotion.matches);
+    patioSun.position.copy(sun.position).x += 16; patioSun.scale.copy(sun.scale);
+  }
+  const boardCloseUp = avatarStage.isActive() || !whiteboardInteraction.isRoomView() || loungeDetails.chat.isActive() || teamDesk.isActive();
+  if (avatarStage.isActive()) studyFocusPoint.copy(avatarStage.focusPoint());
+  else if (teamDesk.isActive()) studyFocusPoint.copy(teamDesk.focusPoint());
   else if (loungeDetails.chat.isActive()) studyFocusPoint.copy(loungeDetails.chat.focusPoint());
   else if (boardCloseUp) whiteboard.localToWorld(studyFocusPoint.set(0, 1.0, 0));
   else if (sideRoom.isActive()) studyFocusPoint.set(16, 0.7, 0);
@@ -817,7 +838,7 @@ function animate(): void {
   studyFocusPoint.copy(pointerZoom.focusPoint(sideRoom.isActive() ? sideRoomScene : scene, studyFocusPoint));
   displayStudy.begin(viewCamera, studyFocusPoint, boardCloseUp, windowInteraction.isOpen());
   if (showFactory) renderer.render(scene, viewCamera);
-  if (sideRoom.isActive()) {
+  if (showPatio) {
     // Show both rooms only while traveling through the door. The small camera
     // margin must never expose the neighboring room in a settled view.
     renderer.autoClear = !showFactory;
@@ -831,4 +852,4 @@ function animate(): void {
 
 animate();
 
-if (import.meta.hot) import.meta.hot.dispose(() => { titleDisposed = true; stopTitle(); patio.dispose(); sceneAudio.dispose(); stopWeather(); factoryControls.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.chat.dispose(); teamDesk.dispose(); });
+if (import.meta.hot) import.meta.hot.dispose(() => { titleDisposed = true; stopTitle(); patio.dispose(); sceneAudio.dispose(); stopWeather(); visitorBasketball.dispose(); factoryControls.dispose(); avatarStage.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.chat.dispose(); teamDesk.dispose(); });

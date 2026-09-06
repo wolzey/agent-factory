@@ -1,0 +1,8 @@
+.visitor-ball-pickup { position: absolute; width: 44px; height: 44px; padding: 0; border: 0; background: transparent; cursor: grab; z-index: 5; touch-action: none; }
+.visitor-ball-pickup:focus-visible { outline: 2px dashed #aec8ba; outline-offset: -7px; border-radius: 50%; }
+.holding-basketball { cursor: grabbing; touch-action: none; }
+.visitor-ball-hint { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 35; display: flex; align-items: center; gap: 10px; width: max-content; max-width: calc(100vw - 24px); padding: 12px; font: 11px 'Geist Pixel', monospace; color: #d2e1d9; }
+.visitor-ball-hint[hidden], .visitor-ball-pickup[hidden] { display: none; }
+.visitor-ball-hint button { font: inherit; color: #d2e1d9; background: #263a3b; border: 1px solid #637d77; padding: 10px; cursor: pointer; }
+.visitor-ball-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media(max-width:600px) { .visitor-ball-hint span { max-width: 140px; } }

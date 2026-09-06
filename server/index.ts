@@ -1,4 +1,5 @@
 import { TeamRoster } from './team-roster.js';
+import { VisitorBasketball } from './visitor-basketball.js';
 import { registerTeamRoutes } from './routes/team.js';
 import { watchPresenceConnection } from './ws/presence-heartbeat.js';
 import Fastify from 'fastify';
@@ -128,6 +129,7 @@ async function main() {
   const broadcast = new BroadcastManager();
   const controls = new ControlManager(state, broadcast);
   const grabs = new GrabManager(state, broadcast);
+  const visitorBalls = new VisitorBasketball(broadcast);
 
   // HTTP routes
   registerHookRoutes(app, state, broadcast, serverConfig, auth, () => persistence.status());
@@ -151,6 +153,7 @@ async function main() {
     // Send one complete, revisioned world and any active grab leases on connect.
     broadcast.sendWorldSnapshot(socket, state.getSnapshot());
     grabs.sendActive(socket);
+    visitorBalls.sendActive(socket);
     if (principal) {
       broadcast.sendTo(socket, {
         type: 'auth_result',
@@ -164,6 +167,7 @@ async function main() {
       team.disconnect(socket);
       controls.releaseSocket(socket, reason);
       grabs.releaseSocket(socket, reason);
+      visitorBalls.disconnect(socket);
     };
     socket.on('close', () => dropSocket('Browser disconnected'));
     socket.on('error', () => dropSocket('Browser disconnected'));
@@ -172,6 +176,9 @@ async function main() {
       try {
         const msg = JSON.parse(String(raw));
         switch (msg.type) {
+          case 'visitor_ball':
+            visitorBalls.receive(socket, msg);
+            break;
           case 'request_state':
             broadcast.sendWorldSnapshot(socket, state.getSnapshot());
             break;
@@ -314,7 +321,7 @@ async function main() {
   // Start stale cleanup, lifecycle pruning, and manual-control simulation.
   const staleTimer = startStaleReaper(state);
   const teamTimer = setInterval(() => void team.flush(), 5_000);
-  const worldTimer = setInterval(() => state.advanceWorld(), 1_000);
+  const worldTimer = setInterval(() => { state.advanceWorld(); visitorBalls.expire(); }, 1_000);
   controls.start();
   grabs.start();
 

@@ -92,6 +92,10 @@ export class BroadcastManager {
     this.broadcast({ type: 'grab_update', grab });
   }
 
+  broadcastVisitorBall(message: import('../../shared/visitor-basketball.js').VisitorBallUpdate, sender: WebSocket) {
+    for (const client of this.clients.keys()) if (client !== sender) this.sendTo(client, message);
+  }
+
   broadcastGrabRelease(target: GrabTarget, x: number, y: number, reason: string) {
     this.broadcast({ type: 'grab_release', ...target, x, y, reason });
   }
