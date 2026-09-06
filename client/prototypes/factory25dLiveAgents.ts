@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { patioFloorHeight } from '@shared/factory25d-patio';
+import { factoryCompanionPosition } from '@shared/factory25d-layout';
 import type { WorldAgent, WorldSnapshot } from '@shared/types';
 import { DEFAULT_AVATAR } from '@shared/constants';
 import { avatarSheet, AVATAR_ANIMATIONS } from './factory25dAvatar';
@@ -48,7 +50,7 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
     const parent = x > 8 ? patio : factory;
     if (item.mesh.parent !== parent) { parent.add(item.mesh); parent.add(item.shadow); }
     item.mesh.position.x = x; item.mesh.position.z = z;
-    item.shadow.position.set(x, 0.021, z);
+    item.shadow.position.set(x, (x > 8 ? patioFloorHeight({x, z}) : 0) + 0.021, z);
   }
   const stopEffects = onFactoryMessage(message => {
     // World deltas and effects can share a socket batch. Reconcile the latest
@@ -65,7 +67,7 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
       // squash, rotation or partial disappearance.
       entry.mesh.scale.set(1, 1, 1); entry.mesh.rotation.set(0, 0, 0); entry.mesh.material.opacity = 1;
       const dx = point.x - entry.mesh.position.x, dz = point.z - entry.mesh.position.z;
-      const floorY = point.x > 8 ? .018 : view?.floor({ x: point.x, z: point.z - 1.95 }) ?? .018;
+      const floorY = point.x > 8 ? patioFloorHeight(point) + .018 : view?.floor({ x: point.x, z: point.z - 1.95 }) ?? .018;
       place(entry, point.x, point.z); entry.mesh.position.y = floorY + entry.baseHeight + lift;
       for (const child of entry.children.values()) { place(child, child.mesh.position.x + dx, child.mesh.position.z + dz); child.mesh.position.y += lift; }
       effects.follow(id, { x: point.x, y: floorY + lift, z: point.z });
@@ -128,7 +130,7 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
         if (effect && now >= effect.startedAt) row = ['dance', 'merge', 'dizzy', 'shot', 'gun'].includes(effect.kind)
           ? AVATAR_ANIMATIONS.indexOf(`walk_${facing}`) : effect.kind === 'sleep' ? 6 : 0;
         place(entry, point.x, point.z); entry.lastX = point.x; entry.lastZ = point.z;
-        const floorY = point.x > 8 ? 0.018 : floor({x: point.x, z: point.z - 1.95});
+        const floorY = point.x > 8 ? patioFloorHeight(point) + .018 : floor({x: point.x, z: point.z - 1.95});
         setFrame(entry, row, frame, floorY);
         const pose = effectPose(effect, now, reduced);
         const baseHeight = entry.mesh.position.y - floorY;
@@ -153,9 +155,9 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
         entry.label.update(entry.mesh, floorY, camera, canvas, point.x > 8 ? showPatio : showFactory, point.x > 8 ? undefined : occluder);
         let index = 0;
         for (const child of entry.children.values()) {
-          const angle = index++ * 2.4 + 0.5;
-          place(child, entry.mesh.position.x + Math.cos(angle) * 0.42, entry.mesh.position.z + 0.2 + Math.sin(angle) * 0.28);
-          setFrame(child, working ? 5 : moving ? row : 0, frame, floorY, 0.58);
+          const follower = factoryCompanionPosition(entry.mesh.position, index++);
+          place(child, follower.x, follower.z);
+          setFrame(child, working ? 5 : moving ? row : 0, frame, child.mesh.position.x > 8 ? patioFloorHeight(child.mesh.position) + .018 : floorY, 0.58);
         }
         anchors.set(agent.sessionId, { x: entry.mesh.position.x, y: entry.mesh.position.y - baseHeight * entry.mesh.scale.y, z: entry.mesh.position.z });
       }

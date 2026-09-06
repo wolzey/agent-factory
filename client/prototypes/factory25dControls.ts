@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { intersectFactoryFloor } from './factory25dPatioPicking';
 import type { Position, WSMessageToServer } from '@shared/types';
 import { VALID_EMOTES } from '@shared/constants';
 import { toFactoryWorld, fromFactoryWorld, WORKSTATIONS } from '@shared/factory25d-layout';
@@ -141,11 +142,11 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     }
     state.handle(message); grab.handleMessage(message); paint(); });
   const stopConnection = onFactoryConnection(connected => { placement = undefined; state.reset(); grab.handleConnected(); if (!connected) held.clear(); paint(); });
-  const ray = new THREE.Raycaster(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), point = new THREE.Vector3();
+  const ray = new THREE.Raycaster(), point = new THREE.Vector3();
   function pointer(event: PointerEvent) {
     const rect = canvas.getBoundingClientRect();
     ray.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2), camera());
-    if (!ray.ray.intersectPlane(plane, point)) return null;
+    if (!intersectFactoryFloor(ray.ray, point)) return null;
     const world = toFactoryWorld(point); return { id: event.pointerId, worldX: world.x, worldY: world.y };
   }
   let dragPointer: number | undefined;

@@ -1,4 +1,5 @@
 import type { Position } from './types.js';
+import { PATIO_OBSTACLES } from './factory25d-patio.js';
 export const INDOOR_COLUMNS = [-5.5, -3.3, -1.1, 1.1, 3.3, 5.5];
 export const INDOOR_ROWS = [-3.8, 0.33];
 export const INTERIOR_Z = 1.95;
@@ -34,6 +35,7 @@ export type RoomPoint = { x: number; z: number };
 type Obstacle = { left: number; right: number; near: number; far: number };
 const margin = 0.12;
 export const FACTORY_OBSTACLES: Obstacle[] = [
+  ...PATIO_OBSTACLES,
   ...WORKSTATIONS.map(station => ({ left: station.x - (station.room === 'patio' ? 0.77 : 0.36), right: station.x + (station.room === 'patio' ? 0.77 : 0.36), near: station.z - 0.3, far: station.z + 0.32 })),
   { left: 7.88, right: 8.01, near: -4.7, far: -3.25 },
   { left: 7.88, right: 8.01, near: -1.75, far: 14.1 },
@@ -43,7 +45,10 @@ export const FACTORY_OBSTACLES: Obstacle[] = [
   { left: -0.22, right: -0.04, near: 5.6, far: 14.1 },
   { left: -5.85, right: -0.55, near: 6.43, far: 6.86 },
   { left: 0.25, right: 1.1, near: 7.05, far: 8.75 },
-].map(o => ({ left: o.left - margin, right: o.right + margin, near: o.near - margin, far: o.far + margin }));
+].map(o => {
+  const clearance = 'clearance' in o && typeof o.clearance === 'number' ? o.clearance : margin;
+  return { left: o.left - clearance, right: o.right + clearance, near: o.near - clearance, far: o.far + clearance };
+});
 function inside(p: RoomPoint, o: Obstacle) { return p.x > o.left && p.x < o.right && p.z > o.near && p.z < o.far; }
 export function clearFactorySegment(a: RoomPoint, b: RoomPoint) {
   return !FACTORY_OBSTACLES.some(o => {
@@ -60,6 +65,14 @@ const corners: RoomPoint[] = FACTORY_OBSTACLES.flatMap(o => [
   {x:o.left-.015,z:o.near-.015},{x:o.left-.015,z:o.far+.015},
   {x:o.right+.015,z:o.near-.015},{x:o.right+.015,z:o.far+.015},
 ]).filter(p => p.x > -7.8 && p.x < 23.8 && p.z > -4.3 && p.z < 13.7 && !FACTORY_OBSTACLES.some(o => inside(p,o)));
+/** A restored pose may predate a new planter or wall. Move only blocked poses. */
+export function recoverFactoryPosition(position: Position): Position {
+  const point = fromFactoryWorld(position);
+  if (!FACTORY_OBSTACLES.some(obstacle => inside(point, obstacle))) return position;
+  const nearest = corners.reduce((best, corner) =>
+    Math.hypot(corner.x - point.x, corner.z - point.z) < Math.hypot(best.x - point.x, best.z - point.z) ? corner : best);
+  return toFactoryWorld(nearest);
+}
 let staticEdges: Array<Array<[number, number]>> | undefined;
 /** Visibility routes share the actual wall opening and avoid station/couch footprints. */
 export function routeToStation(from: RoomPoint, target: RoomPoint): RoomPoint[] {
@@ -90,4 +103,11 @@ export function constrainFactoryStep(from: Position, to: Position): Position {
   const vertical={x:a.x,z:b.z};
   if(clearFactorySegment(a,vertical)) a.z=b.z;
   return toFactoryWorld(a);
+}
+
+/** Followers can spread out on open floor, but never straddle a stair wall. */
+export function factoryCompanionPosition(parent: RoomPoint, index: number): RoomPoint {
+  const angle = index * 2.4 + .5;
+  const desired = { x: parent.x + Math.cos(angle) * .42, z: parent.z + .2 + Math.sin(angle) * .28 };
+  return fromFactoryWorld(constrainFactoryStep(toFactoryWorld(parent), toFactoryWorld(desired)));
 }

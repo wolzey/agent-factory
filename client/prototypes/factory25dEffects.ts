@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { patioFloorHeight } from '@shared/factory25d-patio';
 import type { EnvironmentType } from '@shared/types';
 import { signTexture } from './factory25dLabels';
 import { projectPosition } from './factory25dWorld';
@@ -197,6 +198,7 @@ export function createFactoryEffects(factory: THREE.Scene, patio: THREE.Scene) {
         const strength = vortexStrength(event, now), t = (now - event.startedAt) / 1000;
         groups.forEach((group, side) => {
           group.position.set(customCenter?.x ?? (side ? 15 : 0), .025, customCenter?.z ?? (side ? 4 : .8));
+          if (side) group.position.y += patioFloorHeight(group.position);
           group.visible = now >= event.startedAt; group.scale.setScalar(reduced ? 1 : Math.max(.02, strength));
           group.children.forEach((ring, i) => { if (ring instanceof THREE.Group) ring.rotation.y = event.seed * .01 + i * .2 + (reduced ? 0 : t * (.2 + i * .035)); });
         });

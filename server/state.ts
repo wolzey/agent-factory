@@ -1,4 +1,4 @@
-import { FACTORY25D_BOUNDS, constrainFactoryStep, toFactoryWorld, factory25dWaypoints } from '../shared/factory25d-layout.js';
+import { FACTORY25D_BOUNDS, constrainFactoryStep, toFactoryWorld, factory25dWaypoints, recoverFactoryPosition } from '../shared/factory25d-layout.js';
 import { CONTROL_WORLD_BOUNDS, GRAB_POINTER_BOUNDS } from '../shared/constants.js';
 import { randomUUID } from 'node:crypto';
 import type {
@@ -242,10 +242,16 @@ export class StateManager {
         this.createTombstone(session, timestamp);
         continue;
       }
+      if (this.environment === 'factory25d') {
+        // Retain identity and station reservations, but rebuild persisted routes
+        // against the current terrace walls instead of reusing an older floor plan.
+        session.world.position = recoverFactoryPosition(stored.manualControl ?? this.currentWorldPosition(session, timestamp));
+        delete session.world.movement;
+      }
       this.sessions.set(session.sessionId, session);
       // A settled, explicitly dropped workstation assignment survives a restart,
       // including an idle avatar placed there by its owner.
-      if (!stored.manualControl && !session.world.movement && session.world.zone === 'work'
+      if (!stored.manualControl && !stored.world.movement && session.world.zone === 'work'
         && this.layoutSlotValid('work', session.world.slotIndex)) continue;
       this.syncWorld(session, timestamp);
     }

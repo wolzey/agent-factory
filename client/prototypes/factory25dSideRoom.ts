@@ -1,8 +1,11 @@
 import { createPatioStations } from "./factory25dPatioStations";
+import './factory25dPatio.css';
 import * as THREE from "three";
 import { requireElement } from "./dom";
 import { propPart, standard } from "./factory25dProps";
-import { contactShadow } from "./factory25dContactShadows";
+import { createPatioTerraces } from "./factory25dPatioTerraces";
+import { createPatioWater } from './factory25dPatioWater';
+import { patioFloorHeight } from "@shared/factory25d-patio";
 
 export const SIDE_DOOR = { x: 7.94, near: -3.25, far: -1.75, height: 1.8 };
 
@@ -51,7 +54,7 @@ export function createDoorFrame(scene: THREE.Scene) {
 export function createSideRoom(scene: THREE.Scene) {
   const room = new THREE.Group();
   scene.add(room);
-  const timber = standard("#94714e", 1, "#151922");
+  const timber = new THREE.MeshPhysicalMaterial({ color: '#94714e', roughness: .96, metalness: .03, emissive: '#151922', clearcoat: 0, clearcoatRoughness: .18 });
   // A single textured receiving surface avoids coplanar plank meshes and shadow acne.
   const grain = document.createElement("canvas");
   grain.width = 128;
@@ -67,29 +70,17 @@ export function createSideRoom(scene: THREE.Scene) {
   const map = new THREE.CanvasTexture(grain);
   map.colorSpace = THREE.SRGBColorSpace;
   map.wrapS = map.wrapT = THREE.RepeatWrapping;
-  map.repeat.set(5, 38);
+  map.repeat.set(1, 1);
   map.magFilter = THREE.NearestFilter;
   map.minFilter = THREE.LinearMipmapLinearFilter;
   timber.map = map;
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(16.4, 18.6), timber);
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.set(16, 0, 4.65);
-  floor.receiveShadow = true;
-  room.add(floor);
+  const terraces = createPatioTerraces(room, timber);
   const iron = standard("#344848", 1, "#0b1217");
-  const oak = standard("#86735b", 1);
-  // Only the distant railing is visible; the cutaway sides continue past the camera.
-  for (const x of [8.5, 12.2, 16, 19.8, 23.5]) {
-    propPart(room, [0.08, 0.72, 0.08], [x, 0.36, -4.12], iron);
-  }
-  propPart(room, [15.1, 0.07, 0.1], [16, 0.76, -4.12], oak);
-  for (const y of [0.27, 0.51])
-    propPart(room, [15.1, 0.018, 0.018], [16, y, -4.12], iron);
 
   const bulbs: THREE.PointLight[] = [];
   for (const [z, height, count] of [
     [-3.6, 3.65, 15],
-    [2.8, 2.9, 12],
+    [9.8, 1.7, 12],
   ]) {
     for (const x of [8.5, 23.5])
       propPart(room, [0.07, height, 0.07], [x, height / 2, z], iron);
@@ -130,6 +121,7 @@ export function createSideRoom(scene: THREE.Scene) {
     }
   }
   const stations = createPatioStations(room);
+  const water = createPatioWater(room, timber);
   const sun = new THREE.DirectionalLight("#fff0d5", 0.9);
   sun.castShadow = true;
   sun.shadow.mapSize.set(512, 512);
@@ -179,13 +171,18 @@ export function createSideRoom(scene: THREE.Scene) {
   room.add(rain, snowflakes);
   return {
     stations,
+    dispose: () => water.dispose(),
     update(
       source: THREE.DirectionalLight,
       snow: number,
       rainAmount: number,
       night: boolean,
       time: number,
+      wetAmount = rainAmount,
+      reducedMotion = false,
     ) {
+      terraces.update(snow, rainAmount, night, time, reducedMotion);
+      water.update(wetAmount, rainAmount, snow, night, time, reducedMotion);
       rain.visible = rainAmount > 0.05;
       snowflakes.visible = snow > 0.05;
       rainGeometry.setDrawRange(0, Math.floor(rainAmount * 180) * 2);
@@ -193,10 +190,11 @@ export function createSideRoom(scene: THREE.Scene) {
       for (let i = 0; i < 180; i++) {
         const x = 8.1 + seeds[i * 3] * 15.8,
           z = -4.2 + seeds[i * 3 + 1] * 17.7;
+        const ground = patioFloorHeight({ x, z });
         const rainY =
-          0.08 + ((((seeds[i * 3 + 2] - time * 1.2) % 1) + 1) % 1) * 4;
+          ground + 0.08 + ((((seeds[i * 3 + 2] - time * 1.2) % 1) + 1) % 1) * 4;
         const snowY =
-          0.08 + ((((seeds[i * 3 + 2] - time * 0.15) % 1) + 1) % 1) * 4;
+          ground + 0.08 + ((((seeds[i * 3 + 2] - time * 0.15) % 1) + 1) % 1) * 4;
         rainPositions.set([x, rainY, z, x + 0.025, rainY + 0.13, z], i * 6);
         snowPositions.set(
           [x + Math.sin(time * 0.5 + i) * 0.12, snowY, z],
@@ -212,7 +210,7 @@ export function createSideRoom(scene: THREE.Scene) {
       sun.color.copy(source.color);
       sun.intensity = source.intensity;
       sun.castShadow = source.castShadow;
-      timber.color.set("#94714e").lerp(new THREE.Color("#c8d5dd"), snow * 0.65);
+      timber.color.set("#94714e").multiplyScalar(1 - wetAmount * .22).lerp(new THREE.Color("#c8d5dd"), snow * 0.65);
       bulbs.forEach((light) => {
         light.intensity = night ? 4.4 : 1.4;
       });
@@ -240,6 +238,10 @@ export function createSideRoomNavigation(
     if (next && !available) return;
     if (!open && !motion) camera.copy(homeCamera);
     open = next;
+    const url = new URL(location.href);
+    if (next) url.searchParams.set('room', 'patio');
+    else url.searchParams.delete('room');
+    history.replaceState(null, '', url);
     navigation.dataset.instant = String(instant);
     navigation.hidden = !next;
     document.body.classList.add("secondary-room");
@@ -248,7 +250,7 @@ export function createSideRoomNavigation(
       from: camera.position.clone(),
       to: homeCamera.position
         .clone()
-        .add(new THREE.Vector3(next ? 16 : 0, 0, 0)),
+        .add(new THREE.Vector3(next ? 16 : 0, next ? -0.55 : 0, 0)),
     };
     if (next) back.focus({ preventScroll: true });
   }
@@ -261,6 +263,7 @@ export function createSideRoomNavigation(
       move(false, true);
     }
   });
+  if (new URLSearchParams(location.search).get('room') === 'patio') move(true, true);
   return {
     camera,
     visit: (outside: boolean) => { if (outside !== open) move(outside, false); },

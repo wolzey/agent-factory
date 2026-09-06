@@ -405,6 +405,8 @@ This removes Agent Factory hook entries and mutable config while preserving `ide
 
 ## Architecture
 
+Plant and foliage work follows the [3D plant modeling standard](docs/plant-modeling-standard.md), using the indoor hanging pothos as the visual reference.
+
 ```
 agent-factory/
 ├── server/           # Fastify HTTP + WebSocket server
