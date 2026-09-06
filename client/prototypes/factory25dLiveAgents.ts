@@ -4,6 +4,7 @@ import { factoryCompanionPosition } from '@shared/factory25d-layout';
 import type { WorldAgent, WorldSnapshot } from '@shared/types';
 import { DEFAULT_AVATAR } from '@shared/constants';
 import { avatarSheet, AVATAR_ANIMATIONS } from './factory25dAvatar';
+import { avatarTexture } from './factory25dAvatarTexture';
 import { agentPosition } from './factory25dWorld';
 import { createNameTag } from './factory25dLabels';
 import { contactShadow } from './factory25dContactShadows';
@@ -27,10 +28,7 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
   let snapshot: WorldSnapshot | undefined, clockOffset = 0;
   let view: { camera: THREE.Camera; factory: boolean; patio: boolean; occluder: THREE.Object3D; floor: (point: { x: number; z: number }) => number } | undefined;
   function sprite(agent: WorldAgent, scale = 1): Sprite {
-    const sheet = avatarSheet(agent.avatar ?? DEFAULT_AVATAR);
-    const texture = new THREE.CanvasTexture(sheet.canvas);
-    texture.colorSpace = THREE.SRGBColorSpace; texture.magFilter = texture.minFilter = THREE.NearestFilter;
-    texture.generateMipmaps = false; texture.repeat.set(0.25, 1 / AVATAR_ANIMATIONS.length);
+    const { sheet, texture } = avatarTexture(agent.avatar ?? DEFAULT_AVATAR);
     const material = new THREE.MeshStandardMaterial({ map: texture, alphaTest: 0.08, side: THREE.DoubleSide,
       emissive: '#101126', emissiveIntensity: 0.6, roughness: 1 });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.86 * scale, 0.86 * scale), material);

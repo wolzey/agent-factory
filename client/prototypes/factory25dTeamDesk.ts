@@ -12,7 +12,8 @@ const DISPLAY = { width: .686, height: .486, frameWidth: .74, frameHeight: .54, 
 const ZOOM_DURATION = 900;
 
 export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
-  roomCamera: THREE.OrthographicCamera, renderer: THREE.WebGLRenderer, onOpen: () => void) {
+  roomCamera: THREE.OrthographicCamera, renderer: THREE.WebGLRenderer, onOpen: () => void,
+  onVisitors?: (members: readonly TeamMember[]) => void) {
   const abort = new AbortController(), events = { signal: abort.signal };
   const terminal = new THREE.Group(); terminal.position.set(-3.2, .53, 4.66); parent.add(terminal);
   const casing = standard('#364344', .7), edge = standard('#566363', .6);
@@ -55,7 +56,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
     if (previous?.signature === signature) return previous.canvas;
     const image = document.createElement('canvas'); image.width = image.height = 48;
     const context = image.getContext('2d')!; context.imageSmoothingEnabled = false;
-    context.drawImage(avatarSheet(member.avatar).canvas, 0, 0, 32, 32, 0, 0, 48, 48);
+    context.drawImage(avatarSheet(member.avatar, ['idle']).canvas, 0, 0, 32, 32, 0, 0, 48, 48);
     portraits.set(member.id, { signature, canvas: image }); return image;
   }
   function paint() {
@@ -113,6 +114,9 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
       value.members = value.members.filter(member => typeof member.id === 'string' && typeof member.name === 'string' && Number.isFinite(member.lastSeen) && typeof member.online === 'boolean' && Number.isInteger(member.agents) && !!parseAvatarConfig(member.avatar));
       if (abort.signal.aborted) return;
       data = value; previousTime = Date.now(); unavailable = false;
+      // The landscape shares this durable roster and poll; ambient visitors never
+      // create sessions, change last-seen times, or count as people online.
+      onVisitors?.(value.members);
     } catch { if (!abort.signal.aborted) unavailable = true; }
     finally { if (request === controller) request = undefined; if (!abort.signal.aborted) paint(); }
   }

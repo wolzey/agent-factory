@@ -1,25 +1,11 @@
 import Phaser from 'phaser';
 import { VALID_EMOTES } from '@shared/constants';
 import type { EmoteType } from '@shared/types';
+import { EMOTE_GLYPHS } from './emotes';
 
 const INNER_RADIUS = 45;
 const OUTER_RADIUS = 150;
 const LABEL_RADIUS = 103;
-
-const EMOTE_GLYPHS: Record<EmoteType, string> = {
-  dance: '♪',
-  jump: '↑',
-  guitar: '♫',
-  gun: '✦',
-  laugh: 'HA',
-  wave: 'o/',
-  sleep: 'Zz',
-  explode: 'BOOM',
-  dizzy: '@',
-  flex: '💪',
-  rage: '!!',
-  fart: '~',
-};
 
 export class EmoteWheel {
   private container: Phaser.GameObjects.Container | null = null;

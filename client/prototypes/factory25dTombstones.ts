@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { patioFloorHeight } from '@shared/factory25d-patio';
 import type { EnvironmentType, TombstoneState } from '@shared/types';
-import { avatarSheet } from './factory25dAvatar';
+import { avatarTexture } from './factory25dAvatarTexture';
 import { createNameTag, signTexture } from './factory25dLabels';
 import { projectPosition } from './factory25dWorld';
 
@@ -28,9 +28,7 @@ export function createFactoryTombstones(factory: THREE.Scene, patio: THREE.Scene
     const ripTexture = signTexture('RIP', '#3a4b51', '#8b999c', 1);
     const inscription = new THREE.MeshBasicMaterial({ map: ripTexture, side: THREE.DoubleSide });
     const rip = new THREE.Mesh(plane, inscription); rip.position.set(0, .36, .067); rip.scale.set(.17, .075, 1); group.add(rip);
-    const portraitTexture = new THREE.CanvasTexture(avatarSheet(state.avatar).canvas);
-    portraitTexture.colorSpace = THREE.SRGBColorSpace; portraitTexture.magFilter = portraitTexture.minFilter = THREE.NearestFilter;
-    portraitTexture.generateMipmaps = false; portraitTexture.repeat.set(.25, 1 / 7); portraitTexture.offset.set(0, 6 / 7);
+    const { texture: portraitTexture } = avatarTexture(state.avatar, ['idle']);
     const portraitMaterial = new THREE.MeshBasicMaterial({ map: portraitTexture, transparent: true, alphaTest: .1, opacity: .65, side: THREE.DoubleSide });
     const portrait = new THREE.Mesh(plane, portraitMaterial); portrait.position.set(0, .22, .068); portrait.scale.setScalar(.24); group.add(portrait);
     const label = createNameTag(state.username, false, canvas.parentElement!);

@@ -1,6 +1,6 @@
 export interface FloorPoint { x: number; z: number }
 export interface FloorKey extends FloorPoint { label: string; width: number; depth: number; color: number }
-export const KEYBOARD_ORIGIN = { x: 5.65, z: 7.55 };
+export const KEYBOARD_ORIGIN = { x: 5.88, z: 7.2 };
 export const KEYBOARD_WIDTH = 2.78;
 export const KEYBOARD_DEPTH = 1.48;
 export const FLOOR_Y = 0.018;

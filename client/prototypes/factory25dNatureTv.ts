@@ -3,9 +3,12 @@ import { propPart, standard } from './factory25dProps';
 
 /** Original, quiet pixel landscapes; no video download, autoplay audio or feed. */
 export function createNatureTv(parent: THREE.Group) {
-  const tv = new THREE.Group(); tv.position.set(7.36, 1.88, 6.35); tv.rotation.y = -Math.PI / 3;
+  // Sit against the inside of the cutaway wall, leaving the lounge entrance open.
+  // From the room camera the slim edge is visible; the picture faces the couch.
+  const tv = new THREE.Group(); tv.name = 'lounge-nature-tv';
+  tv.position.set(7.82, 1.88, 7.1); tv.rotation.y = -Math.PI / 2;
   parent.add(tv);
-  propPart(tv, [.25, .24, .18], [0, 0, -.19], standard('#252c39'));
+  propPart(tv, [.48, .32, .025], [0, 0, -.048], standard('#252c39'));
   propPart(tv, [2.22, 1.29, .07], [0, 0, 0], standard('#101822'));
   propPart(tv, [2.12, .025, .008], [0, -.616, .04], standard('#34434a'));
   propPart(tv, [.018, .009, .008], [.93, -.616, .044], standard('#a5c4b2', 1, '#376451'));
@@ -15,7 +18,9 @@ export function createNatureTv(parent: THREE.Group) {
   texture.magFilter = texture.minFilter = THREE.NearestFilter; texture.generateMipmaps = false;
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 1.18), new THREE.MeshBasicMaterial({ map: texture, toneMapped: false }));
   screen.position.z = .037; tv.add(screen);
-  const glow = new THREE.PointLight('#90b8a7', .28, 2.7, 2); glow.position.set(0, -.2, .35); tv.add(glow);
+  const glow = new THREE.PointLight('#90b8a7', 12, 5.2, 2);
+  glow.name = 'lounge-tv-glow'; glow.position.set(0, -.2, .22); tv.add(glow);
+  const sceneGlows = [new THREE.Color('#90b8a7'), new THREE.Color('#90b8c8')];
   const scenes = [document.createElement('canvas'), document.createElement('canvas')];
   scenes.forEach((image, index) => {
     image.width = 288; image.height = 160; const c = image.getContext('2d')!;
@@ -43,6 +48,9 @@ export function createNatureTv(parent: THREE.Group) {
       const time = reduced ? 0 : elapsed;
       const frame = Math.floor(time * 4); if (frame === lastFrame) return; lastFrame = frame;
       const phase = time % 100, index = Math.floor(phase / 50), local = phase % 50;
+      // Match the landscape dissolve, with no flicker; reduced motion holds still.
+      const dissolve = Math.max(0, (local - 44) / 6);
+      glow.color.copy(sceneGlows[index]).lerp(sceneGlows[1 - index], dissolve);
       const pan = Math.round((Math.sin(time / 70) + 1) * 8);
       ctx.globalAlpha = 1; ctx.drawImage(scenes[index], pan, 4, 256, 144, 0, 0, 256, 144);
       if (local > 44) { ctx.globalAlpha = (local - 44) / 6; ctx.drawImage(scenes[1 - index], pan, 4, 256, 144, 0, 0, 256, 144); }
