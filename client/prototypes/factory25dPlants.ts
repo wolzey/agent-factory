@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { standard, propPart } from "./factory25dProps";
 import { contactShadow } from "./factory25dContactShadows";
+import { createHouseplantFoliage } from './factory25dHouseplantFoliage';
 
 export function createIndoorPlants(interior: THREE.Group) {
   type PlantKind =
@@ -16,7 +17,8 @@ export function createIndoorPlants(interior: THREE.Group) {
     | "succulent"
     | "bonsai"
     | "flytrap";
-  const plants: Array<{ foliage: THREE.Group; phase: number }> = [];
+  const houseplants = createHouseplantFoliage();
+  const plants: Array<{ foliage: THREE.Group; phase: number; update?: (time: number, reduced: boolean) => void }> = [];
   const potClay = standard("#69515d", 1, "#100c16");
   const potRim = standard("#8b6e74", 1, "#110c16");
   const potSoil = standard("#272431", 1);
@@ -68,6 +70,8 @@ export function createIndoorPlants(interior: THREE.Group) {
     parent: THREE.Object3D = interior,
   ) {
     const group = new THREE.Group();
+    group.name = `${kind} plant`;
+    let updateFoliage: ((time: number, reduced: boolean) => void) | undefined;
     propPart(group, [0.24, 0.18, 0.24], [0, 0.11, 0], potClay);
     propPart(group, [0.29, 0.07, 0.29], [0, 0.235, 0], potRim);
     propPart(group, [0.235, 0.015, 0.235], [0, 0.279, 0], potSoil);
@@ -106,12 +110,7 @@ export function createIndoorPlants(interior: THREE.Group) {
       );
       leaf.position.copy(end);
       // Broad leaves spread out; spear-shaped plants point up from the pot.
-      const rise =
-        kind === "snake" || kind === "bird"
-          ? 0.9
-          : kind === "trailing"
-            ? -0.34
-            : 0.34;
+      const rise = kind === "snake" || kind === "bird" ? 0.9 : 0.34;
       leaf.quaternion.setFromUnitVectors(
         new THREE.Vector3(0, 1, 0),
         new THREE.Vector3(
@@ -186,33 +185,9 @@ export function createIndoorPlants(interior: THREE.Group) {
           foliage.add(leaf);
         }
       }
-    } else if (kind === "bonsai") {
-      const bark = standard("#6c5543", 1, "#100b08");
-      const trunk = propPart(foliage, [0.075, 0.48, 0.075], [0, 0.24, 0], bark);
-      trunk.rotation.z = -0.18;
-      const crowns = [
-        [-0.21, 0.42, 0.04, 0.2],
-        [0.2, 0.58, -0.03, 0.23],
-        [-0.08, 0.76, -0.02, 0.24],
-      ];
-      crowns.forEach(([x, y, z, radius], index) => {
-        const branch = propPart(
-          foliage,
-          [0.045, 0.29, 0.045],
-          [x / 2, y - 0.15, z],
-          bark,
-        );
-        branch.rotation.z = x > 0 ? -0.75 : 0.75;
-        const crown = new THREE.Mesh(
-          new THREE.IcosahedronGeometry(radius, 0),
-          leafMaterials[index],
-        );
-        crown.position.set(x, y, z);
-        crown.scale.set(1.25, 0.7, 0.95);
-        crown.castShadow = true;
-        crown.receiveShadow = true;
-        foliage.add(crown);
-      });
+    } else if (kind === 'bonsai') {
+      const detail = houseplants.bonsai(phase);
+      foliage.add(detail.group); updateFoliage = detail.update;
     } else if (kind === "flytrap") {
       const lip = standard("#c35a72", 1, "#231019");
       const tooth = standard("#e2d9a1", 1);
@@ -253,33 +228,20 @@ export function createIndoorPlants(interior: THREE.Group) {
             );
         }
       }
-    } else if (kind === "rubber") {
-      for (let i = 0; i < 6; i += 1)
-        addLeaf(i * 2.5 + phase, 0.16 + i * 0.09, 0.07, 0.26, 0.85, i);
-    } else if (kind === "fern" || kind === "palm") {
-      for (let i = 0; i < 9; i += 1) {
-        const angle = (i * Math.PI * 2) / 9 + phase;
-        addLeaf(
-          angle,
-          kind === "palm" ? 0.5 : 0.18 + (i % 3) * 0.05,
-          0.07,
-          kind === "palm" ? 0.45 : 0.36,
-          0.5,
-          i,
-        );
-      }
+    } else if (kind === 'rubber' || kind === 'broad' || kind === 'calathea') {
+      const detail = houseplants.broadleaf(kind,phase);
+      foliage.add(detail.group); updateFoliage = detail.update;
+    } else if (kind === 'fern' || kind === 'palm' || kind === 'trailing') {
+      const detail = kind === 'trailing' ? houseplants.trailing(phase, baseY > 0) : houseplants.fronds(kind,phase);
+      foliage.add(detail.group); updateFoliage = detail.update;
     } else {
       const count = kind === "snake" ? 7 : kind === "bird" ? 4 : 6;
       for (let i = 0; i < count; i += 1) {
         const angle = i * 2.4 + phase;
         const spear = kind === "snake" || kind === "bird";
         const height = spear ? 0.04 : 0.16 + (i % 3) * 0.11;
-        const length = spear
-          ? 0.45 + (i % 3) * 0.13
-          : kind === "trailing"
-            ? 0.32
-            : 0.31;
-        const width = kind === "snake" ? 0.38 : kind === "calathea" ? 1.1 : 0.9;
+        const length = spear ? 0.45 + (i % 3) * 0.13 : 0.31;
+        const width = kind === "snake" ? 0.38 : 0.9;
         addLeaf(angle, height, spear ? 0.06 : 0.09, length, width, i);
       }
     }
@@ -321,7 +283,7 @@ export function createIndoorPlants(interior: THREE.Group) {
       opacity: 0.28,
       round: true,
     });
-    plants.push({ foliage, phase });
+    plants.push({ foliage, phase, update: updateFoliage });
     return group;
   }
 
@@ -353,7 +315,8 @@ export function createIndoorPlants(interior: THREE.Group) {
       return shelf;
     },
     update(elapsed: number, reduced: boolean) {
-      plants.forEach(({ foliage, phase }) => {
+      plants.forEach(({ foliage, phase, update }) => {
+        if (update) { update(elapsed,reduced); return; }
         foliage.rotation.z = reduced
           ? 0
           : Math.sin(elapsed * 0.92 + phase) * 0.018;

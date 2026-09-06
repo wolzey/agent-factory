@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { patioFloorHeight } from '@shared/factory25d-patio';
 import type { EnvironmentType, TombstoneState } from '@shared/types';
 import { avatarSheet } from './factory25dAvatar';
 import { createNameTag, signTexture } from './factory25dLabels';
@@ -49,7 +50,7 @@ export function createFactoryTombstones(factory: THREE.Scene, patio: THREE.Scene
         grave ??= add(state); grave.state = state;
         const point = projectPosition(state.position, environment), outside = point.x > 8, parent = outside ? patio : factory;
         if (grave.group.parent !== parent) parent.add(grave.group);
-        const floorY = outside ? .018 : floor({ x: point.x, z: point.z - 1.95 });
+        const floorY = outside ? patioFloorHeight(point) + .018 : floor({ x: point.x, z: point.z - 1.95 });
         grave.group.position.set(point.x, floorY, point.z);
         // A sleeping tab resumes at the current phase and never extends a reservation.
         const appear = Math.min(1, Math.max(0, (now - state.createdAt) / 600));

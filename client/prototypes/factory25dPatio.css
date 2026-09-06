@@ -1,0 +1,6 @@
+/* Keep agent controls above the wrapped patio navigation on narrow screens. */
+@media (max-width: 600px) {
+  .secondary-room .factory-controls {
+    bottom: max(154px, calc(env(safe-area-inset-bottom) + 144px));
+  }
+}

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { patioFloorHeight } from '@shared/factory25d-patio';
 import { PATIO_STATIONS } from './factory25dWorkstations';
 import { propPart, standard } from './factory25dProps';
 import { contactShadow } from './factory25dContactShadows';
@@ -8,7 +9,7 @@ export function createPatioStations(parent: THREE.Group) {
   const oak = standard('#a58254', 1), teal = standard('#447d76', 1), iron = standard('#303f47', 1);
   const screens = new Map<string, THREE.MeshStandardMaterial>();
   for (const station of PATIO_STATIONS) {
-    const desk = new THREE.Group(); desk.position.set(station.x, 0, station.z); parent.add(desk);
+    const desk = new THREE.Group(); desk.position.set(station.x, patioFloorHeight(station), station.z); parent.add(desk);
     const solar = station.id === 'patio-5';
     // All decks meet the same standing work pose as the indoor cabinets.
     propPart(desk, [1.5, 0.075, 0.65], [0, 0.41, 0], solar ? teal : oak);
@@ -33,10 +34,11 @@ export function createPatioStations(parent: THREE.Group) {
       propPart(desk, [0.08, 0.025, 0.01], [0.44, 0.2, 0.107], standard('#edbd61', 1, '#ac7634'));
     }
   }
+  const lower = patioFloorHeight({ x: 13.65, z: 3.8 });
   // Join the pair of desks into one picnic table, with a bench on the far side.
-  propPart(parent, [1.25, 0.075, 0.65], [13.65, 0.41, 3.8], oak);
-  propPart(parent, [4.15, 0.07, 0.28], [13.65, 0.24, 3.22], teal);
-  for (const x of [11.95, 15.35]) propPart(parent, [0.075, 0.21, 0.25], [x, 0.105, 3.22], iron);
+  propPart(parent, [1.25, 0.075, 0.65], [13.65, lower + 0.41, 3.8], oak);
+  propPart(parent, [4.15, 0.07, 0.28], [13.65, lower + 0.24, 3.22], teal);
+  for (const x of [11.95, 15.35]) propPart(parent, [0.075, 0.21, 0.25], [x, lower + 0.105, 3.22], iron);
   return {
     setFeedback(states: Map<string, StationFeedback>, reducedMotion = false) {
       for (const [id, material] of screens) {

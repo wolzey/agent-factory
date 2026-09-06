@@ -7,20 +7,30 @@ import { blendCamera, cameraPose, type CameraPose } from './factory25dCameraMoti
 import { propPart, standard } from './factory25dProps';
 import './factory25dTeamDesk.css';
 
+// One physical display size drives the model, camera framing and live UI projection.
+const DISPLAY = { width: .686, height: .486, frameWidth: .74, frameHeight: .54, faceZ: .024 };
+const ZOOM_DURATION = 900;
+
 export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   roomCamera: THREE.OrthographicCamera, renderer: THREE.WebGLRenderer, onOpen: () => void) {
   const abort = new AbortController(), events = { signal: abort.signal };
-  const desk = new THREE.Group(); desk.position.set(-3.2, 1.34, 4.66); desk.rotation.x = -.1; parent.add(desk);
-  propPart(desk, [2.24, 1.67, .055], [0, 0, 0], standard('#41494a'));
-  propPart(desk, [2.25, .035, .14], [0, -.817, .008], standard('#26332e'));
-  const paper = document.createElement('canvas'); paper.width = 360; paper.height = 264;
+  const terminal = new THREE.Group(); terminal.position.set(-3.2, .53, 4.66); parent.add(terminal);
+  const casing = standard('#364344', .7), edge = standard('#566363', .6);
+  // A weighted foot rests on the counter; the short neck supports a tilted tablet.
+  propPart(terminal, [.34, .028, .25], [0, .014, .012], casing);
+  propPart(terminal, [.085, .17, .065], [0, .108, 0], edge);
+  const desk = new THREE.Group(); desk.position.y = .37; desk.rotation.x = -.22; terminal.add(desk);
+  propPart(desk, [DISPLAY.frameWidth, DISPLAY.frameHeight, .045], [0, 0, 0], casing);
+  propPart(desk, [DISPLAY.width + .012, DISPLAY.height + .012, .003], [0, 0, .023], edge);
+  propPart(desk, [.012, .005, .003], [.30, -.257, .023], standard('#9fbead', .7, '#37533f'));
+  const paper = document.createElement('canvas'); paper.width = 360; paper.height = 255;
   const ink = paper.getContext('2d')!;
   const texture = new THREE.CanvasTexture(paper); texture.colorSpace = THREE.SRGBColorSpace;
   texture.magFilter = texture.minFilter = THREE.NearestFilter; texture.generateMipmaps = false;
-  const face = new THREE.Mesh(new THREE.PlaneGeometry(2.12, 1.55), new THREE.MeshBasicMaterial({ map: texture }));
-  face.position.z = .029; desk.add(face);
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(DISPLAY.width, DISPLAY.height), new THREE.MeshBasicMaterial({ map: texture }));
+  face.position.z = DISPLAY.faceZ + .001; desk.add(face);
   const trigger = document.createElement('button'); trigger.type = 'button'; trigger.className = 'team-desk-hotspot';
-  trigger.setAttribute('aria-label', 'Open team at the front counter'); trigger.title = 'Who’s here'; canvas.parentElement!.append(trigger);
+  trigger.setAttribute('aria-label', 'Open the front desk team screen'); trigger.title = 'See who’s here'; canvas.parentElement!.append(trigger);
   const dialog = document.createElement('dialog'); dialog.className = 'team-desk-dialog';
   dialog.setAttribute('aria-labelledby', 'team-desk-heading');
   dialog.innerHTML = `<section class="team-desk-sheet"><header><div><p>FRONT COUNTER</p><h2 id="team-desk-heading">our people</h2></div><span class="team-desk-count"></span></header><div class="team-desk-members" tabindex="0" role="list" aria-label="Team presence"></div><footer class="team-desk-status" role="status"></footer></section><nav class="team-desk-dock pixel-island"><button type="button">← room</button></nav>`;
@@ -34,7 +44,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   const soundParent = soundPanel?.parentElement, soundSibling = soundPanel?.nextSibling;
   const restoreSound = () => { if (soundPanel && soundParent) soundParent.insertBefore(soundPanel, soundSibling ?? null); };
   const camera = roomCamera.clone(), reduced = matchMedia('(prefers-reduced-motion: reduce)');
-  let active = false, open = false, moving = false, canOpen = false, started = 0;
+  let active = false, open = false, moving = false, canOpen = false, started = 0, exitOpacity = 0;
   let from = cameraPose(roomCamera), room = cameraPose(roomCamera);
   let width = 0, height = 0, lastPoll = -Infinity, previousTime = 0;
   let data: TeamSnapshot | undefined, unavailable = false, signature = '';
@@ -75,10 +85,10 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
       }
       if (!members.length) { const empty = document.createElement('p'); empty.className = 'team-desk-empty'; empty.textContent = unavailable ? 'the team list is temporarily unavailable' : data ? 'the first person to connect will appear here' : 'checking who’s here…'; list.append(empty); }
       list.scrollTop = scroll;
-      ink.fillStyle = '#182629'; ink.fillRect(0, 0, 360, 264);
+      ink.fillStyle = '#182629'; ink.fillRect(0, 0, paper.width, paper.height);
       ink.fillStyle = '#d8e6df'; ink.font = '22px "Geist Pixel", monospace'; ink.fillText('our people', 22, 33);
       ink.fillStyle = '#8ab8a1'; ink.font = '12px "Geist Pixel", monospace'; ink.fillText(unavailable ? 'reconnecting' : `${online} here`, 245, 31);
-      members.slice(0, 4).forEach((member, index) => {
+      members.slice(0, 3).forEach((member, index) => {
         const y = 53 + index * 48;
         ink.globalAlpha = member.online && !unavailable ? 1 : .4; ink.drawImage(portrait(member), 18, y, 42, 42); ink.globalAlpha = 1;
         ink.fillStyle = member.online && !unavailable ? '#d8e6df' : '#91a09e'; ink.font = '15px "Geist Pixel", monospace';
@@ -86,6 +96,9 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
         ink.font = '10px "Geist Pixel", monospace'; ink.fillStyle = '#889f9a';
         ink.fillText(unavailable ? 'reconnecting' : member.online ? 'here now' : lastSeenLabel(member.lastSeen, now), 72, y + 34, 240);
       });
+      ink.fillStyle = '#304541'; ink.fillRect(18, 220, 324, 1);
+      ink.fillStyle = '#9fbead'; ink.font = '11px "Geist Pixel", monospace';
+      ink.fillText('tap to see the team', 22, 242);
       texture.needsUpdate = true;
     }
   }
@@ -110,22 +123,29 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   }
   const focus = new THREE.Vector3();
   function closePose(): CameraPose {
-    desk.updateWorldMatrix(true, false); desk.localToWorld(focus.set(0, 0, .03));
+    desk.updateWorldMatrix(true, false); desk.localToWorld(focus.set(0, 0, DISPLAY.faceZ));
     const quaternion = desk.getWorldQuaternion(new THREE.Quaternion());
     const position = focus.clone().add(new THREE.Vector3(0, 0, .85).applyQuaternion(quaternion));
-    const span = Math.max(1.8 / .8, 2.35 / (width / Math.max(1, height)));
-    position.add(new THREE.Vector3(0, -.055 * span, 0).applyQuaternion(quaternion));
+    const availableWidth = Math.max(1, Math.min(840, width - 48));
+    const availableHeight = Math.max(1, height - 160);
+    const span = Math.max(DISPLAY.height * height / availableHeight, DISPLAY.width * height / availableWidth);
+    position.add(new THREE.Vector3(0, -.045 * span, 0).applyQuaternion(quaternion));
     return { position, quaternion, height: span };
   }
   function enter() {
     if (active || !canOpen) return;
     onOpen(); room = cameraPose(roomCamera); from = cameraPose(roomCamera); const oldHeight = canvas.clientHeight;
     active = open = moving = true; started = performance.now(); document.body.classList.add('team-open');
+    sheet.style.opacity = '0'; sheet.inert = true;
     if (soundPanel) dialog.append(soundPanel);
     dialog.showModal(); fit(); from.height *= height / Math.max(1, oldHeight);
     blendCamera(camera, from, closePose(), 0, width / Math.max(1, height)); back.focus(); void refresh();
   }
-  function exit() { if (!open) return; from = cameraPose(camera); open = false; moving = true; started = performance.now(); sheet.inert = true; }
+  function exit() {
+    if (!open) return;
+    exitOpacity = Number(sheet.style.opacity); from = cameraPose(camera);
+    open = false; moving = true; started = performance.now(); sheet.inert = true;
+  }
   function finishExit() {
     active = moving = false; dialog.close(); restoreSound(); document.body.classList.remove('team-open'); renderer.setSize(800, 564, false);
     trigger.hidden = false; trigger.focus({ preventScroll: true });
@@ -134,32 +154,40 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   dialog.addEventListener('cancel', event => { event.preventDefault(); exit(); }, events);
   dialog.addEventListener('keydown', event => event.stopPropagation(), events);
   const project = (x: number, y: number, view: THREE.Camera) => {
-    const p = desk.localToWorld(new THREE.Vector3(x, y, .032)).project(view);
+    const p = desk.localToWorld(new THREE.Vector3(x, y, DISPLAY.faceZ + .002)).project(view);
     return { x: (p.x + 1) * canvas.clientWidth / 2, y: (1 - p.y) * canvas.clientHeight / 2 };
   };
   paint(); void refresh();
   return {
-    camera, isActive: () => active, focusPoint: () => desk.localToWorld(focus.set(0, 0, .03)),
+    camera, isActive: () => active, focusPoint: () => desk.localToWorld(focus.set(0, 0, DISPLAY.faceZ)),
     update(now: number, visible: boolean) {
       canOpen = visible && !document.body.classList.contains('inspect-open'); trigger.hidden = active || !canOpen;
       if (now - lastPoll > (active ? 10_000 : 30_000)) void refresh();
       desk.updateWorldMatrix(true, false);
       if (active) {
         if (width !== canvas.clientWidth || height !== canvas.clientHeight) fit();
-        const t = reduced.matches || !moving ? 1 : THREE.MathUtils.clamp((now - started) / 720, 0, 1);
+        const t = reduced.matches || !moving ? 1 : THREE.MathUtils.clamp((now - started) / ZOOM_DURATION, 0, 1);
         const viewport = canvas.closest('.slice-viewport')!.getBoundingClientRect();
         const restored = Math.min(viewport.height, viewport.width * 141 / 200) - 2;
         const to = open ? closePose() : { ...room, height: room.height * height / Math.max(1, restored) };
         blendCamera(camera, from, to, t, width / Math.max(1, height)); sheet.inert = !open || t < 1;
-        sheet.style.opacity = String(open ? THREE.MathUtils.smoothstep(t, .35, .9) : 1 - THREE.MathUtils.smoothstep(t, 0, .45));
-        const tl = project(-1.06, .775, camera), tr = project(1.06, .775, camera), bl = project(-1.06, -.775, camera);
-        const w = Math.max(320, Math.min(560, Math.hypot(tr.x - tl.x, tr.y - tl.y))), h = w * 1.55 / 2.12;
+        sheet.style.opacity = String(open ? THREE.MathUtils.smoothstep(t, .68, .96) : exitOpacity * (1 - THREE.MathUtils.smoothstep(t, 0, .35)));
+        const tl = project(-DISPLAY.width / 2, DISPLAY.height / 2, camera);
+        const tr = project(DISPLAY.width / 2, DISPLAY.height / 2, camera);
+        const bl = project(-DISPLAY.width / 2, -DISPLAY.height / 2, camera);
+        // Lay out at the display's pixel size once close, keeping text crisp and
+        // avoiding a scaled opaque layer painting over the tablet's lower bezel.
+        const w = Math.max(320, Math.min(840, Math.hypot(tr.x - tl.x, tr.y - tl.y))), h = w * DISPLAY.height / DISPLAY.width;
         sheet.style.width = `${w}px`; sheet.style.height = `${h}px`;
+        sheet.style.setProperty('--team-ui-scale', String(Math.max(1, w / 560)));
         sheet.style.transform = `matrix(${(tr.x - tl.x) / w},${(tr.y - tl.y) / w},${(bl.x - tl.x) / h},${(bl.y - tl.y) / h},${tl.x},${tl.y})`;
         if (t === 1) { moving = false; if (!open) finishExit(); }
       } else if (canOpen) {
-        const tl = project(-1.12, .835, roomCamera), br = project(1.12, -.835, roomCamera);
-        Object.assign(trigger.style, { left: `${tl.x}px`, top: `${tl.y}px`, width: `${Math.max(44, br.x - tl.x)}px`, height: `${Math.max(44, br.y - tl.y)}px` });
+        const corners = [-1, 1].flatMap(x => [-1, 1].map(y => project(x * DISPLAY.frameWidth / 2, y * DISPLAY.frameHeight / 2, roomCamera)));
+        const left = Math.min(...corners.map(p => p.x)), right = Math.max(...corners.map(p => p.x));
+        const top = Math.min(...corners.map(p => p.y)), bottom = Math.max(...corners.map(p => p.y));
+        const hitWidth = Math.max(44, right - left), hitHeight = Math.max(44, bottom - top);
+        Object.assign(trigger.style, { left: `${(left + right - hitWidth) / 2}px`, top: `${(top + bottom - hitHeight) / 2}px`, width: `${hitWidth}px`, height: `${hitHeight}px` });
       }
     },
     dispose() { abort.abort(); request?.abort(); stopConnection(); restoreSound(); dialog.remove(); trigger.remove(); document.body.classList.remove('team-open'); texture.dispose(); },

@@ -5,6 +5,7 @@
 .team-desk-dialog { position:fixed; inset:0; margin:0; border:0; padding:0; width:100vw; height:100dvh; max-width:none; max-height:none; background:transparent; color:#d8e6df; overflow:hidden; }
 .team-desk-dialog::backdrop { background:transparent; }
 .team-desk-sheet { position:absolute; left:0; top:0; transform-origin:0 0; display:flex; flex-direction:column; background:#182629; overflow:hidden; font:14px/1.4 'Geist Pixel',monospace; text-align:left; }
+.team-desk-sheet > * { zoom:var(--team-ui-scale,1); }
 .team-desk-sheet header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:22px 24px 17px; border-bottom:1px solid #849e9230; flex-shrink:0; }
 .team-desk-sheet header p { margin:0 0 6px; font-size:9px; letter-spacing:1.2px; color:#7f9c90; }
 .team-desk-sheet h2 { font:20px/1.15 'Geist Pixel',monospace; margin:0; font-weight:400; }

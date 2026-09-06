@@ -483,7 +483,7 @@ interior.add(box([counterWidth, 0.16, 0.34], [counterCenter, 0.36, 4.7], standar
 interior.add(box([counterTopWidth, 0.1, 0.42], [counterTopCenter, 0.48, 4.66], standard('#c4991a')));
 contactShadow(interior, { x: counterCenter, z: 4.7, floorY: 0.018,
   width: counterWidth - 0.14, depth: 0.29, spread: 0.18, opacity: 0.32 });
-// The counter label belongs on its cabinet face, leaving the folded card clear.
+// The counter label belongs on its cabinet face, leaving the tabletop screen clear.
 const counterLabel = new THREE.Mesh(new THREE.PlaneGeometry(1.65, 0.16), new THREE.MeshStandardMaterial({
   map: signTexture('FRONT COUNTER', '#d2c8a1', '#4d401e', 2, 1.65 / 0.16), roughness: 1,
 }));
@@ -804,7 +804,7 @@ function animate(): void {
   sideRoomAmbient.color.copy(ambient.color);
   sideRoomAmbient.groundColor.copy(ambient.groundColor);
   sideRoomAmbient.intensity = ambient.intensity;
-  patio.update(windowLight, weather.snow01, weather.rain01, isNight, elapsed*(reducedSceneMotion.matches?0.2:1));
+  patio.update(windowLight, weather.snow01, weather.rain01, isNight, elapsed*(reducedSceneMotion.matches?0.2:1), weather.wet01, reducedSceneMotion.matches);
   const patioSun = sideRoomScene.getObjectByName('patio-sun')!;
   patioSun.position.copy(sun.position).x += 16; patioSun.scale.copy(sun.scale);
   const showFactory = sideRoom.showsFactory();
@@ -831,4 +831,4 @@ function animate(): void {
 
 animate();
 
-if (import.meta.hot) import.meta.hot.dispose(() => { titleDisposed = true; stopTitle(); sceneAudio.dispose(); stopWeather(); factoryControls.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.chat.dispose(); teamDesk.dispose(); });
+if (import.meta.hot) import.meta.hot.dispose(() => { titleDisposed = true; stopTitle(); patio.dispose(); sceneAudio.dispose(); stopWeather(); factoryControls.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.chat.dispose(); teamDesk.dispose(); });
