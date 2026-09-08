@@ -38,8 +38,9 @@ For the Fluid Render service, use:
 | `AF_GITHUB_PRIVATE_KEY_PATH` | Render secret file path, e.g. `/etc/secrets/github-app.pem` |
 
 > [!NOTE]
-> The Fluid deployment counts `fluid-mono`, `fluid`, `fluid-integrations`, and `fluid-middleware`.
-> The installation was originally granted `fluid-mono` only; the other three must be added to the
+> The Fluid deployment counts `fluid-mono`, `fluid`, `fluid-integrations`, `fluid-middleware`, and
+> `fluid-studios`.
+> The installation was originally granted `fluid-mono` only; the other four must be added to the
 > app installation, or every count falls back to its last verified total.
 
 The [Fluid Agent Factory app](https://github.com/organizations/fluid-commerce/settings/apps/fluid-agent-factory) is registered and installed with read-only access to `fluid-commerce/fluid-mono` (installation ID `159909739`). Live installation-token authentication and fresh counts for all six configured contributors were verified on September 8, 2026 (UTC). The token was confirmed to access only `fluid-commerce/fluid-mono`. Render service `srv-da700ggae00c7386nue0` is configured with the five variables above and the verified signing key at `/etc/secrets/github-app.pem`. These settings were saved without deploying; the integration code must still reach the service's `main` branch and be deployed before live counts appear in production.

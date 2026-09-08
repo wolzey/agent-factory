@@ -4,16 +4,54 @@
     "fluid-commerce/fluid-mono",
     "fluid-commerce/fluid",
     "fluid-commerce/fluid-integrations",
-    "fluid-commerce/fluid-middleware"
+    "fluid-commerce/fluid-middleware",
+    "fluid-commerce/fluid-studios"
   ],
   "baseBranch": "main",
   "identities": [
-    { "githubLogin": "tingeym", "factoryUsernames": ["michaeltingey"] },
-    { "githubLogin": "britonbakerfluid", "factoryUsernames": ["Briton Baker", "britonbaker"] },
-    { "githubLogin": "Jonathanvergara", "factoryUsernames": ["jonathanvergara"] },
-    { "githubLogin": "wolzey", "factoryUsernames": ["Wolzey"] },
-    { "githubLogin": "braypay", "factoryUsernames": ["BrayPay"] },
-    { "githubLogin": "sachin-fluid", "factoryUsernames": ["Sachin"] },
-    { "githubLogin": "jake-bliss", "factoryUsernames": ["Jake", "jakebliss"] }
+    {
+      "githubLogin": "tingeym",
+      "factoryUsernames": [
+        "michaeltingey"
+      ]
+    },
+    {
+      "githubLogin": "britonbakerfluid",
+      "factoryUsernames": [
+        "Briton Baker",
+        "britonbaker"
+      ]
+    },
+    {
+      "githubLogin": "Jonathanvergara",
+      "factoryUsernames": [
+        "jonathanvergara"
+      ]
+    },
+    {
+      "githubLogin": "wolzey",
+      "factoryUsernames": [
+        "Wolzey"
+      ]
+    },
+    {
+      "githubLogin": "braypay",
+      "factoryUsernames": [
+        "BrayPay"
+      ]
+    },
+    {
+      "githubLogin": "sachin-fluid",
+      "factoryUsernames": [
+        "Sachin"
+      ]
+    },
+    {
+      "githubLogin": "jake-bliss",
+      "factoryUsernames": [
+        "Jake",
+        "jakebliss"
+      ]
+    }
   ]
 }
