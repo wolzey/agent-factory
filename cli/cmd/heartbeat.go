@@ -3,10 +3,14 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,6 +37,12 @@ const maxHeartbeatInterval = 30 * time.Second
 // The server reads no more than this many ids from one request, so a machine
 // with more sessions than that must split them or silently lose the remainder.
 const maxSessionsPerRequest = 500
+
+// Never follow a redirect: it would forward the installation credential to
+// whatever address the response names.
+var heartbeatHTTPClient = &http.Client{
+	CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
+}
 
 var (
 	heartbeatInterval time.Duration
@@ -144,29 +154,31 @@ func reportBatches(batches []heartbeatBatch, verbose bool) error {
 	}
 	waiting.Wait()
 
-	var lastErr error
+	// Joined rather than kept as the last one: a machine reporting to several
+	// servers would otherwise hear only about whichever failed last, and an
+	// unreachable server is exactly what its owner needs to be told about.
+	var failures []error
 	for _, result := range results {
 		if result.err != nil {
-			lastErr = result.err
-			if verbose {
-				ui.Warn(fmt.Sprintf("%s: %s", result.batch.ServerURL, result.err.Error()))
-			}
+			failures = append(failures, fmt.Errorf("%s: %w", result.batch.ServerURL, result.err))
 			continue
 		}
 		// The server answers with what it is actually holding. A refused report
 		// leaves sessions unprotected, so it fails the command rather than
 		// printing a warning that a service health check would never see.
 		if result.tracked < len(result.batch.SessionIDs) {
-			lastErr = fmt.Errorf("%s: sent %d session(s), server is holding %d",
-				result.batch.ServerURL, len(result.batch.SessionIDs), result.tracked)
-			ui.Warn(lastErr.Error())
+			failures = append(failures, fmt.Errorf("%s: sent %d session(s), server is holding %d",
+				result.batch.ServerURL, len(result.batch.SessionIDs), result.tracked))
 			continue
 		}
 		if verbose {
 			ui.Info(fmt.Sprintf("%s: reported %d session(s)", result.batch.ServerURL, result.tracked))
 		}
 	}
-	return lastErr
+	for _, failure := range failures {
+		ui.Warn(failure.Error())
+	}
+	return errors.Join(failures...)
 }
 
 // heartbeatBatch is the set of sessions that report to one server.
@@ -226,9 +238,33 @@ func groupBySessionServer(entries []sessions.Entry) ([]heartbeatBatch, error) {
 	return batches, nil
 }
 
+// heartbeatEndpoint validates a server address before anything is sent to it.
+//
+// The report carries this installation's credential, so the address is checked
+// here rather than trusting the far end to refuse it: a server that rejects a
+// plaintext request rejects it after the bearer token has already crossed the
+// wire.
+func heartbeatEndpoint(serverURL string) (string, error) {
+	endpoint, err := url.Parse(strings.TrimRight(serverURL, "/") + "/api/registry/heartbeat")
+	if err != nil || endpoint.Host == "" || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" {
+		return "", fmt.Errorf("invalid factory server address")
+	}
+	ip := net.ParseIP(endpoint.Hostname())
+	local := endpoint.Hostname() == "localhost" || ip != nil && ip.IsLoopback()
+	if endpoint.Scheme != "https" && !(endpoint.Scheme == "http" && local) {
+		return "", fmt.Errorf("use an HTTPS factory address to report sessions")
+	}
+	return endpoint.String(), nil
+}
+
 // postHeartbeat reports one batch and returns how many sessions the server says
 // it is holding.
 func postHeartbeat(batch heartbeatBatch) (int, error) {
+	endpoint, err := heartbeatEndpoint(batch.ServerURL)
+	if err != nil {
+		return 0, err
+	}
+
 	body, err := json.Marshal(map[string]any{
 		"session_ids": batch.SessionIDs,
 		"username":    batch.Username,
@@ -242,12 +278,12 @@ func postHeartbeat(batch heartbeatBatch) (int, error) {
 
 	// Authenticated like the hook script is, so this machine's sessions are held
 	// open by this installation and no other.
-	request, err := newAuthenticatedJSONRequest(ctx, http.MethodPost, batch.ServerURL+"/api/registry/heartbeat", body)
+	request, err := newAuthenticatedJSONRequest(ctx, http.MethodPost, endpoint, body)
 	if err != nil {
 		return 0, err
 	}
 
-	response, err := http.DefaultClient.Do(request)
+	response, err := heartbeatHTTPClient.Do(request)
 	if err != nil {
 		return 0, err
 	}

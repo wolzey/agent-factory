@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -258,5 +259,69 @@ func TestGroupBySessionServerSplitsBatchesTheServerWouldTruncate(t *testing.T) {
 	}
 	if len(batches[0].SessionIDs) != maxSessionsPerRequest || len(batches[1].SessionIDs) != 1 {
 		t.Errorf("batch sizes = %d, %d", len(batches[0].SessionIDs), len(batches[1].SessionIDs))
+	}
+}
+
+func TestHeartbeatEndpointRefusesAddressesTheCredentialCannotCross(t *testing.T) {
+	for _, allowed := range []string{"https://factory.example", "http://localhost:4242", "http://127.0.0.1:4242", "http://[::1]:4242"} {
+		if _, err := heartbeatEndpoint(allowed); err != nil {
+			t.Errorf("%s was refused: %v", allowed, err)
+		}
+	}
+
+	// The report carries a bearer credential, so a plaintext address must fail
+	// before anything is sent -- a server that rejects the request rejects it
+	// after the token has already crossed the wire.
+	for _, refused := range []string{"http://factory.example", "ftp://factory.example", "https://user:pw@factory.example",
+		"https://factory.example/?redirect=elsewhere", "https://factory.example/#fragment", "https://"} {
+		if _, err := heartbeatEndpoint(refused); err == nil {
+			t.Errorf("%s was accepted", refused)
+		}
+	}
+}
+
+func TestPostHeartbeatSendsNothingToAPlaintextAddress(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	var reached bool
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { reached = true }))
+	defer server.Close()
+	plaintext := strings.Replace(server.URL, "127.0.0.1", "factory.example", 1)
+
+	if _, err := postHeartbeat(heartbeatBatch{ServerURL: plaintext, SessionIDs: []string{"a"}}); err == nil {
+		t.Fatal("expected a plaintext address to be refused")
+	}
+	if reached {
+		t.Error("a request was sent to a plaintext address")
+	}
+}
+
+func TestReportBatchesKeepsEveryFailure(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	short := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		_, _ = response.Write([]byte(`{"ok":true,"tracked":0}`))
+	}))
+	defer short.Close()
+	unreachable := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
+	unreachableURL := unreachable.URL
+	unreachable.Close()
+
+	err := reportBatches([]heartbeatBatch{
+		{ServerURL: unreachableURL, SessionIDs: []string{"a"}},
+		{ServerURL: short.URL, SessionIDs: []string{"b"}},
+	}, false)
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+
+	// Keeping only the last failure would hide an unreachable server behind a
+	// later server's refusal.
+	message := err.Error()
+	if !strings.Contains(message, unreachableURL) {
+		t.Errorf("the unreachable server is missing from %q", message)
+	}
+	if !strings.Contains(message, short.URL) {
+		t.Errorf("the refusing server is missing from %q", message)
 	}
 }
