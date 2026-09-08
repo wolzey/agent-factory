@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -165,5 +166,72 @@ func TestPostHeartbeatReportsANonSuccessStatus(t *testing.T) {
 	_, err := postHeartbeat(heartbeatBatch{ServerURL: server.URL, SessionIDs: []string{"a"}})
 	if err == nil {
 		t.Fatal("expected an error for a 401")
+	}
+}
+
+func TestReportOnceContactsEveryServerConcurrently(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	// Both handlers block until both requests have arrived. Serialized reporting
+	// deadlocks until the request timeout, which is the regression this guards:
+	// one slow server must not delay another server's heartbeat toward expiry.
+	arrived := make(chan struct{}, 2)
+	release := make(chan struct{})
+	handler := http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		arrived <- struct{}{}
+		<-release
+		_, _ = response.Write([]byte(`{"ok":true,"tracked":1}`))
+	})
+	first := httptest.NewServer(handler)
+	defer first.Close()
+	second := httptest.NewServer(handler)
+	defer second.Close()
+
+	go func() {
+		for range 2 {
+			select {
+			case <-arrived:
+			case <-time.After(4 * time.Second):
+				close(release)
+				return
+			}
+		}
+		close(release)
+	}()
+
+	batches := []heartbeatBatch{
+		{ServerURL: first.URL, SessionIDs: []string{"a"}},
+		{ServerURL: second.URL, SessionIDs: []string{"b"}},
+	}
+	started := time.Now()
+	if err := reportBatches(batches, false); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(started); elapsed > 3*time.Second {
+		t.Errorf("reporting took %s, which means the servers were contacted in turn", elapsed)
+	}
+}
+
+func TestGroupBySessionServerSplitsBatchesTheServerWouldTruncate(t *testing.T) {
+	writeConfig(t, `{"username": "jake", "serverUrl": "http://localhost:4242"}`)
+	home := os.Getenv("HOME")
+
+	entries := make([]sessions.Entry, 0, maxSessionsPerRequest+1)
+	for index := range maxSessionsPerRequest + 1 {
+		entries = append(entries, sessions.Entry{SessionID: fmt.Sprintf("session-%04d", index), Cwd: home})
+	}
+
+	batches, err := groupBySessionServer(entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The server reads only the first 500 ids of a request; a 501st session must
+	// travel in its own batch rather than being dropped every cycle.
+	if len(batches) != 2 {
+		t.Fatalf("expected 2 batches, got %d", len(batches))
+	}
+	if len(batches[0].SessionIDs) != maxSessionsPerRequest || len(batches[1].SessionIDs) != 1 {
+		t.Errorf("batch sizes = %d, %d", len(batches[0].SessionIDs), len(batches[1].SessionIDs))
 	}
 }

@@ -114,7 +114,10 @@ export class RemoteSessionRegistry {
     const now = this.now();
     for (const [installation, shelf] of this.installations) {
       for (const [id, expiresAt] of shelf) {
-        if (expiresAt <= now) shelf.delete(id);
+        // An entry whose session has left the world is dropped rather than
+        // waiting out its TTL, so what is held tracks the world rather than
+        // recent throughput.
+        if (expiresAt <= now || !this.admits(id, installation || undefined)) shelf.delete(id);
       }
       if (shelf.size === 0) this.installations.delete(installation);
     }

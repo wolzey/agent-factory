@@ -29,6 +29,11 @@ const heartbeatRequestTimeout = 5 * time.Second
 // reapable. A non-positive interval would spin the reporter into a request loop.
 const maxHeartbeatInterval = 30 * time.Second
 
+// maxSessionsPerRequest matches MAX_HEARTBEAT_SESSION_IDS in shared/constants.ts.
+// The server reads no more than this many ids from one request, so a machine
+// with more sessions than that must split them or silently lose the remainder.
+const maxSessionsPerRequest = 500
+
 var (
 	heartbeatInterval time.Duration
 	heartbeatOnce     bool
@@ -114,6 +119,11 @@ func reportOnce(verbose bool) error {
 		return nil
 	}
 
+	return reportBatches(batches, verbose)
+}
+
+// reportBatches posts every batch and returns the last error, if any.
+func reportBatches(batches []heartbeatBatch, verbose bool) error {
 	// Reported concurrently: done in sequence, one unreachable server spends its
 	// whole timeout before the next is even tried, and the machine's real cadence
 	// to a healthy server drifts toward the server's 90-second expiry.
@@ -194,7 +204,20 @@ func groupBySessionServer(entries []sessions.Entry) ([]heartbeatBatch, error) {
 	batches := make([]heartbeatBatch, 0, len(byServer))
 	for _, batch := range byServer {
 		sort.Strings(batch.SessionIDs)
-		batches = append(batches, *batch)
+		// Split rather than truncate: the server reads a bounded number of ids
+		// per request, and a session past that bound would be refused on every
+		// cycle and reaped while it is still running.
+		for start := 0; start < len(batch.SessionIDs); start += maxSessionsPerRequest {
+			end := start + maxSessionsPerRequest
+			if end > len(batch.SessionIDs) {
+				end = len(batch.SessionIDs)
+			}
+			batches = append(batches, heartbeatBatch{
+				ServerURL:  batch.ServerURL,
+				Username:   batch.Username,
+				SessionIDs: batch.SessionIDs[start:end],
+			})
+		}
 	}
 	sort.Slice(batches, func(i, j int) bool { return batches[i].ServerURL < batches[j].ServerURL })
 	return batches, nil
@@ -254,6 +277,13 @@ var heartbeatInstallCmd = &cobra.Command{
 		if err := validateHeartbeatInterval(heartbeatInterval); err != nil {
 			ui.Error(err.Error())
 			return err
+		}
+
+		// Checked here as well as in the reporter: installing first would hand
+		// launchd a service that exits immediately and is restarted forever.
+		if !config.Exists() {
+			ui.Error("Agent Factory is not installed. Run 'agent-factory install' first.")
+			return fmt.Errorf("not installed")
 		}
 
 		binaryPath, err := os.Executable()
