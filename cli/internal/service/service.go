@@ -35,6 +35,16 @@ func Path() (string, error) {
 	}
 }
 
+// Installed reports whether a service definition exists for this OS.
+func Installed() bool {
+	path, err := Path()
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(path)
+	return err == nil
+}
+
 // Install writes the service definition and starts it, replacing any previous
 // one so a reinstall picks up a new binary path or interval.
 func Install(binaryPath string, interval time.Duration, logDir string) (string, error) {

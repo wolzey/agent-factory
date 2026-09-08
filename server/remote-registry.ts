@@ -1,8 +1,6 @@
 import {
   MAX_HEARTBEAT_SESSION_IDS,
-  MAX_HEARTBEAT_SESSIONS_PER_INSTALLATION,
   MAX_SESSION_ID_LENGTH,
-  MAX_TRACKED_HEARTBEAT_SESSIONS,
   REMOTE_HEARTBEAT_TTL_MS,
 } from '../shared/constants.js';
 
@@ -33,9 +31,7 @@ export class RemoteSessionRegistry {
 
   constructor(
     private ttlMs: number = REMOTE_HEARTBEAT_TTL_MS,
-    private maxTracked: number = MAX_TRACKED_HEARTBEAT_SESSIONS,
     private now: () => number = Date.now,
-    private maxPerInstallation: number = MAX_HEARTBEAT_SESSIONS_PER_INSTALLATION,
   ) {
     this.startedAt = this.now();
   }
@@ -64,20 +60,14 @@ export class RemoteSessionRegistry {
       this.installations.set(installation, shelf);
     }
 
+    // Admission is the whole bound. A separate capacity of its own would be a
+    // scarce resource anyone can exhaust -- installation credentials are
+    // self-minted -- and refusing a real machine's report gets its live session
+    // reaped. Holding at most one entry per session the server already has is
+    // bounded by the world itself.
     let accepted = 0;
     for (const id of ids) {
       if (!this.admits(id, ownerId)) continue;
-      // Refreshing an id this installation already holds is always allowed; the
-      // caps only bound how many new ones can accumulate.
-      if (!shelf.has(id)) {
-        if (shelf.size >= this.maxPerInstallation) continue;
-        // At capacity a report is refused rather than evicting anyone. Evicting
-        // "the largest shelf" reads as fairness but is a weapon: the largest
-        // shelf is usually the machine doing the most work, and credentials are
-        // free to mint, so a swarm of small shelves could delete its entries one
-        // by one and get its live sessions reaped.
-        if (this.trackedCount() >= this.maxTracked) continue;
-      }
       shelf.set(id, this.now() + this.ttlMs);
       accepted += 1;
     }
@@ -115,10 +105,6 @@ export class RemoteSessionRegistry {
 
   get size(): number {
     this.prune();
-    return this.trackedCount();
-  }
-
-  private trackedCount(): number {
     let total = 0;
     for (const shelf of this.installations.values()) total += shelf.size;
     return total;

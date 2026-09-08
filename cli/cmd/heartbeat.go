@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -113,24 +114,43 @@ func reportOnce(verbose bool) error {
 		return nil
 	}
 
+	// Reported concurrently: done in sequence, one unreachable server spends its
+	// whole timeout before the next is even tried, and the machine's real cadence
+	// to a healthy server drifts toward the server's 90-second expiry.
+	type outcome struct {
+		batch   heartbeatBatch
+		tracked int
+		err     error
+	}
+	results := make([]outcome, len(batches))
+	var waiting sync.WaitGroup
+	for index, batch := range batches {
+		waiting.Add(1)
+		go func(index int, batch heartbeatBatch) {
+			defer waiting.Done()
+			tracked, err := postHeartbeat(batch)
+			results[index] = outcome{batch: batch, tracked: tracked, err: err}
+		}(index, batch)
+	}
+	waiting.Wait()
+
 	var lastErr error
-	for _, batch := range batches {
-		tracked, err := postHeartbeat(batch)
-		if err != nil {
-			lastErr = err
+	for _, result := range results {
+		if result.err != nil {
+			lastErr = result.err
 			if verbose {
-				ui.Warn(fmt.Sprintf("%s: %s", batch.ServerURL, err.Error()))
+				ui.Warn(fmt.Sprintf("%s: %s", result.batch.ServerURL, result.err.Error()))
 			}
 			continue
 		}
 		// The server answers with what it is actually holding. Reporting what was
-		// sent instead would call a full registry a success.
-		if tracked < len(batch.SessionIDs) {
-			ui.Warn(fmt.Sprintf("%s: sent %d session(s), server is holding %d", batch.ServerURL, len(batch.SessionIDs), tracked))
+		// sent instead would call a refused report a success.
+		if result.tracked < len(result.batch.SessionIDs) {
+			ui.Warn(fmt.Sprintf("%s: sent %d session(s), server is holding %d", result.batch.ServerURL, len(result.batch.SessionIDs), result.tracked))
 			continue
 		}
 		if verbose {
-			ui.Info(fmt.Sprintf("%s: reported %d session(s)", batch.ServerURL, tracked))
+			ui.Info(fmt.Sprintf("%s: reported %d session(s)", result.batch.ServerURL, result.tracked))
 		}
 	}
 	return lastErr

@@ -1,11 +1,14 @@
+  it('reads a bounded number of ids from one request', () => {
+    const registry = openRegistry();
+
+    const flood = Array.from({ length: MAX_HEARTBEAT_SESSION_IDS + 50 }, (_, i) => `flood-${i}`);
+    expect(registry.heartbeat(flood)).toBe(MAX_HEARTBEAT_SESSION_IDS);
+  });
+
 import { describe, expect, it } from 'vitest';
 import { RemoteSessionRegistry } from '../server/remote-registry.js';
 import { StateManager } from '../server/state.js';
-import {
-  MAX_HEARTBEAT_SESSION_IDS,
-  REMOTE_HEARTBEAT_TTL_MS,
-  STALE_SESSION_TIMEOUT_MS,
-} from '../shared/constants.js';
+import { MAX_HEARTBEAT_SESSION_IDS, REMOTE_HEARTBEAT_TTL_MS, STALE_SESSION_TIMEOUT_MS } from '../shared/constants.js';
 import type { HookPayload } from '../shared/types.js';
 
 /** A registry that admits anything, for the tests that are about TTL and caps
@@ -29,7 +32,7 @@ function sessionStart(sessionId: string): HookPayload {
 describe('RemoteSessionRegistry', () => {
   it('keeps a reported session alive until its heartbeats stop', () => {
     let now = 1_000;
-    const registry = openRegistry(REMOTE_HEARTBEAT_TTL_MS, 10, () => now);
+    const registry = openRegistry(REMOTE_HEARTBEAT_TTL_MS, () => now);
 
     registry.heartbeat(['session-a']);
     expect(registry.isAlive('session-a')).toBe(true);
@@ -93,55 +96,13 @@ describe('RemoteSessionRegistry', () => {
     expect(registry.isAlive('real', 'owner-a')).toBe(true);
   });
 
-  it('refuses a new id at capacity instead of evicting another installation', () => {
-    let now = 1_000;
-    const registry = openRegistry(REMOTE_HEARTBEAT_TTL_MS, 3, () => now, 3);
-
-    registry.heartbeat(['w1', 'w2', 'w3'], 'worker');
-
-    // A smaller shelf must not be able to make room by deleting a bigger one's
-    // entries -- that would reap the busiest machine's live sessions.
-    expect(registry.heartbeat(['x1'], 'other')).toBe(0);
-    expect(registry.isAlive('w1', 'worker')).toBe(true);
-    expect(registry.isAlive('w2', 'worker')).toBe(true);
-    expect(registry.isAlive('w3', 'worker')).toBe(true);
-  });
-
-  it('spares restored sessions for one TTL after a restart', () => {
-    let now = 1_000;
-    const registry = openRegistry(REMOTE_HEARTBEAT_TTL_MS, 10, () => now);
-
-    // A restart restores sessions with an old lastEventAt and an empty registry,
-    // and the first sweep runs before a 30-second reporter is sure to have
-    // checked in.
-    expect(registry.warmingUp()).toBe(true);
-    now += REMOTE_HEARTBEAT_TTL_MS;
-    expect(registry.warmingUp()).toBe(false);
-  });
-
-  it('bounds what one request and one server can hold', () => {
-    let now = 1_000;
-    const registry = openRegistry(REMOTE_HEARTBEAT_TTL_MS, 3, () => now);
-
-    const flood = Array.from({ length: MAX_HEARTBEAT_SESSION_IDS + 50 }, (_, i) => `flood-${i}`);
-    expect(registry.heartbeat(flood)).toBe(3);
-    expect(registry.size).toBe(3);
-
-    // A tracked id still refreshes once the cap is reached, so a machine at the
-    // cap keeps its own sessions rather than losing them to newcomers.
-    now += REMOTE_HEARTBEAT_TTL_MS - 1;
-    expect(registry.heartbeat(['flood-0'])).toBe(1);
-    now += 2;
-    expect(registry.isAlive('flood-0')).toBe(true);
-    expect(registry.isAlive('flood-1')).toBe(false);
-  });
 });
 
 describe('StateManager remote keep-alive', () => {
   it('spares a heartbeated session from the stale reaper and reaps a silent one', () => {
     let now = 1_000;
     const state = new StateManager('arcade', () => now);
-    const registry = openRegistry(REMOTE_HEARTBEAT_TTL_MS, 10, () => now);
+    const registry = openRegistry(REMOTE_HEARTBEAT_TTL_MS, () => now);
     state.setSessionKeepAliveCheck((id, ownerId) => registry.isAlive(id, ownerId));
     registry.setAdmissionCheck((id, ownerId) => {
       const session = state.get(id);
@@ -164,10 +125,42 @@ describe('StateManager remote keep-alive', () => {
     expect(state.reapStale()).toEqual(['reported']);
   });
 
+  it('spares a restored session through the restart it cannot have reported yet', () => {
+    let now = 1_000;
+    const state = new StateManager('arcade', () => now);
+    state.handleHookEvent(sessionStart('restored'));
+
+    // Hours pass and the server restarts: the world comes back from persistence
+    // with an old lastEventAt, and the registry comes back empty.
+    now += STALE_SESSION_TIMEOUT_MS + 1;
+    const registry = new RemoteSessionRegistry(REMOTE_HEARTBEAT_TTL_MS, () => now);
+    // Exactly the production wiring, so dropping warmingUp() from it fails here.
+    state.setSessionKeepAliveCheck((id, ownerId) => registry.isAlive(id, ownerId) || registry.warmingUp());
+    registry.setAdmissionCheck((id, ownerId) => {
+      const session = state.get(id);
+      return !!session && session.ownerId === ownerId;
+    });
+
+    // The first sweep lands 30 seconds in, before a reporter is sure to have
+    // checked in. Without the warm-up the restart itself reaps the session.
+    expect(state.reapStale()).toEqual([]);
+
+    // Its machine checks in, and that report -- not the warm-up -- carries it.
+    now += 80_000;
+    registry.heartbeat(['restored']);
+    now += 15_000;
+    expect(registry.warmingUp()).toBe(false);
+    expect(state.reapStale()).toEqual([]);
+
+    // Nothing reports it again, so it goes with the next sweep after expiry.
+    now += REMOTE_HEARTBEAT_TTL_MS;
+    expect(state.reapStale()).toEqual(['restored']);
+  });
+
   it('does not let a pushed id conjure a session the server never saw', () => {
     let now = 1_000;
     const state = new StateManager('arcade', () => now);
-    const registry = openRegistry(REMOTE_HEARTBEAT_TTL_MS, 10, () => now);
+    const registry = openRegistry(REMOTE_HEARTBEAT_TTL_MS, () => now);
     state.setSessionKeepAliveCheck((id, ownerId) => registry.isAlive(id, ownerId));
 
     registry.heartbeat(['never-started']);
