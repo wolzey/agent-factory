@@ -280,19 +280,57 @@ func TestHeartbeatEndpointRefusesAddressesTheCredentialCannotCross(t *testing.T)
 	}
 }
 
+type recordingTransport struct {
+	used  bool
+	inner http.RoundTripper
+}
+
+func (transport *recordingTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	transport.used = true
+	return transport.inner.RoundTrip(request)
+}
+
 func TestPostHeartbeatSendsNothingToAPlaintextAddress(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	var reached bool
-	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { reached = true }))
-	defer server.Close()
-	plaintext := strings.Replace(server.URL, "127.0.0.1", "factory.example", 1)
+	// The transport records any attempt, so this fails if the address check is
+	// removed -- pointing at an unresolvable host would not, because the
+	// connection error looks the same as a refusal.
+	transport := &recordingTransport{inner: http.DefaultTransport}
+	original := heartbeatHTTPClient.Transport
+	heartbeatHTTPClient.Transport = transport
+	t.Cleanup(func() { heartbeatHTTPClient.Transport = original })
 
-	if _, err := postHeartbeat(heartbeatBatch{ServerURL: plaintext, SessionIDs: []string{"a"}}); err == nil {
+	if _, err := postHeartbeat(heartbeatBatch{ServerURL: "http://factory.example", SessionIDs: []string{"a"}}); err == nil {
 		t.Fatal("expected a plaintext address to be refused")
 	}
-	if reached {
-		t.Error("a request was sent to a plaintext address")
+	if transport.used {
+		t.Error("a credential-bearing request was handed to the transport")
+	}
+}
+
+func TestPostHeartbeatDoesNotFollowARedirect(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	var followed bool
+	destination := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		followed = true
+		_, _ = response.Write([]byte(`{"ok":true,"tracked":1}`))
+	}))
+	defer destination.Close()
+
+	// A followed redirect would replay the POST, and its Authorization header,
+	// at whatever address the response names.
+	redirector := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		http.Redirect(response, request, destination.URL+"/api/registry/heartbeat", http.StatusTemporaryRedirect)
+	}))
+	defer redirector.Close()
+
+	if _, err := postHeartbeat(heartbeatBatch{ServerURL: redirector.URL, SessionIDs: []string{"a"}}); err == nil {
+		t.Fatal("expected the redirect response to be reported as a failure")
+	}
+	if followed {
+		t.Error("the credential was forwarded to the redirect destination")
 	}
 }
 
