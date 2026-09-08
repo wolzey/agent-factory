@@ -56,8 +56,13 @@ export function loadGitHubConfig(env: NodeJS.ProcessEnv = process.env): GitHubCo
 }
 
 export function contributionCacheScope(config: GitHubConfig): string {
+  // A deployment that counted one repository before and still counts that one
+  // repository keeps its scope: hashing ['x'] where 'x' was hashed before would
+  // strand its verified totals behind an empty cache for a configuration that
+  // did not actually change.
+  const scope = config.repositories.length === 1 ? config.repositories[0] : config.repositories;
   return createHash('sha256').update(JSON.stringify([config.publicUrl, config.organization,
-    config.repositories, config.baseBranch, config.appId ?? null])).digest('hex');
+    scope, config.baseBranch, config.appId ?? null])).digest('hex');
 }
 
 export function githubRegistrationUrl(config: GitHubConfig, name: string): string {

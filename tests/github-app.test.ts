@@ -1,4 +1,4 @@
-import { generateKeyPairSync, verify } from 'node:crypto';
+import { createHash, generateKeyPairSync, verify } from 'node:crypto';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -61,6 +61,17 @@ describe('deployment configuration', () => {
       expect(contributionCacheScope({ ...config, ...change })).not.toBe(contributionCacheScope(config));
     }
   });
+  it('keeps the cache scope of a deployment that still counts the one repository it always did', () => {
+    // The scope is a hash of what the counts are for. An upgrade that leaves the
+    // configuration meaning the same thing must not send a deployment back to an
+    // empty cache -- during a GitHub outage that publishes no totals at all.
+    const legacy = createHash('sha256').update(JSON.stringify([config.publicUrl, config.organization,
+      'example/one', config.baseBranch, config.appId ?? null])).digest('hex');
+
+    expect(contributionCacheScope(config)).toBe(legacy);
+    expect(contributionCacheScope({ ...config, repositories: ['example/one', 'example/two'] })).not.toBe(legacy);
+  });
+
   it('generates deployment-specific setup navigation with read-only permissions and no OAuth or webhook', () => {
     const url = new URL(githubRegistrationUrl(config, 'Example Factory'));
     expect(url.pathname).toBe('/organizations/example/settings/apps/new');
