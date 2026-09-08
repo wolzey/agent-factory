@@ -16,6 +16,17 @@ export const GRAB_INPUT_TIMEOUT_MS = 3_000; // server drops a grab lease that go
 export const CHAT_MESSAGE_MAX_LENGTH = 200;
 export const CHAT_FADE_TIMEOUT_MS = 15_000; // 15 seconds before chat fades
 
+// Remote keep-alive. The session registry the reaper consults lives on the
+// machine running the agents (~/.claude/sessions), so a server hosted anywhere
+// else cannot see it and reaps every session that goes 30 minutes without a
+// hook -- including ones still sitting open. Those machines POST their live
+// session ids to /api/registry/heartbeat instead.
+export const HEARTBEAT_INTERVAL_MS = 30_000; // cadence a client re-sends at
+export const REMOTE_HEARTBEAT_TTL_MS = 90_000; // 3 missed heartbeats before a session is reapable again
+export const MAX_HEARTBEAT_SESSION_IDS = 500; // ids accepted per request
+export const MAX_TRACKED_HEARTBEAT_SESSIONS = 2_000; // ids held across all clients
+export const MAX_SESSION_ID_LENGTH = 512; // matches the hook payload cap
+
 export const DEFAULT_AVATAR = {
   spriteIndex: 0,
   color: '#4a90d9',

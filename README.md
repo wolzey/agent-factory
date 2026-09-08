@@ -111,6 +111,31 @@ Local development uses `file:.data/agent-factory.db` automatically when `TURSO_D
 > [!IMPORTANT]
 > **Existing production deployments must configure both `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` before upgrading to this release.** When `NODE_ENV=production`, the server intentionally exits during startup if either value is missing so it cannot silently run with non-durable state.
 
+### Keeping idle sessions on screen (remote servers)
+
+The server drops any session that goes 30 minutes without a hook event. When it runs on
+the same machine as the agents it can tell the difference between a finished session and
+one that is simply idle, because it reads Claude's session registry at `~/.claude/sessions`
+directly. A hosted server (Render, a VPS, a teammate's machine) cannot see that directory,
+so it reaps both -- a session parked on a question, or blocked behind a long build that
+fires no hooks, disappears while its terminal is still open.
+
+Each machine reports its own live sessions instead:
+
+```bash
+agent-factory heartbeat install    # launchd on macOS, systemd --user on Linux
+agent-factory heartbeat --once     # report once, to check it reaches the server
+```
+
+The reporter posts every 30 seconds and the server forgets a session 90 seconds after the
+reports stop, so a machine that goes away takes its agents off screen without saying
+goodbye. Sessions are grouped by the server their working directory resolves to, so
+[repository-aware overrides](#repository-aware-overrides) keep holding: a session only ever
+reports to its own server. Reports are authenticated with the same installation credential
+the hooks use, so only the machine that owns a session can hold it open.
+
+Nothing is needed for a server running on the same machine as the agents.
+
 ### Deploying to Render
 
 The included [`render.yaml`](render.yaml) creates a free Docker web service named `agent-factory`. Its filesystem is ephemeral, so the authoritative world is stored in Turso instead of a local SQLite file.
@@ -337,6 +362,9 @@ After upgrading, start a new agent session to establish ownership. Sessions emit
 | `agent-factory emote <name>` | Trigger an emote on your agent |
 | `agent-factory chat <message>` | Send a chat message |
 | `agent-factory avatar` | Customize your avatar |
+| `agent-factory heartbeat` | Report this machine's running sessions so a remote server does not reap them |
+| `agent-factory heartbeat install` | Run that reporter in the background (launchd / systemd --user) |
+| `agent-factory heartbeat uninstall` | Stop and remove the background reporter |
 
 ## Configuration
 
@@ -443,6 +471,7 @@ agent-factory/
 | `POST /api/emote` | Trigger an emote for the authenticated installation |
 | `POST /api/chat` | Send a chat message as the authenticated installation |
 | `POST /api/context` | Authenticated installation task-description update |
+| `POST /api/registry/heartbeat` | Session ids still running on the reporting machine, so they survive the stale reaper |
 | `POST /api/auth/handoff` | Create a short-lived browser handoff for an installation |
 | `POST /api/auth/handoff/exchange` | Exchange a handoff for an HttpOnly browser cookie |
 | `GET /api/auth/session` | Restore and renew the browser cookie session |

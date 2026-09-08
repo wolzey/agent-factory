@@ -5,6 +5,7 @@ import type { StateManager } from '../state.js';
 import type { BroadcastManager } from '../ws/broadcast.js';
 import type { AuthService } from '../auth.js';
 import type { PersistenceStatus } from '../persistence/world-repository.js';
+import type { RemoteSessionRegistry } from '../remote-registry.js';
 import { normalizeHookPayload } from '../hook-payload.js';
 import { usesSecureTransport } from '../request-security.js';
 
@@ -15,6 +16,7 @@ export function registerHookRoutes(
   serverConfig: ServerConfig,
   auth: AuthService,
   getPersistenceStatus: () => PersistenceStatus,
+  remoteRegistry: RemoteSessionRegistry,
 ) {
   app.post<{ Body: HookPayload }>('/api/hooks', async (request, reply) => {
     // Reduced to the fields the server uses before anything else touches it, so
@@ -47,6 +49,35 @@ export function registerHookRoutes(
     console.log(`[hook] event=${payload.hook_event_name} session=${payload.session_id} user=${payload.username || 'unknown'}`);
     state.handleHookEvent(trustedPayload);
     return reply.status(200).send({ ok: true });
+  });
+
+  // Machines running agents report which sessions are still open, so a server
+  // that is not on that machine can keep them out of the stale reaper. A
+  // session that goes quiet for 30 minutes while its terminal is still up --
+  // parked on a question, or blocked behind a long build that fires no hooks --
+  // is otherwise indistinguishable from one that ended.
+  app.post<{ Body: { session_ids?: unknown; username?: string } }>('/api/registry/heartbeat', async (request, reply) => {
+    const { session_ids, username } = request.body || {};
+
+    // Same credential rules as /api/hooks: an installation identifies itself so
+    // its sessions can only be held open by it, and an older install with no
+    // credential still reports, exactly as its hooks still post.
+    const device = auth.authenticateDevice(request.headers.authorization);
+    if (device.kind === 'authenticated' && !usesSecureTransport(request)) {
+      return reply.status(400).send({ error: 'HTTPS is required for installation authentication' });
+    }
+    if (device.kind === 'invalid') {
+      return reply.status(401).send({ error: 'Invalid installation credential' });
+    }
+
+    if (!Array.isArray(session_ids)) {
+      return reply.status(400).send({ error: 'Missing session_ids' });
+    }
+
+    const ownerId = device.kind === 'authenticated' ? device.ownerId : undefined;
+    const tracked = remoteRegistry.heartbeat(session_ids, ownerId);
+    console.log(`[heartbeat] user=${username || 'unknown'} sessions=${tracked}`);
+    return reply.status(200).send({ ok: true, tracked });
   });
 
   app.post<{ Body: { username: string; emote: string } }>('/api/emote', async (request, reply) => {

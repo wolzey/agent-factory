@@ -48,5 +48,6 @@ func init() {
 	rootCmd.AddCommand(connectCmd)
 	rootCmd.AddCommand(tokenCmd)
 	rootCmd.AddCommand(configCmd)
+	rootCmd.AddCommand(heartbeatCmd)
 	rootCmd.AddCommand(refreshAssetsCmd)
 }

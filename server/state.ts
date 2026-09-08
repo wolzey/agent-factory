@@ -110,6 +110,7 @@ export class StateManager {
   private onChange: StateChangeCallback | null = null;
   private sessionNameLookup: ((id: string) => string | undefined) | null = null;
   private sessionAliveCheck: ((id: string) => boolean) | null = null;
+  private sessionKeepAliveCheck: ((id: string, ownerId?: string) => boolean) | null = null;
   private idleRoamAt = new Map<string, number>();
   private idleExcursionCount = new Map<string, number>();
   private windowVisitors = new Set<string>();
@@ -140,6 +141,15 @@ export class StateManager {
 
   setSessionAliveCheck(fn: (id: string) => boolean) {
     this.sessionAliveCheck = fn;
+  }
+
+  /** Liveness reported by the machine running the agents, for servers that are
+   *  not on that machine and so cannot read its session registry themselves.
+   *  It protects a session from the stale reaper, and deliberately does NOT
+   *  admit unknown session_ids the way the local registry does -- a pushed id
+   *  is not proof that a SessionStart ever happened. */
+  setSessionKeepAliveCheck(fn: (id: string, ownerId?: string) => boolean) {
+    this.sessionKeepAliveCheck = fn;
   }
 
   onStateChange(cb: StateChangeCallback) {
@@ -1167,8 +1177,9 @@ export class StateManager {
     const reaped: string[] = [];
     for (const [id, session] of this.sessions) {
       if (now - session.lastEventAt > STALE_SESSION_TIMEOUT_MS) {
-        // Don't reap sessions that are still alive in Claude's session registry
-        if (this.sessionAliveCheck?.(id)) {
+        // Don't reap sessions that are still alive in Claude's session registry,
+        // locally or as reported by the machine they run on
+        if (this.sessionAliveCheck?.(id) || this.sessionKeepAliveCheck?.(id, session.ownerId)) {
           // Touch liveness without extending station reward eligibility.
           session.ticketHookAt ??= session.lastEventAt;
           session.lastEventAt = now;

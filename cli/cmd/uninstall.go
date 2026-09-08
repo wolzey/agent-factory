@@ -9,6 +9,7 @@ import (
 	"github.com/wolzey/agent-factory/cli/internal/config"
 	"github.com/wolzey/agent-factory/cli/internal/hooks"
 	"github.com/wolzey/agent-factory/cli/internal/identity"
+	"github.com/wolzey/agent-factory/cli/internal/service"
 	"github.com/wolzey/agent-factory/cli/internal/ui"
 )
 
@@ -100,6 +101,12 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		case hooks.TargetCodex:
 			ui.Success("Removed hooks from ~/.codex/hooks.json")
 		}
+	}
+
+	// A background heartbeat left running would report to a server this machine
+	// no longer has a config for, from a binary that may be gone.
+	if _, err := service.Uninstall(); err != nil {
+		ui.Warn("Could not remove the heartbeat service: " + err.Error())
 	}
 
 	// Remove mutable config and generated hooks while preserving installation identity by default.
