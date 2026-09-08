@@ -86,7 +86,9 @@ export class RemoteSessionRegistry {
     const shelf = this.installations.get(sessionOwnerId ?? LEGACY_INSTALLATION);
     const expiresAt = shelf?.get(sessionId);
     if (expiresAt === undefined) return false;
-    if (expiresAt <= this.now()) {
+    // Expiry and admission are both checked here, not only in prune(), so a
+    // reader never sees an entry the registry would no longer accept.
+    if (expiresAt <= this.now() || !this.admits(sessionId, sessionOwnerId)) {
       shelf!.delete(sessionId);
       return false;
     }

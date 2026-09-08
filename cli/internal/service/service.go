@@ -71,7 +71,9 @@ func Install(binaryPath string, interval time.Duration, logDir string) (string, 
 	}
 
 	// Tearing the old one down first is what makes reinstall idempotent.
-	stop(path)
+	if err := stop(path); err != nil {
+		return path, err
+	}
 	return path, start(path)
 }
 
@@ -86,7 +88,12 @@ func Uninstall() (string, error) {
 		return path, nil
 	}
 
-	stop(path)
+	// The definition stays on disk if the running service could not be stopped:
+	// removing it would report success while a loaded service keeps relaunching
+	// a reporter whose configuration is about to be deleted.
+	if err := stop(path); err != nil {
+		return path, err
+	}
 	if err := os.Remove(path); err != nil {
 		return path, err
 	}
@@ -109,13 +116,35 @@ func start(path string) error {
 	return nil
 }
 
-func stop(path string) {
+// stop tears the service down. Being asked to stop something that was never
+// loaded is the normal case on a first install, and is not an error; anything
+// else is, because the caller is about to delete what the service needs.
+func stop(path string) error {
+	var command *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		_ = exec.Command("launchctl", "bootout", guiDomain()+"/"+Label).Run()
+		command = exec.Command("launchctl", "bootout", guiDomain()+"/"+Label)
 	case "linux":
-		_ = exec.Command("systemctl", "--user", "disable", "--now", filepath.Base(path)).Run()
+		command = exec.Command("systemctl", "--user", "disable", "--now", filepath.Base(path))
+	default:
+		return nil
 	}
+
+	output, err := command.CombinedOutput()
+	if err == nil || notLoaded(string(output)) {
+		return nil
+	}
+	return fmt.Errorf("could not stop %s: %s", Label, strings.TrimSpace(string(output)))
+}
+
+func notLoaded(output string) bool {
+	lowered := strings.ToLower(output)
+	for _, phrase := range []string{"no such process", "not loaded", "could not find", "not find specified service", "does not exist", "no such file"} {
+		if strings.Contains(lowered, phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 func guiDomain() string {

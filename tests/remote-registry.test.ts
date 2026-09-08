@@ -1,3 +1,20 @@
+  it('lets go of an entry once its session leaves the world', () => {
+    let now = 1_000;
+    const live = new Set(['session-a', 'session-b']);
+    const registry = new RemoteSessionRegistry(REMOTE_HEARTBEAT_TTL_MS, () => now);
+    registry.setAdmissionCheck(id => live.has(id));
+
+    expect(registry.heartbeat(['session-a', 'session-b'])).toBe(2);
+    expect(registry.size).toBe(2);
+
+    // The session ends. Waiting out the TTL would make what is held track recent
+    // throughput rather than the world.
+    live.delete('session-a');
+    expect(registry.isAlive('session-a')).toBe(false);
+    expect(registry.size).toBe(1);
+    expect(registry.isAlive('session-b')).toBe(true);
+  });
+
   it('reads a bounded number of ids from one request', () => {
     const registry = openRegistry();
 

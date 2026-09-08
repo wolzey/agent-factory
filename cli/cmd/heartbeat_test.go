@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/wolzey/agent-factory/cli/internal/identity"
+	"github.com/wolzey/agent-factory/cli/internal/service"
 	"github.com/wolzey/agent-factory/cli/internal/sessions"
 )
 
@@ -187,15 +188,20 @@ func TestReportOnceContactsEveryServerConcurrently(t *testing.T) {
 	second := httptest.NewServer(handler)
 	defer second.Close()
 
+	serialized := make(chan bool, 1)
 	go func() {
 		for range 2 {
 			select {
 			case <-arrived:
 			case <-time.After(4 * time.Second):
+				// Only one request ever arrived: the second is waiting for the
+				// first to finish, which is the regression this test exists for.
+				serialized <- true
 				close(release)
 				return
 			}
 		}
+		serialized <- false
 		close(release)
 	}()
 
@@ -203,12 +209,31 @@ func TestReportOnceContactsEveryServerConcurrently(t *testing.T) {
 		{ServerURL: first.URL, SessionIDs: []string{"a"}},
 		{ServerURL: second.URL, SessionIDs: []string{"b"}},
 	}
-	started := time.Now()
 	if err := reportBatches(batches, false); err != nil {
 		t.Fatal(err)
 	}
-	if elapsed := time.Since(started); elapsed > 3*time.Second {
-		t.Errorf("reporting took %s, which means the servers were contacted in turn", elapsed)
+	// A scheduling pause on a loaded machine must not read as serialization, so
+	// the assertion is on what the watchdog saw rather than on elapsed time.
+	if <-serialized {
+		t.Error("the second server was not contacted until the first request finished")
+	}
+}
+
+func TestHeartbeatInstallRefusesBeforeAgentFactoryIsInstalled(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	// Installing first would hand launchd a service that exits immediately and
+	// is restarted forever.
+	if err := heartbeatInstallCmd.RunE(heartbeatInstallCmd, nil); err == nil {
+		t.Fatal("expected heartbeat install to refuse without a config")
+	}
+
+	path, err := service.Path()
+	if err != nil {
+		t.Skipf("no background service on this platform: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("a service definition was written to %s", path)
 	}
 }
 

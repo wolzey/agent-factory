@@ -113,10 +113,14 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	// no longer has a config for, from a binary that may be gone.
 	if hasService {
 		if _, err := service.Uninstall(); err != nil {
-			ui.Warn("Could not remove the heartbeat service: " + err.Error())
-		} else {
-			ui.Success("Removed the background heartbeat service")
+			// Stopping first, and stopping before the config goes, is the point:
+			// a service still loaded would keep relaunching a reporter whose
+			// configuration this command is about to delete.
+			ui.Error("Could not remove the heartbeat service: " + err.Error())
+			ui.Info("Nothing else was removed. Stop it yourself, then run uninstall again.")
+			return err
 		}
+		ui.Success("Removed the background heartbeat service")
 	}
 
 	// Remove mutable config and generated hooks while preserving installation identity by default.
