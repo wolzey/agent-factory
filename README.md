@@ -133,8 +133,9 @@ stale window -- so a machine that goes away takes its agents off screen within a
 minutes, without saying goodbye. A report is only held for a session the server already
 knows, reported by the installation that owns it; anything else is refused. Sessions are grouped by the server their working directory resolves to, so
 [repository-aware overrides](#repository-aware-overrides) keep holding: a session only ever
-reports to its own server. Reports are authenticated with the same installation credential
-the hooks use, so only the machine that owns a session can hold it open.
+reports to its own server. Reports require the same installation credential the hooks use --
+unlike `/api/hooks`, an unsigned one is refused -- so only the machine that owns a session can
+hold it open.
 
 Nothing is needed for a server running on the same machine as the agents.
 

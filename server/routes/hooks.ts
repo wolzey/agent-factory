@@ -59,23 +59,23 @@ export function registerHookRoutes(
   app.post<{ Body: { session_ids?: unknown; username?: string } }>('/api/registry/heartbeat', async (request, reply) => {
     const { session_ids, username } = request.body || {};
 
-    // Same credential rules as /api/hooks: an installation identifies itself so
-    // its sessions can only be held open by it, and an older install with no
-    // credential still reports, exactly as its hooks still post.
+    // Unlike /api/hooks this endpoint requires a credential. Every CLI that can
+    // report at all also has one, so nothing is locked out -- and an unsigned
+    // report would let anyone read an unowned session id out of world state and
+    // hold that session on screen forever after its machine is gone.
     const device = auth.authenticateDevice(request.headers.authorization);
-    if (device.kind === 'authenticated' && !usesSecureTransport(request)) {
-      return reply.status(400).send({ error: 'HTTPS is required for installation authentication' });
+    if (device.kind !== 'authenticated') {
+      return reply.status(401).send({ error: 'Installation authentication required' });
     }
-    if (device.kind === 'invalid') {
-      return reply.status(401).send({ error: 'Invalid installation credential' });
+    if (!usesSecureTransport(request)) {
+      return reply.status(400).send({ error: 'HTTPS is required for installation authentication' });
     }
 
     if (!Array.isArray(session_ids)) {
       return reply.status(400).send({ error: 'Missing session_ids' });
     }
 
-    const ownerId = device.kind === 'authenticated' ? device.ownerId : undefined;
-    const tracked = remoteRegistry.heartbeat(session_ids, ownerId);
+    const tracked = remoteRegistry.heartbeat(session_ids, device.ownerId);
     console.log(`[heartbeat] user=${username || 'unknown'} sessions=${tracked}`);
     return reply.status(200).send({ ok: true, tracked });
   });

@@ -153,10 +153,13 @@ func reportBatches(batches []heartbeatBatch, verbose bool) error {
 			}
 			continue
 		}
-		// The server answers with what it is actually holding. Reporting what was
-		// sent instead would call a refused report a success.
+		// The server answers with what it is actually holding. A refused report
+		// leaves sessions unprotected, so it fails the command rather than
+		// printing a warning that a service health check would never see.
 		if result.tracked < len(result.batch.SessionIDs) {
-			ui.Warn(fmt.Sprintf("%s: sent %d session(s), server is holding %d", result.batch.ServerURL, len(result.batch.SessionIDs), result.tracked))
+			lastErr = fmt.Errorf("%s: sent %d session(s), server is holding %d",
+				result.batch.ServerURL, len(result.batch.SessionIDs), result.tracked)
+			ui.Warn(lastErr.Error())
 			continue
 		}
 		if verbose {

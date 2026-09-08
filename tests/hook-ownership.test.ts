@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
 import { AuthService } from '../server/auth.js';
 import { registerHookRoutes } from '../server/routes/hooks.js';
+import { RemoteSessionRegistry } from '../server/remote-registry.js';
 import { StateManager } from '../server/state.js';
 import { BroadcastManager } from '../server/ws/broadcast.js';
 import type { HookPayload } from '../shared/types.js';
@@ -23,6 +24,11 @@ function buildHookApp() {
   const app = Fastify();
   const state = new StateManager('arcade');
   const auth = new AuthService('server-secret');
+  const remoteRegistry = new RemoteSessionRegistry();
+  remoteRegistry.setAdmissionCheck((id, ownerId) => {
+    const session = state.get(id);
+    return !!session && session.ownerId === ownerId;
+  });
   registerHookRoutes(
     app,
     state,
@@ -30,8 +36,9 @@ function buildHookApp() {
     { title: 'test', environment: 'arcade' },
     auth,
     () => ({ healthy: true, lastSavedRevision: null, lastError: null }),
+    remoteRegistry,
   );
-  return { app, state, auth };
+  return { app, state, auth, remoteRegistry };
 }
 
 describe('hook ownership boundary', () => {
@@ -42,6 +49,34 @@ describe('hook ownership boundary', () => {
 
     expect(response.statusCode).toBe(200);
     expect(state.get('legacy')).toMatchObject({ username: 'same-name', ownerId: undefined });
+    await app.close();
+  });
+
+  it('holds a session only for the installation that owns it', async () => {
+    const { app } = buildHookApp();
+    const secure = { authorization: `Bearer ${FIRST_SECRET}`, 'x-forwarded-proto': 'https' };
+    await app.inject({ method: 'POST', url: '/api/hooks', payload: payload('owned'), headers: secure });
+
+    const unsigned = await app.inject({
+      method: 'POST', url: '/api/registry/heartbeat',
+      payload: { session_ids: ['owned'] }, headers: { 'x-forwarded-proto': 'https' },
+    });
+    // Session ids are public in world state, so an unsigned report would let
+    // anyone hold a session open after the machine running it is gone.
+    expect(unsigned.statusCode).toBe(401);
+
+    const wrongOwner = await app.inject({
+      method: 'POST', url: '/api/registry/heartbeat', payload: { session_ids: ['owned'] },
+      headers: { authorization: `Bearer ${SECOND_SECRET}`, 'x-forwarded-proto': 'https' },
+    });
+    expect(wrongOwner.statusCode).toBe(200);
+    expect(wrongOwner.json()).toMatchObject({ tracked: 0 });
+
+    const owner = await app.inject({
+      method: 'POST', url: '/api/registry/heartbeat',
+      payload: { session_ids: ['owned', 'never-seen'] }, headers: secure,
+    });
+    expect(owner.json()).toMatchObject({ tracked: 1 });
     await app.close();
   });
 

@@ -8,6 +8,7 @@ import { AuthService } from '../server/auth.js';
 import { AvatarProfiles, type AvatarProfileRepository } from '../server/avatar-profiles.js';
 import { registerAvatarRoutes } from '../server/routes/avatar.js';
 import { registerHookRoutes } from '../server/routes/hooks.js';
+import { RemoteSessionRegistry } from '../server/remote-registry.js';
 import { StateManager, type StateNotification } from '../server/state.js';
 import { BroadcastManager } from '../server/ws/broadcast.js';
 import { LibSqlWorldRepository } from '../server/persistence/libsql-world-repository.js';
@@ -38,7 +39,7 @@ async function fixture(repository = memoryRepository()) {
   const profiles = new AvatarProfiles(repository, state); await profiles.initialize();
   const app = Fastify(); await app.register(cookie);
   registerAvatarRoutes(app, auth, profiles);
-  registerHookRoutes(app, state, new BroadcastManager(), { title: 'Test' }, auth, () => ({ healthy: true, lastSavedRevision: 0, lastError: null }));
+  registerHookRoutes(app, state, new BroadcastManager(), { title: 'Test' }, auth, () => ({ healthy: true, lastSavedRevision: 0, lastError: null }), new RemoteSessionRegistry());
   return { app, state, profiles, repository };
 }
 const request = { method: 'PUT' as const, url: '/api/avatar', headers: { origin: 'http://factory.test', host: 'factory.test', 'x-avatar-owner': owner }, cookies: { af_session: browserCookie }, payload: { avatar: red } };
