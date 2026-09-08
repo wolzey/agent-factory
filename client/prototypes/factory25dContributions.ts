@@ -1,4 +1,4 @@
-import { contributionFor, readContribution, readContributionIdentities, validContributionScope, type ContributionIdentity, type ContributionRecord } from '@shared/factory-contributions';
+import { contributionFor, readContribution, readContributionIdentities, readContributionRepositories, type ContributionIdentity, type ContributionRecord } from '@shared/factory-contributions';
 import { factoryHost, isControlPreview } from './factory25dBoardData';
 
 /** One small roster request, shared by every nameplate. Never send private-repo credentials to a browser. */
@@ -15,9 +15,11 @@ export function watchContributions(changed: () => void) {
       const data = await response.json();
       if (stopped || !data || !Array.isArray(data.contributors)) return;
       const nextIdentities = readContributionIdentities(data.identities);
-      if (!nextIdentities || (!validContributionScope(data.repository, data.baseBranch)
+      // A deployment may count several repositories; an unconfigured one sends none.
+      const nextRepositories = readContributionRepositories(data.repositories ?? data.repository, data.baseBranch);
+      if (!nextIdentities || (!nextRepositories
         && !(data.repository === '' && data.contributors.length === 0 && nextIdentities.length === 0))) return;
-      const nextScope = JSON.stringify([data.repository, data.baseBranch, nextIdentities]);
+      const nextScope = JSON.stringify([nextRepositories ?? [], data.baseBranch, nextIdentities]);
       const scopeChanged = scope !== nextScope;
       if (scopeChanged) { records = []; identities = nextIdentities; scope = nextScope; }
       const candidates: ContributionRecord[] = data.contributors.map(readContribution).filter((value: ContributionRecord | undefined): value is ContributionRecord => !!value);

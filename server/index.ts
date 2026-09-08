@@ -134,7 +134,7 @@ async function main() {
   const github = githubConfig?.appId ? new GitHubApp(githubConfig) : undefined;
   const contributionScope = githubConfig ? contributionCacheScope(githubConfig) : undefined;
   const contributions = new ContributionService({
-    repository: githubConfig?.repository,
+    repositories: githubConfig?.repositories,
     baseBranch: githubConfig?.baseBranch,
     identities: githubConfig?.identities,
     tokenProvider: github,

@@ -4,7 +4,9 @@ export interface ContributionRecord {
   checkedAt: number;
 }
 export interface ContributionSnapshot {
+  /** The first configured repository, kept so an older client still reads a scope. */
   repository: string;
+  repositories: string[];
   baseBranch: string;
   contributors: ContributionRecord[];
   identities?: ContributionIdentity[];
@@ -56,6 +58,22 @@ export function readContributionIdentities(value: unknown): ContributionIdentity
     identities.push({ githubLogin: row.githubLogin.toLowerCase(), factoryUsernames: [...row.factoryUsernames] });
   }
   return identities;
+}
+
+/** Bounded, deduplicated repositories for one deployment. Counts are summed
+ *  across them in a single search, so the list is capped: every entry costs
+ *  query length against GitHub's limit. */
+export function readContributionRepositories(value: unknown, branch: unknown): string[] | undefined {
+  const candidates = typeof value === 'string' ? [value] : value;
+  if (!Array.isArray(candidates) || !candidates.length || candidates.length > 10) return;
+  const repositories: string[] = [];
+  for (const candidate of candidates) {
+    if (!validContributionScope(candidate, branch)) return;
+    const repository = (candidate as string).toLowerCase();
+    if (repositories.includes(repository)) return;
+    repositories.push(repository);
+  }
+  return repositories;
 }
 
 export function validContributionScope(repository: unknown, branch: unknown): boolean {

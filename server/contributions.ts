@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import {
-  readContribution, readContributionIdentities, validContributionScope, type ContributionIdentity,
+  readContribution, readContributionIdentities, readContributionRepositories, type ContributionIdentity,
   type ContributionRecord,
   type ContributionSnapshot,
 } from '../shared/factory-contributions.js';
@@ -21,6 +21,7 @@ export interface ContributionPersistence {
 export interface ContributionServiceOptions {
   identities?: readonly { githubLogin: string; factoryUsernames?: string[] }[];
   repository?: string;
+  repositories?: readonly string[];
   baseBranch?: string;
   tokenProvider?: InstallationTokenProvider;
   seed?: readonly ContributionRecord[];
@@ -74,7 +75,7 @@ export class ContributionService {
   private readonly logins: string[];
   private readonly token: string;
   private readonly tokenProvider?: InstallationTokenProvider;
-  private readonly repository: string;
+  private readonly repositories: string[];
   private readonly baseBranch: string;
   private readonly identities: ContributionIdentity[];
   private readonly read: typeof globalThis.fetch;
@@ -88,14 +89,16 @@ export class ContributionService {
   private disposed = false;
 
   constructor(options: ContributionServiceOptions = {}) {
-    this.repository = options.repository ?? '';
     this.baseBranch = options.baseBranch ?? 'main';
-    if (this.repository && !validContributionScope(this.repository, this.baseBranch)) throw new TypeError('Invalid contribution scope');
+    const configured = options.repositories ?? (options.repository ? [options.repository] : []);
+    const repositories = configured.length ? readContributionRepositories([...configured], this.baseBranch) : [];
+    if (!repositories) throw new TypeError('Invalid contribution scope');
+    this.repositories = repositories;
     const identities = readContributionIdentities((options.identities ?? []).map(identity => ({ ...identity, factoryUsernames: identity.factoryUsernames ?? [] })));
     if (!identities) throw new TypeError('Invalid contribution identity');
     this.identities = identities;
     this.logins = identities.map(identity => identity.githubLogin);
-    if (this.logins.length && !this.repository) throw new TypeError('Contribution repository is required');
+    if (this.logins.length && !this.repositories.length) throw new TypeError('Contribution repository is required');
     this.tokenProvider = options.tokenProvider;
     if (this.logins.some(login => !LOGIN.test(login))) throw new TypeError('Invalid contribution identity');
     for (const record of recordsFromUnknown(options.seed ?? [])) {
@@ -111,7 +114,8 @@ export class ContributionService {
 
   snapshot(): ContributionSnapshot {
     return {
-      repository: this.repository,
+      repository: this.repositories[0] ?? '',
+      repositories: [...this.repositories],
       baseBranch: this.baseBranch,
       identities: this.identities.map(identity => ({ ...identity, factoryUsernames: [...identity.factoryUsernames] })),
       contributors: this.logins.flatMap(login => {
@@ -213,7 +217,10 @@ export class ContributionService {
 
   private async readCountResponse(login: string, signal: AbortSignal): Promise<{ count?: number; stop?: boolean }> {
     const url = new URL('https://api.github.com/search/issues');
-    url.searchParams.set('q', `repo:${this.repository} is:pr is:merged base:${this.baseBranch} author:${login}`);
+    // Repository qualifiers are OR-ed by GitHub search, so one request returns
+    // this author's merges across every configured repository.
+    const scope = this.repositories.map(repository => `repo:${repository}`).join(' ');
+    url.searchParams.set('q', `${scope} is:pr is:merged base:${this.baseBranch} author:${login}`);
     url.searchParams.set('per_page', '1');
     let token: string;
     try { token = this.tokenProvider ? await this.tokenProvider.token(signal) : this.token; }

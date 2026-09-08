@@ -9,7 +9,7 @@ import { contributionCacheScope, githubRegistrationUrl, loadGitHubConfig, type G
 import { ContributionService } from '../server/contributions.js';
 
 const keys = generateKeyPairSync('rsa', { modulusLength: 2048 });
-const config: GitHubConfig = { organization: 'example', repository: 'example/one', baseBranch: 'main',
+const config: GitHubConfig = { organization: 'example', repositories: ['example/one'], baseBranch: 'main',
   identities: [{ githubLogin: 'octocat', factoryUsernames: ['Octo'] }], publicUrl: 'https://factory.example',
   appId: '123', appSlug: 'factory-example', privateKey: keys.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString() };
 const now = Date.parse('2026-09-01T00:00:00Z');
@@ -17,9 +17,16 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 const installation = { id: 456, app_id: 123, account: { login: 'example', type: 'Organization' }, suspended_at: null };
 const token = { token: 'private-installation-token', expires_at: new Date(now + 3600_000).toISOString() };
 const directories: string[] = [];
+
+/** The access-token request body a deployment with this configuration sends. */
+async function tokenBodyFor(deployment: GitHubConfig) {
+  const read = vi.fn<typeof fetch>().mockResolvedValueOnce(json(installation)).mockResolvedValueOnce(json(token));
+  await new GitHubApp(deployment, read, () => now).token(new AbortController().signal);
+  return read.mock.calls[1][1]!.body;
+}
 afterEach(() => { directories.splice(0).forEach(path => rmSync(path, { recursive: true, force: true })); vi.useRealTimers(); });
 
-function configured(overrides: Partial<GitHubConfig> = {}) {
+function configured(overrides: Record<string, unknown> = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'github-config-')); directories.push(dir);
   const path = join(dir, 'config.json');
   writeFileSync(path, JSON.stringify({ ...config, ...overrides }));
@@ -33,7 +40,8 @@ describe('deployment configuration', () => {
   });
   it('requires explicit configuration and rejects tenant/query/redirect ambiguity', () => {
     expect(() => loadGitHubConfig({ AF_GITHUB_APP_ID: '123' })).toThrow('AF_GITHUB_CONFIG_PATH');
-    for (const overrides of [{ organization: 'other' }, { repository: 'example/one org:other' }, { baseBranch: 'main is:open' },
+    for (const overrides of [{ organization: 'other' }, { repositories: ['example/one org:other'] }, { baseBranch: 'main is:open' },
+      { repositories: ['example/one', 'other/two'] }, { repositories: ['example/one', 'example/one'] }, { repositories: [] },
       { identities: [{ githubLogin: 'one', factoryUsernames: ['same'] }, { githubLogin: 'two', factoryUsernames: ['Same'] }] }]) {
       expect(() => loadGitHubConfig(configured(overrides))).toThrow('Invalid GitHub');
     }
@@ -48,7 +56,8 @@ describe('deployment configuration', () => {
     expect(loaded.privateKey).toBe(config.privateKey);
     const keyPath = join(directories.at(-1)!, 'app.pem'); writeFileSync(keyPath, config.privateKey!);
     expect(loadGitHubConfig({ ...env, AF_GITHUB_APP_ID: '123', AF_GITHUB_PRIVATE_KEY_PATH: keyPath })?.privateKey).toBe(config.privateKey);
-    for (const change of [{ publicUrl: 'https://other.example' }, { repository: 'example/two' }, { baseBranch: 'develop' }, { appId: '789' }]) {
+    for (const change of [{ publicUrl: 'https://other.example' }, { repositories: ['example/two'] },
+      { repositories: ['example/one', 'example/two'] }, { baseBranch: 'develop' }, { appId: '789' }]) {
       expect(contributionCacheScope({ ...config, ...change })).not.toBe(contributionCacheScope(config));
     }
   });
@@ -66,7 +75,7 @@ describe('deployment configuration', () => {
 });
 
 describe('GitHub App installation boundary', () => {
-  it('signs a valid JWT, verifies the org and narrows the token to one read-only repository', async () => {
+  it('signs a valid JWT, verifies the org and narrows the token to the configured repositories', async () => {
     const read = vi.fn<typeof fetch>().mockResolvedValueOnce(json(installation)).mockResolvedValueOnce(json(token));
     const github = new GitHubApp(config, read, () => now);
     const signal = new AbortController().signal;
@@ -82,6 +91,8 @@ describe('GitHub App installation boundary', () => {
     expect(verify('RSA-SHA256', Buffer.from(`${header}.${payload}`), keys.publicKey, Buffer.from(signature, 'base64url'))).toBe(true);
     expect(read.mock.calls[1][0]).toBe('https://api.github.com/app/installations/456/access_tokens');
     expect(JSON.parse(read.mock.calls[1][1]!.body as string)).toEqual({ repositories: ['one'], permissions: { pull_requests: 'read' } });
+    expect(JSON.parse((await tokenBodyFor({ ...config, repositories: ['example/one', 'example/two'] })) as string))
+      .toEqual({ repositories: ['one', 'two'], permissions: { pull_requests: 'read' } });
     expect(read.mock.calls.every(([, options]) => options?.redirect === 'error')).toBe(true);
   });
   it.each([

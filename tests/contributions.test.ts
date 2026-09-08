@@ -32,7 +32,7 @@ describe('authored Fluid main contribution totals', () => {
     const fetch = vi.fn<typeof globalThis.fetch>();
     const counts = service({ fetch });
     counts.start();
-    expect(await counts.refresh()).toEqual({ repository: 'fluid-commerce/fluid-mono', baseBranch: 'main', contributors: seed, identities: identities.map(identity => ({ ...identity, factoryUsernames: [] })), refresh: 'unconfigured' });
+    expect(await counts.refresh()).toEqual({ repository: 'fluid-commerce/fluid-mono', repositories: ['fluid-commerce/fluid-mono'], baseBranch: 'main', contributors: seed, identities: identities.map(identity => ({ ...identity, factoryUsernames: [] })), refresh: 'unconfigured' });
     expect(fetch).not.toHaveBeenCalled();
     const snapshot = counts.snapshot();
     snapshot.contributors[0].mergedPullRequests = 0;
@@ -57,6 +57,33 @@ describe('authored Fluid main contribution totals', () => {
     expect(url.searchParams.get('per_page')).toBe('1');
     expect(init).toMatchObject({ method: 'GET', redirect: 'error', headers: { Authorization: 'Bearer private-token' } });
     expect(JSON.stringify(snapshot)).not.toContain('private-token');
+  });
+
+  it('counts one author across every configured repository in a single search', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(validCount(7));
+    const counts = service({
+      token: 'private-token',
+      fetch,
+      repository: undefined,
+      repositories: ['fluid-commerce/fluid-mono', 'Fluid-Commerce/fluid', 'fluid-commerce/fluid-integrations'],
+    });
+
+    const snapshot = await counts.refresh();
+
+    const url = new URL(String(fetch.mock.calls[0][0]));
+    expect(url.searchParams.get('q')).toBe(
+      'repo:fluid-commerce/fluid-mono repo:fluid-commerce/fluid repo:fluid-commerce/fluid-integrations is:pr is:merged base:main author:tingeym');
+    // One request per author, not per author per repository.
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(snapshot.repositories).toEqual(['fluid-commerce/fluid-mono', 'fluid-commerce/fluid', 'fluid-commerce/fluid-integrations']);
+    expect(snapshot.repository).toBe('fluid-commerce/fluid-mono');
+  });
+
+  it('refuses a repository list that is malformed, duplicated, or unbounded', () => {
+    for (const repositories of [['fluid-commerce/fluid-mono', 'fluid-commerce/fluid-mono'], ['fluid-commerce/one two'],
+      ['fluid-commerce/one org:other'], Array.from({ length: 11 }, (_, index) => `fluid-commerce/repo-${index}`)]) {
+      expect(() => service({ repository: undefined, repositories })).toThrow('Invalid contribution scope');
+    }
   });
 
   it.each([401, 403, 429])('preserves the last count and stops the batch on HTTP %s', async status => {

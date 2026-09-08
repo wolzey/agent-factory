@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { readContributionIdentities, validContributionScope, type ContributionIdentity } from '../../shared/factory-contributions.js';
+import { readContributionIdentities, readContributionRepositories, type ContributionIdentity } from '../../shared/factory-contributions.js';
 
 export interface GitHubConfig {
   organization: string;
-  repository: string;
+  repositories: string[];
   baseBranch: string;
   identities: ContributionIdentity[];
   publicUrl: string;
@@ -25,11 +25,14 @@ export function loadGitHubConfig(env: NodeJS.ProcessEnv = process.env): GitHubCo
   try { raw = JSON.parse(readFileSync(env.AF_GITHUB_CONFIG_PATH, 'utf8')); }
   catch { throw new Error('Unable to read GitHub deployment configuration'); }
   if (!raw || typeof raw !== 'object') throw new Error('Invalid GitHub deployment configuration');
-  const { organization, repository, baseBranch = 'main' } = raw;
+  const { organization, repository, repositories, baseBranch = 'main' } = raw;
   const identities = readContributionIdentities(raw.identities);
+  // One deployment counts merges across several repositories of the same
+  // organization; `repository` stays accepted so an existing config keeps working.
+  const scoped = readContributionRepositories(repositories ?? repository, baseBranch);
   if (typeof organization !== 'string' || !/^[a-z\d][a-z\d-]{0,38}$/i.test(organization)
-    || !validContributionScope(repository, baseBranch)
-    || (repository as string).split('/')[0].toLowerCase() !== organization.toLowerCase()
+    || !scoped
+    || scoped.some(entry => entry.split('/')[0] !== organization.toLowerCase())
     || !identities?.length) throw new Error('Invalid GitHub organization, repository, branch, or identities');
   let url: URL;
   try { url = new URL(env.AF_PUBLIC_URL ?? ''); } catch { throw new Error('AF_PUBLIC_URL must be the deployment origin'); }
@@ -48,13 +51,13 @@ export function loadGitHubConfig(env: NodeJS.ProcessEnv = process.env): GitHubCo
   if (Boolean(appId) !== Boolean(privateKey)) throw new Error('GitHub App ID and private key must be configured together');
   const appSlug = env.AF_GITHUB_APP_SLUG;
   if (appSlug && !/^[a-z\d-]+$/.test(appSlug)) throw new Error('Invalid AF_GITHUB_APP_SLUG');
-  return { organization: organization.toLowerCase(), repository: (repository as string).toLowerCase(),
+  return { organization: organization.toLowerCase(), repositories: scoped,
     baseBranch: baseBranch as string, identities, publicUrl: url.origin, appId, privateKey, appSlug };
 }
 
 export function contributionCacheScope(config: GitHubConfig): string {
   return createHash('sha256').update(JSON.stringify([config.publicUrl, config.organization,
-    config.repository, config.baseBranch, config.appId ?? null])).digest('hex');
+    config.repositories, config.baseBranch, config.appId ?? null])).digest('hex');
 }
 
 export function githubRegistrationUrl(config: GitHubConfig, name: string): string {

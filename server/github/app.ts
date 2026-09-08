@@ -55,7 +55,10 @@ export class GitHubApp implements InstallationTokenProvider {
       || installation.suspended_at !== null) throw new Error('GitHub installation does not match this deployment');
     if (signal.aborted) throw new Error('GitHub request cancelled');
     const result = await this.request(`/app/installations/${installation.id}/access_tokens`, jwt, signal, {
-      repositories: [this.config.repository.split('/')[1]], permissions: { pull_requests: 'read' },
+      // Every counted repository, and nothing else: the token stays as narrow as
+      // the configuration it serves.
+      repositories: this.config.repositories.map(repository => repository.split('/')[1]),
+      permissions: { pull_requests: 'read' },
     });
     const expiresAt = Date.parse(result.expires_at);
     if (typeof result.token !== 'string' || !result.token || !Number.isFinite(expiresAt)
