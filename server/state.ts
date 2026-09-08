@@ -1177,12 +1177,19 @@ export class StateManager {
     const reaped: string[] = [];
     for (const [id, session] of this.sessions) {
       if (now - session.lastEventAt > STALE_SESSION_TIMEOUT_MS) {
-        // Don't reap sessions that are still alive in Claude's session registry,
-        // locally or as reported by the machine they run on
-        if (this.sessionAliveCheck?.(id) || this.sessionKeepAliveCheck?.(id, session.ownerId)) {
+        // Don't reap sessions that are still alive in Claude's session registry
+        if (this.sessionAliveCheck?.(id)) {
           // Touch liveness without extending station reward eligibility.
           session.ticketHookAt ??= session.lastEventAt;
           session.lastEventAt = now;
+          continue;
+        }
+        // A session the machine it runs on still reports is spared too, but its
+        // lastEventAt is deliberately left stale: the report expires 90 seconds
+        // after the machine stops sending, and the next sweep must then take the
+        // session, rather than granting it another full 30-minute window.
+        if (this.sessionKeepAliveCheck?.(id, session.ownerId)) {
+          session.ticketHookAt ??= session.lastEventAt;
           continue;
         }
         // Cancel any pending removal timer so it can't fire later and emit a duplicate remove

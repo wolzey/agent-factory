@@ -53,12 +53,39 @@ describe('RemoteSessionRegistry', () => {
 
     expect(registry.isAlive('owned', 'owner-a')).toBe(true);
     expect(registry.isAlive('owned', 'owner-b')).toBe(false);
-    // An unowned (pre-credential) session keeps the trust /api/hooks gives it.
-    expect(registry.isAlive('owned')).toBe(true);
+    expect(registry.isAlive('owned')).toBe(false);
 
     registry.heartbeat(['legacy']);
     expect(registry.isAlive('legacy')).toBe(true);
     expect(registry.isAlive('legacy', 'owner-a')).toBe(false);
+  });
+
+  it('cannot be used to drop a session someone else is holding open', () => {
+    const registry = new RemoteSessionRegistry();
+
+    registry.heartbeat(['shared-id'], 'owner-a');
+
+    // Session ids are public in world state. Reporting one you do not own must
+    // not rewrite who is holding it, or the owner's live session gets reaped.
+    registry.heartbeat(['shared-id'], 'owner-b');
+    registry.heartbeat(['shared-id']);
+
+    expect(registry.isAlive('shared-id', 'owner-a')).toBe(true);
+  });
+
+  it('evicts the flooding installation rather than the machine doing real work', () => {
+    let now = 1_000;
+    const registry = new RemoteSessionRegistry(REMOTE_HEARTBEAT_TTL_MS, 4, () => now, 4);
+
+    registry.heartbeat(['f1', 'f2', 'f3'], 'flooder');
+    expect(registry.size).toBe(3);
+
+    expect(registry.heartbeat(['real-1'], 'worker')).toBe(1);
+    expect(registry.heartbeat(['real-2'], 'worker')).toBe(1);
+
+    expect(registry.isAlive('real-1', 'worker')).toBe(true);
+    expect(registry.isAlive('real-2', 'worker')).toBe(true);
+    expect(registry.size).toBe(4);
   });
 
   it('bounds what one request and one server can hold', () => {
@@ -96,9 +123,9 @@ describe('StateManager remote keep-alive', () => {
     expect(state.reapStale()).toEqual(['silent']);
     expect(state.get('reported')).toBeDefined();
 
-    // The machine goes away: nothing refreshes the entry, so the next sweep
-    // after it expires takes the session with it.
-    now += STALE_SESSION_TIMEOUT_MS + REMOTE_HEARTBEAT_TTL_MS;
+    // The machine goes away. The report expires 90 seconds later and the very
+    // next sweep takes the session -- it does not get another stale window.
+    now += REMOTE_HEARTBEAT_TTL_MS + 1;
     expect(state.reapStale()).toEqual(['reported']);
   });
 

@@ -4,12 +4,14 @@
 package service
 
 import (
+	"encoding/xml"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -110,6 +112,16 @@ func guiDomain() string {
 	return "gui/" + strconv.Itoa(os.Getuid())
 }
 
+// xmlText escapes a value for a plist <string>. A home directory containing "&"
+// would otherwise produce a plist launchd refuses to load.
+func xmlText(value string) string {
+	var escaped strings.Builder
+	if err := xml.EscapeText(&escaped, []byte(value)); err != nil {
+		return ""
+	}
+	return escaped.String()
+}
+
 func plist(binaryPath string, interval time.Duration, logDir string) string {
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -134,21 +146,23 @@ func plist(binaryPath string, interval time.Duration, logDir string) string {
   <string>%s</string>
 </dict>
 </plist>
-`, Label, binaryPath, interval.String(),
-		filepath.Join(logDir, "heartbeat.log"),
-		filepath.Join(logDir, "heartbeat.error.log"))
+`, Label, xmlText(binaryPath), xmlText(interval.String()),
+		xmlText(filepath.Join(logDir, "heartbeat.log")),
+		xmlText(filepath.Join(logDir, "heartbeat.error.log")))
 }
 
 func systemdUnit(binaryPath string, interval time.Duration) string {
+	// The binary path is quoted: an installation under a home directory with a
+	// space in it is a valid path systemd would otherwise split into arguments.
 	return fmt.Sprintf(`[Unit]
 Description=Agent Factory session heartbeat
 
 [Service]
-ExecStart=%s heartbeat --interval %s
+ExecStart="%s" heartbeat --interval %s
 Restart=always
 RestartSec=10
 
 [Install]
 WantedBy=default.target
-`, binaryPath, interval.String())
+`, strings.ReplaceAll(binaryPath, `"`, `\"`), interval.String())
 }

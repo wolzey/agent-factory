@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/wolzey/agent-factory/cli/internal/identity"
 	"github.com/wolzey/agent-factory/cli/internal/sessions"
@@ -37,12 +38,15 @@ func TestGroupBySessionServerUsesEachSessionsOwnRepositoryOverride(t *testing.T)
 	}`)
 	home := os.Getenv("HOME")
 
-	batches := groupBySessionServer([]sessions.Entry{
+	batches, err := groupBySessionServer([]sessions.Entry{
 		{SessionID: "b", Cwd: filepath.Join(home, "projects", "work")},
 		{SessionID: "a", Cwd: filepath.Join(home, "projects", "other")},
 		{SessionID: "c", Cwd: filepath.Join(home, "projects", "private", "repo")},
 		{SessionID: "d", Cwd: filepath.Join(home, "elsewhere")},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if len(batches) != 3 {
 		t.Fatalf("expected 3 batches, got %d: %+v", len(batches), batches)
@@ -76,10 +80,34 @@ func TestGroupBySessionServerUsesEachSessionsOwnRepositoryOverride(t *testing.T)
 func TestGroupBySessionServerSkipsSessionsWithoutADirectory(t *testing.T) {
 	writeConfig(t, `{"username": "jake", "serverUrl": "http://localhost:4242"}`)
 
-	batches := groupBySessionServer([]sessions.Entry{{SessionID: "a", Cwd: ""}})
+	batches, err := groupBySessionServer([]sessions.Entry{{SessionID: "a", Cwd: ""}})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if len(batches) != 0 {
 		t.Fatalf("expected no batches, got %+v", batches)
+	}
+}
+
+func TestGroupBySessionServerReportsAnUnreadableConfig(t *testing.T) {
+	writeConfig(t, `{ this is not json`)
+
+	// Dropping the sessions instead would let every one of them age out of the
+	// world with the daemon reporting success.
+	if _, err := groupBySessionServer([]sessions.Entry{{SessionID: "a", Cwd: os.Getenv("HOME")}}); err == nil {
+		t.Fatal("expected an error for a malformed config")
+	}
+}
+
+func TestValidateHeartbeatIntervalRejectsSpinAndGaps(t *testing.T) {
+	for _, interval := range []time.Duration{0, -5 * time.Second, 90 * time.Second} {
+		if err := validateHeartbeatInterval(interval); err == nil {
+			t.Errorf("interval %s was accepted", interval)
+		}
+	}
+	if err := validateHeartbeatInterval(DefaultHeartbeatInterval); err != nil {
+		t.Errorf("the default interval was rejected: %v", err)
 	}
 }
 
@@ -103,13 +131,17 @@ func TestPostHeartbeatSendsTheSessionIdsWithAnInstallationCredential(t *testing.
 	}))
 	defer server.Close()
 
-	if err := postHeartbeat(heartbeatBatch{ServerURL: server.URL, Username: "jake", SessionIDs: []string{"a", "b"}}); err != nil {
-		t.Fatal(err)
-	}
-
-	device, err := identity.LoadOrCreate()
+	tracked, err := postHeartbeat(heartbeatBatch{ServerURL: server.URL, Username: "jake", SessionIDs: []string{"a", "b"}})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if tracked != 2 {
+		t.Errorf("tracked = %d, want the count the server reported", tracked)
+	}
+
+	device, deviceErr := identity.LoadOrCreate()
+	if deviceErr != nil {
+		t.Fatal(deviceErr)
 	}
 	if authorization != "Bearer "+device.Secret {
 		t.Errorf("authorization = %q, want the installation credential", authorization)
@@ -130,7 +162,7 @@ func TestPostHeartbeatReportsANonSuccessStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	err := postHeartbeat(heartbeatBatch{ServerURL: server.URL, SessionIDs: []string{"a"}})
+	_, err := postHeartbeat(heartbeatBatch{ServerURL: server.URL, SessionIDs: []string{"a"}})
 	if err == nil {
 		t.Fatal("expected an error for a 401")
 	}

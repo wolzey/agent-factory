@@ -22,6 +22,11 @@ const DefaultHeartbeatInterval = 30 * time.Second
 
 const heartbeatRequestTimeout = 5 * time.Second
 
+// The server forgets a reported session 90 seconds after the last report, so an
+// interval at or past that guarantees gaps where sessions are reapable. A
+// non-positive one would spin the reporter into a request loop.
+const maxHeartbeatInterval = 45 * time.Second
+
 var (
 	heartbeatInterval time.Duration
 	heartbeatOnce     bool
@@ -40,7 +45,22 @@ var heartbeatCmd = &cobra.Command{
 	RunE: runHeartbeat,
 }
 
+func validateHeartbeatInterval(interval time.Duration) error {
+	if interval <= 0 {
+		return fmt.Errorf("--interval must be positive, got %s", interval)
+	}
+	if interval > maxHeartbeatInterval {
+		return fmt.Errorf("--interval must be %s or less, got %s -- the server forgets a session 90s after its last report", maxHeartbeatInterval, interval)
+	}
+	return nil
+}
+
 func runHeartbeat(cmd *cobra.Command, args []string) error {
+	if err := validateHeartbeatInterval(heartbeatInterval); err != nil {
+		ui.Error(err.Error())
+		return err
+	}
+
 	if !config.Exists() {
 		ui.Error("Agent Factory is not installed. Run 'agent-factory install' first.")
 		return fmt.Errorf("not installed")
@@ -74,7 +94,12 @@ func reportOnce(verbose bool) error {
 		return err
 	}
 
-	batches := groupBySessionServer(entries)
+	batches, err := groupBySessionServer(entries)
+	if err != nil {
+		// Silently reporting nothing here would let every session on this machine
+		// age out with no indication that the config is the reason.
+		return err
+	}
 	if len(batches) == 0 {
 		if verbose {
 			ui.Info("No running sessions to report.")
@@ -84,15 +109,22 @@ func reportOnce(verbose bool) error {
 
 	var lastErr error
 	for _, batch := range batches {
-		if err := postHeartbeat(batch); err != nil {
+		tracked, err := postHeartbeat(batch)
+		if err != nil {
 			lastErr = err
 			if verbose {
 				ui.Warn(fmt.Sprintf("%s: %s", batch.ServerURL, err.Error()))
 			}
 			continue
 		}
+		// The server answers with what it is actually holding. Reporting what was
+		// sent instead would call a full registry a success.
+		if tracked < len(batch.SessionIDs) {
+			ui.Warn(fmt.Sprintf("%s: sent %d session(s), server is holding %d", batch.ServerURL, len(batch.SessionIDs), tracked))
+			continue
+		}
 		if verbose {
-			ui.Info(fmt.Sprintf("%s: reported %d session(s)", batch.ServerURL, len(batch.SessionIDs)))
+			ui.Info(fmt.Sprintf("%s: reported %d session(s)", batch.ServerURL, tracked))
 		}
 	}
 	return lastErr
@@ -108,7 +140,7 @@ type heartbeatBatch struct {
 // groupBySessionServer resolves each session's own directory through the config,
 // so a session in a repository with a server override is reported to that server
 // and to no other.
-func groupBySessionServer(entries []sessions.Entry) []heartbeatBatch {
+func groupBySessionServer(entries []sessions.Entry) ([]heartbeatBatch, error) {
 	byServer := make(map[string]*heartbeatBatch)
 	for _, entry := range entries {
 		if entry.Cwd == "" {
@@ -116,7 +148,12 @@ func groupBySessionServer(entries []sessions.Entry) []heartbeatBatch {
 		}
 
 		cfg, err := config.ReadForPath(entry.Cwd)
-		if err != nil || cfg.ServerURL == "" {
+		if err != nil {
+			// An unreadable or malformed config affects every session on this
+			// machine, so it is reported rather than dropping them one by one.
+			return nil, err
+		}
+		if cfg.ServerURL == "" {
 			continue
 		}
 
@@ -134,16 +171,18 @@ func groupBySessionServer(entries []sessions.Entry) []heartbeatBatch {
 		batches = append(batches, *batch)
 	}
 	sort.Slice(batches, func(i, j int) bool { return batches[i].ServerURL < batches[j].ServerURL })
-	return batches
+	return batches, nil
 }
 
-func postHeartbeat(batch heartbeatBatch) error {
+// postHeartbeat reports one batch and returns how many sessions the server says
+// it is holding.
+func postHeartbeat(batch heartbeatBatch) (int, error) {
 	body, err := json.Marshal(map[string]any{
 		"session_ids": batch.SessionIDs,
 		"username":    batch.Username,
 	})
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), heartbeatRequestTimeout)
@@ -153,19 +192,26 @@ func postHeartbeat(batch heartbeatBatch) error {
 	// open by this installation and no other.
 	request, err := newAuthenticatedJSONRequest(ctx, http.MethodPost, batch.ServerURL+"/api/registry/heartbeat", body)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("server returned %d", response.StatusCode)
+		return 0, fmt.Errorf("server returned %d", response.StatusCode)
 	}
-	return nil
+
+	var result struct {
+		Tracked int `json:"tracked"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		return 0, err
+	}
+	return result.Tracked, nil
 }
 
 func init() {
@@ -179,6 +225,11 @@ var heartbeatInstallCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Run the heartbeat in the background (launchd on macOS, systemd --user on Linux)",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := validateHeartbeatInterval(heartbeatInterval); err != nil {
+			ui.Error(err.Error())
+			return err
+		}
+
 		binaryPath, err := os.Executable()
 		if err != nil {
 			return err

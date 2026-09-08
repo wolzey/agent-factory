@@ -27,8 +27,12 @@ func Dir() string {
 // Read returns every live session in dir.
 //
 // A registry file whose process is gone is skipped: reporting it would hold a
-// dead agent on screen forever, which is worse than the reaping this fixes. A
-// recycled pid can only keep a session one heartbeat longer than it deserves.
+// dead agent on screen forever, which is worse than the reaping this fixes.
+// The check is pid existence only -- an entry with no pid cannot be checked at
+// all, and a pid reused by an unrelated process would keep its stale entry
+// reported for as long as that process runs. Claude removes a session file when
+// the session ends, so both are recovery paths for a file it did not get to
+// remove, not the normal case.
 func Read(dir string) ([]Entry, error) {
 	return read(dir, processAlive)
 }
