@@ -23,9 +23,10 @@ const DefaultHeartbeatInterval = 30 * time.Second
 const heartbeatRequestTimeout = 5 * time.Second
 
 // The server forgets a reported session 90 seconds after the last report, so an
-// interval at or past that guarantees gaps where sessions are reapable. A
-// non-positive one would spin the reporter into a request loop.
-const maxHeartbeatInterval = 45 * time.Second
+// interval must leave room for a failed report and its retry inside that
+// window: at 45s a single failure already opens a gap where the session is
+// reapable. A non-positive interval would spin the reporter into a request loop.
+const maxHeartbeatInterval = 30 * time.Second
 
 var (
 	heartbeatInterval time.Duration
@@ -50,7 +51,7 @@ func validateHeartbeatInterval(interval time.Duration) error {
 		return fmt.Errorf("--interval must be positive, got %s", interval)
 	}
 	if interval > maxHeartbeatInterval {
-		return fmt.Errorf("--interval must be %s or less, got %s -- the server forgets a session 90s after its last report", maxHeartbeatInterval, interval)
+		return fmt.Errorf("--interval must be %s or less, got %s -- the server forgets a session 90s after its last report, and one failed report must still leave room for a retry", maxHeartbeatInterval, interval)
 	}
 	return nil
 }
@@ -70,13 +71,18 @@ func runHeartbeat(cmd *cobra.Command, args []string) error {
 		return reportOnce(true)
 	}
 
+	// A ticker rather than sleeping after each report: sleeping adds however long
+	// the request took to every cycle, which quietly stretches the real interval
+	// toward the server's expiry window.
+	ticker := time.NewTicker(heartbeatInterval)
+	defer ticker.Stop()
 	for {
 		if err := reportOnce(false); err != nil {
 			// Keep beating: a server restart or a dropped network should not end
 			// the daemon, or every session on this machine silently ages out.
 			fmt.Fprintln(os.Stderr, "agent-factory: heartbeat failed: "+err.Error())
 		}
-		time.Sleep(heartbeatInterval)
+		<-ticker.C
 	}
 }
 

@@ -101,7 +101,7 @@ func TestGroupBySessionServerReportsAnUnreadableConfig(t *testing.T) {
 }
 
 func TestValidateHeartbeatIntervalRejectsSpinAndGaps(t *testing.T) {
-	for _, interval := range []time.Duration{0, -5 * time.Second, 90 * time.Second} {
+	for _, interval := range []time.Duration{0, -5 * time.Second, 45 * time.Second, 90 * time.Second} {
 		if err := validateHeartbeatInterval(interval); err == nil {
 			t.Errorf("interval %s was accepted", interval)
 		}

@@ -325,7 +325,13 @@ async function main() {
   });
   state.setSessionNameLookup((id) => registry.getSessionName(id));
   state.setSessionAliveCheck((id) => registry.isSessionAlive(id));
-  state.setSessionKeepAliveCheck((id, ownerId) => remoteRegistry.isAlive(id, ownerId));
+  state.setSessionKeepAliveCheck((id, ownerId) => remoteRegistry.isAlive(id, ownerId) || remoteRegistry.warmingUp());
+  // Only sessions this server already has, reported by the installation that
+  // owns them. An id naming nothing here is refused rather than stored.
+  remoteRegistry.setAdmissionCheck((id, ownerId) => {
+    const session = state.get(id);
+    return !!session && session.ownerId === ownerId;
+  });
 
   // Await first poll so the cache is populated before we restore sessions
   await registry.start();

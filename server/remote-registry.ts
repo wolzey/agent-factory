@@ -27,13 +27,30 @@ const LEGACY_INSTALLATION = '';
  *  hold its sessions alive, without needing to say goodbye. */
 export class RemoteSessionRegistry {
   private installations = new Map<string, Map<string, number>>();
+  private readonly startedAt: number;
+  /** Fail closed: until a server wires the world state in, a report holds nothing. */
+  private admits: (sessionId: string, ownerId?: string) => boolean = () => false;
 
   constructor(
     private ttlMs: number = REMOTE_HEARTBEAT_TTL_MS,
     private maxTracked: number = MAX_TRACKED_HEARTBEAT_SESSIONS,
     private now: () => number = Date.now,
     private maxPerInstallation: number = MAX_HEARTBEAT_SESSIONS_PER_INSTALLATION,
-  ) {}
+  ) {
+    this.startedAt = this.now();
+  }
+
+  /** Which reports are worth holding: a session the server already knows, whose
+   *  owner is the installation reporting it.
+   *
+   *  This is the admission boundary. Without it a report of invented ids fills
+   *  the registry -- and installation credentials are self-minted, so a
+   *  per-installation cap alone is no bound at all. Ids that name nothing the
+   *  server has cost nothing to refuse: a session the server does not know
+   *  cannot be reaped either. */
+  setAdmissionCheck(fn: (sessionId: string, ownerId?: string) => boolean) {
+    this.admits = fn;
+  }
 
   /** Record a heartbeat. Returns how many of the reported ids it is holding. */
   heartbeat(sessionIds: unknown, ownerId?: string): number {
@@ -49,11 +66,17 @@ export class RemoteSessionRegistry {
 
     let accepted = 0;
     for (const id of ids) {
+      if (!this.admits(id, ownerId)) continue;
       // Refreshing an id this installation already holds is always allowed; the
       // caps only bound how many new ones can accumulate.
       if (!shelf.has(id)) {
         if (shelf.size >= this.maxPerInstallation) continue;
-        if (this.trackedCount() >= this.maxTracked && !this.evictFromLargest(shelf)) continue;
+        // At capacity a report is refused rather than evicting anyone. Evicting
+        // "the largest shelf" reads as fairness but is a weapon: the largest
+        // shelf is usually the machine doing the most work, and credentials are
+        // free to mint, so a swarm of small shelves could delete its entries one
+        // by one and get its live sessions reaped.
+        if (this.trackedCount() >= this.maxTracked) continue;
       }
       shelf.set(id, this.now() + this.ttlMs);
       accepted += 1;
@@ -80,6 +103,16 @@ export class RemoteSessionRegistry {
     return true;
   }
 
+  /** True for the first TTL after startup.
+   *
+   *  A restarted server restores sessions with their old lastEventAt but an
+   *  empty registry, and the first stale sweep runs 30 seconds in -- before a
+   *  reporter on a 30-second cycle is guaranteed to have checked in. Without
+   *  this window the restart itself reaps every remotely-held session. */
+  warmingUp(): boolean {
+    return this.now() - this.startedAt < this.ttlMs;
+  }
+
   get size(): number {
     this.prune();
     return this.trackedCount();
@@ -89,29 +122,6 @@ export class RemoteSessionRegistry {
     let total = 0;
     for (const shelf of this.installations.values()) total += shelf.size;
     return total;
-  }
-
-  /** Make room for a new id by dropping the soonest-expiring entry of whichever
-   *  installation holds the most. An installation flooding the registry loses
-   *  its own entries before it can crowd out a machine reporting real work. */
-  private evictFromLargest(requester: Map<string, number>): boolean {
-    let largest: Map<string, number> | undefined;
-    for (const shelf of this.installations.values()) {
-      if (!largest || shelf.size > largest.size) largest = shelf;
-    }
-    if (!largest || largest.size <= requester.size) return false;
-
-    let oldest: string | undefined;
-    let oldestExpiry = Infinity;
-    for (const [id, expiresAt] of largest) {
-      if (expiresAt < oldestExpiry) {
-        oldest = id;
-        oldestExpiry = expiresAt;
-      }
-    }
-    if (oldest === undefined) return false;
-    largest.delete(oldest);
-    return true;
   }
 
   private prune(): void {

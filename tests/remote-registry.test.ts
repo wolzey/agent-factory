@@ -8,6 +8,14 @@ import {
 } from '../shared/constants.js';
 import type { HookPayload } from '../shared/types.js';
 
+/** A registry that admits anything, for the tests that are about TTL and caps
+ *  rather than about which reports are worth holding. */
+function openRegistry(...args: ConstructorParameters<typeof RemoteSessionRegistry>) {
+  const registry = new RemoteSessionRegistry(...args);
+  registry.setAdmissionCheck(() => true);
+  return registry;
+}
+
 function sessionStart(sessionId: string): HookPayload {
   return {
     hook_event_name: 'SessionStart',
@@ -21,7 +29,7 @@ function sessionStart(sessionId: string): HookPayload {
 describe('RemoteSessionRegistry', () => {
   it('keeps a reported session alive until its heartbeats stop', () => {
     let now = 1_000;
-    const registry = new RemoteSessionRegistry(REMOTE_HEARTBEAT_TTL_MS, 10, () => now);
+    const registry = openRegistry(REMOTE_HEARTBEAT_TTL_MS, 10, () => now);
 
     registry.heartbeat(['session-a']);
     expect(registry.isAlive('session-a')).toBe(true);
@@ -39,7 +47,7 @@ describe('RemoteSessionRegistry', () => {
   });
 
   it('ignores ids that are not usable strings', () => {
-    const registry = new RemoteSessionRegistry();
+    const registry = openRegistry();
 
     expect(registry.heartbeat(['ok', '', '   ', 42, null, 'x'.repeat(600), 'ok'])).toBe(1);
     expect(registry.isAlive('ok')).toBe(true);
@@ -47,7 +55,7 @@ describe('RemoteSessionRegistry', () => {
   });
 
   it('lets only the reporting installation hold an owned session open', () => {
-    const registry = new RemoteSessionRegistry();
+    const registry = openRegistry();
 
     registry.heartbeat(['owned'], 'owner-a');
 
@@ -61,7 +69,7 @@ describe('RemoteSessionRegistry', () => {
   });
 
   it('cannot be used to drop a session someone else is holding open', () => {
-    const registry = new RemoteSessionRegistry();
+    const registry = openRegistry();
 
     registry.heartbeat(['shared-id'], 'owner-a');
 
@@ -73,24 +81,47 @@ describe('RemoteSessionRegistry', () => {
     expect(registry.isAlive('shared-id', 'owner-a')).toBe(true);
   });
 
-  it('evicts the flooding installation rather than the machine doing real work', () => {
+  it('holds only sessions the server knows, reported by the installation that owns them', () => {
+    const registry = new RemoteSessionRegistry();
+    registry.setAdmissionCheck((id, ownerId) => id === 'real' && ownerId === 'owner-a');
+
+    // Credentials are self-minted, so this is the boundary that actually bounds
+    // the registry: invented ids are refused instead of occupying capacity.
+    expect(registry.heartbeat(['real', 'invented'], 'owner-a')).toBe(1);
+    expect(registry.heartbeat(['real'], 'owner-b')).toBe(0);
+    expect(registry.size).toBe(1);
+    expect(registry.isAlive('real', 'owner-a')).toBe(true);
+  });
+
+  it('refuses a new id at capacity instead of evicting another installation', () => {
     let now = 1_000;
-    const registry = new RemoteSessionRegistry(REMOTE_HEARTBEAT_TTL_MS, 4, () => now, 4);
+    const registry = openRegistry(REMOTE_HEARTBEAT_TTL_MS, 3, () => now, 3);
 
-    registry.heartbeat(['f1', 'f2', 'f3'], 'flooder');
-    expect(registry.size).toBe(3);
+    registry.heartbeat(['w1', 'w2', 'w3'], 'worker');
 
-    expect(registry.heartbeat(['real-1'], 'worker')).toBe(1);
-    expect(registry.heartbeat(['real-2'], 'worker')).toBe(1);
+    // A smaller shelf must not be able to make room by deleting a bigger one's
+    // entries -- that would reap the busiest machine's live sessions.
+    expect(registry.heartbeat(['x1'], 'other')).toBe(0);
+    expect(registry.isAlive('w1', 'worker')).toBe(true);
+    expect(registry.isAlive('w2', 'worker')).toBe(true);
+    expect(registry.isAlive('w3', 'worker')).toBe(true);
+  });
 
-    expect(registry.isAlive('real-1', 'worker')).toBe(true);
-    expect(registry.isAlive('real-2', 'worker')).toBe(true);
-    expect(registry.size).toBe(4);
+  it('spares restored sessions for one TTL after a restart', () => {
+    let now = 1_000;
+    const registry = openRegistry(REMOTE_HEARTBEAT_TTL_MS, 10, () => now);
+
+    // A restart restores sessions with an old lastEventAt and an empty registry,
+    // and the first sweep runs before a 30-second reporter is sure to have
+    // checked in.
+    expect(registry.warmingUp()).toBe(true);
+    now += REMOTE_HEARTBEAT_TTL_MS;
+    expect(registry.warmingUp()).toBe(false);
   });
 
   it('bounds what one request and one server can hold', () => {
     let now = 1_000;
-    const registry = new RemoteSessionRegistry(REMOTE_HEARTBEAT_TTL_MS, 3, () => now);
+    const registry = openRegistry(REMOTE_HEARTBEAT_TTL_MS, 3, () => now);
 
     const flood = Array.from({ length: MAX_HEARTBEAT_SESSION_IDS + 50 }, (_, i) => `flood-${i}`);
     expect(registry.heartbeat(flood)).toBe(3);
@@ -110,8 +141,12 @@ describe('StateManager remote keep-alive', () => {
   it('spares a heartbeated session from the stale reaper and reaps a silent one', () => {
     let now = 1_000;
     const state = new StateManager('arcade', () => now);
-    const registry = new RemoteSessionRegistry(REMOTE_HEARTBEAT_TTL_MS, 10, () => now);
+    const registry = openRegistry(REMOTE_HEARTBEAT_TTL_MS, 10, () => now);
     state.setSessionKeepAliveCheck((id, ownerId) => registry.isAlive(id, ownerId));
+    registry.setAdmissionCheck((id, ownerId) => {
+      const session = state.get(id);
+      return !!session && session.ownerId === ownerId;
+    });
 
     state.handleHookEvent(sessionStart('reported'));
     state.handleHookEvent(sessionStart('silent'));
@@ -132,7 +167,7 @@ describe('StateManager remote keep-alive', () => {
   it('does not let a pushed id conjure a session the server never saw', () => {
     let now = 1_000;
     const state = new StateManager('arcade', () => now);
-    const registry = new RemoteSessionRegistry(REMOTE_HEARTBEAT_TTL_MS, 10, () => now);
+    const registry = openRegistry(REMOTE_HEARTBEAT_TTL_MS, 10, () => now);
     state.setSessionKeepAliveCheck((id, ownerId) => registry.isAlive(id, ownerId));
 
     registry.heartbeat(['never-started']);
