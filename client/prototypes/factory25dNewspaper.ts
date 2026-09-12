@@ -8,19 +8,21 @@ export function createNewspaper(parent: THREE.Group, canvas: HTMLCanvasElement, 
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const paper = new THREE.Group(); paper.name = 'couch-newspaper';
   paper.position.set(.62, .278, 5.65); paper.rotation.set(-Math.PI / 2, 0, Math.PI / 2 + .12);
+  paper.scale.setScalar(.6);
   parent.add(paper);
-  const textureCanvas = document.createElement('canvas'); textureCanvas.width = 512; textureCanvas.height = 360;
+  const textureCanvas = document.createElement('canvas'); textureCanvas.width = 128; textureCanvas.height = 90;
   const ink = textureCanvas.getContext('2d')!;
+  ink.scale(.25, .25);
   ink.fillStyle = '#e9e1c9'; ink.fillRect(0, 0, 512, 360);
-  ink.fillStyle = '#26291f'; ink.textAlign = 'center'; ink.font = 'bold 55px Georgia'; ink.fillText('The Fluid Press', 256, 72);
+  ink.fillStyle = '#26291f'; ink.textAlign = 'center'; ink.font = "48px 'Geist Pixel', monospace"; ink.fillText('The Fluid Press', 256, 72);
   ink.fillRect(24, 88, 464, 5); ink.font = '17px monospace'; ink.fillText('THE COUCH EDITION · NO. 001', 256, 116);
-  ink.font = 'bold 44px Georgia'; ink.fillText('Built around people.', 256, 183);
-  ink.font = '20px Georgia'; ink.fillText('Company news. Office life. Good things.', 256, 217);
+  ink.font = "32px 'Geist Pixel', monospace"; ink.fillText('Built around people.', 256, 183);
+  ink.font = '20px monospace'; ink.fillText('Company news. Office life. Good things.', 256, 217);
   ink.fillStyle = '#818270';
   for (let col = 0; col < 3; col++) for (let line = 0; line < 8; line++) ink.fillRect(24 + col * 158, 244 + line * 10, line === 7 ? 87 : 140, 3);
   ink.fillStyle = '#b7af99'; ink.fillRect(253, 0, 2, 360);
   const texture = new THREE.CanvasTexture(textureCanvas); texture.colorSpace = THREE.SRGBColorSpace;
-  texture.magFilter = THREE.NearestFilter;
+  texture.magFilter = texture.minFilter = THREE.NearestFilter; texture.generateMipmaps = false;
   const geometry = new THREE.BoxGeometry(.64, .45, .012);
   const edge = new THREE.MeshStandardMaterial({ color: '#cec6af', roughness: 1 });
   const print = new THREE.MeshStandardMaterial({ map: texture, roughness: 1 });
@@ -40,7 +42,7 @@ export function createNewspaper(parent: THREE.Group, canvas: HTMLCanvasElement, 
         <div class="newspaper-lead"><div><p class="newspaper-kicker">COMPANY · MARCH 17, 2026</p><h2>More fuel for<br>people-powered commerce.</h2><p class="newspaper-deck">Fluid’s $15 million funding round backs its AI capabilities and We-Commerce platform.</p></div><div class="newspaper-number"><strong>$15M</strong><span>FUNDING ROUND</span><small>Capital raised, not revenue.</small></div></div>
         <div class="newspaper-columns"><article><h3>Investing in the people behind every sale</h3><p>Fluid announced a funding round led by Vess Pearson, with participation from Alex Bean and existing investors. The investment supports AI tools that help sellers create content, find useful information, and stay connected with customers.</p><a href="https://www.directsellingnews.com/2026/03/17/fluid-raises-15-million-to-expand-ai-capabilities-and-we-commerce-platform/" target="_blank" rel="noopener noreferrer">Read the report · Direct Selling News ↗</a></article>
         <article><p class="newspaper-kicker">FROM THE ARCHIVE · JULY 19, 2024</p><h3>NOW Tech joins Fluid</h3><p>Fluid’s acquisition of the direct-selling mobile app company brought the NOW Tech team and its mobile experience into the Fluid family.</p><a href="https://www.directsellingnews.com/2024/07/19/ai-leader-fluid-acquires-direct-selling-mobile-app-company-nowtech/" target="_blank" rel="noopener noreferrer">Read the announcement ↗</a></article>
-        <aside class="newspaper-brief"><p class="newspaper-kicker">AFTER HOURS</p><h3>Fresh ink.<br>Fresh rotation.</h3><p>The lounge DJ now has 45 tracks: jazzy hip-hop, soul, familiar favorites, and a quieter late-night mix.</p><p class="newspaper-signoff">Pull up a seat. Queue something good.</p></aside></div>
+        <aside class="newspaper-brief"><p class="newspaper-kicker">AFTER HOURS</p><h3>Fresh ink.<br>Fresh rotation.</h3><p>The lounge DJ has a bigger rotation of jazzy hip-hop, soul, familiar favorites, and a quieter late-night mix.</p><p class="newspaper-signoff">Pull up a seat. Queue something good.</p></aside></div>
       </div>
       <div data-edition="office" hidden><p class="newspaper-kicker">PEOPLE & PLACES</p><h2>This week,<br>around the office.</h2><div class="newspaper-office-grid">
         <article class="newspaper-office-lead"><span class="newspaper-stamp">BLITZ WEEK</span><h3>Who’s coming through?</h3><p>The Studios schedule is the starting point for upcoming Blitz Weeks. Check the original announcement for the latest context before making plans.</p><a href="https://fluidtech.slack.com/archives/C0ATJTPAZ5G/p1787003708647279" target="_blank" rel="noopener noreferrer">Open the Studios schedule in Slack ↗</a><p class="newspaper-note">A confirmed visitor lineup isn’t available for this edition. The linked schedule was posted August 17.</p></article>
