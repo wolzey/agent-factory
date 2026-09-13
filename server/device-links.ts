@@ -14,10 +14,11 @@ export interface DeviceRepository {
   loadLinkedDevices(): Promise<LinkedDevice[]>;
   saveLinkedDevice(device: LinkedDevice): Promise<void>;
   deleteLinkedDevice(id: string): Promise<void>;
+  findLinkedDevice(tokenHash: string): Promise<LinkedDevice | null>;
 }
 interface LinkRequest {
   id: string; code: string; tokenHash: string; name: string; expiresAt: number;
-  principal?: AuthPrincipal; deviceId?: string;
+  principal?: AuthPrincipal; deviceId?: string; grant?: LinkedDevice;
 }
 export class DeviceLinkError extends Error {
   constructor(public status: number, public code: string) { super(code); }
@@ -103,7 +104,7 @@ export class DeviceLinks {
       // The requester generated and retained the high-entropy credential before starting.
       // Only its commitment was sent at begin; approval cannot be claimed by another device.
       // A lost success response is recoverable via session authentication or this same exchange.
-      const device: LinkedDevice = { ...link.principal, id: randomUUID(), name: link.name,
+      const device: LinkedDevice = link.grant ??= { ...link.principal, id: randomUUID(), name: link.name,
         tokenHash: link.tokenHash, createdAt: this.now(), expiresAt: this.now() + DEVICE_TTL_MS };
       await this.repository.saveLinkedDevice(device);
       this.devices.set(device.id, device); link.deviceId = device.id;
@@ -112,9 +113,17 @@ export class DeviceLinks {
   }
   cancel(id: unknown, token: string | undefined) {
     return this.serial(async () => {
-      const link = this.bound(id, token);
-      if (link.deviceId) { await this.repository.deleteLinkedDevice(link.deviceId); this.devices.delete(link.deviceId); }
-      this.pending.delete(link.id); return { cancelled: true };
+      if (!token || !TOKEN.test(token)) throw new DeviceLinkError(404, 'link_unavailable');
+      const hash = nativeTokenHash(token);
+      const link = typeof id === 'string' ? this.pending.get(id) : undefined;
+      if (link && link.tokenHash !== hash) throw new DeviceLinkError(404, 'link_unavailable');
+      // Display-code expiry is not proof that an in-flight/uncertain save created no grant.
+      // Resolve the durable commitment even after the pending request expired or restarted.
+      const device = await this.repository.findLinkedDevice(hash);
+      if (device) await this.repository.deleteLinkedDevice(device.id);
+      for (const [deviceId, known] of this.devices) if (known.tokenHash === hash) this.devices.delete(deviceId);
+      if (link) this.pending.delete(link.id);
+      return { cancelled: true };
     });
   }
   authenticate(token: string | undefined): LinkedDevice | null {

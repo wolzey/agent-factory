@@ -67,6 +67,41 @@ describe('native device grants', () => {
     expect(await first).toEqual(await duplicate); await cancel;
     expect(links.authenticate(key)).toBeNull(); expect(await repo.loadLinkedDevices()).toEqual([]);
   }));
+  it('recovers a committed-but-unacknowledged save without creating a grant that revives after revocation', () => fixture(async (links, repo, clock) => {
+    const key = token(), link = links.begin('Mac', nativeTokenHash(key)); await links.approve(link.userCode, principal);
+    const save = repo.saveLinkedDevice.bind(repo);
+    vi.spyOn(repo, 'saveLinkedDevice').mockImplementationOnce(async device => { await save(device); throw new Error('reply lost'); });
+    await expect(links.exchange(link.requestId, key)).rejects.toThrow('reply lost');
+    const first = (await repo.loadLinkedDevices())[0];
+    await links.exchange(link.requestId, key);
+    expect(await repo.loadLinkedDevices()).toHaveLength(1); expect(links.list(principal.ownerId)[0].id).toBe(first.id);
+    await links.revoke(first.id, principal.ownerId);
+    const restarted = new DeviceLinks(repo, () => clock.now); await restarted.initialize();
+    expect(restarted.authenticate(key)).toBeNull(); expect(await repo.loadLinkedDevices()).toEqual([]);
+  }));
+  it('cancels a durable grant even if its code expired during the exchange write', () => fixture(async (links, repo, clock) => {
+    const key = token(), link = links.begin('Mac', nativeTokenHash(key)); await links.approve(link.userCode, principal);
+    clock.now += LINK_TTL_MS - 1;
+    const save = repo.saveLinkedDevice.bind(repo); let release!: () => void, entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; }), gate = new Promise<void>(resolve => { release = resolve; });
+    vi.spyOn(repo, 'saveLinkedDevice').mockImplementation(async device => { entered(); await gate; await save(device); });
+    const exchange = links.exchange(link.requestId, key); await started;
+    const cancel = links.cancel(link.requestId, key); clock.now += 100; release();
+    await exchange; await cancel;
+    expect(links.authenticate(key)).toBeNull(); expect(await repo.loadLinkedDevices()).toEqual([]);
+  }));
+  it('cancels uncertain writes after request expiry and retries a committed-but-unacknowledged cancellation', () => fixture(async (links, repo, clock) => {
+    const key = token(), link = links.begin('Mac', nativeTokenHash(key)); await links.approve(link.userCode, principal);
+    const save = repo.saveLinkedDevice.bind(repo);
+    vi.spyOn(repo, 'saveLinkedDevice').mockImplementationOnce(async device => { await save(device); throw new Error('reply lost'); });
+    await expect(links.exchange(link.requestId, key)).rejects.toThrow(); clock.now += LINK_TTL_MS;
+    await links.cancel(link.requestId, key); expect(await repo.loadLinkedDevices()).toEqual([]);
+    const next = links.begin('Mac', nativeTokenHash(key)); await links.approve(next.userCode, principal); await links.exchange(next.requestId, key);
+    const remove = repo.deleteLinkedDevice.bind(repo);
+    vi.spyOn(repo, 'deleteLinkedDevice').mockImplementationOnce(async id => { await remove(id); throw new Error('delete reply lost'); });
+    await expect(links.cancel(next.requestId, key)).rejects.toThrow('delete reply lost');
+    await links.cancel(next.requestId, key); expect(links.authenticate(key)).toBeNull(); expect(await repo.loadLinkedDevices()).toEqual([]);
+  }));
   it('expires device sessions independently of browser credentials', () => fixture(async (links, repo, clock) => {
     const key = token(), link = links.begin('Mac', nativeTokenHash(key)); await links.approve(link.userCode, principal); await links.exchange(link.requestId, key);
     clock.now += DEVICE_TTL_MS; expect(links.authenticate(key)).toBeNull(); expect(links.list(principal.ownerId)).toEqual([]);

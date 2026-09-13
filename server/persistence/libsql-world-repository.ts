@@ -94,7 +94,7 @@ export class LibSqlWorldRepository implements WorldRepository {
         records TEXT NOT NULL,
         checked_at INTEGER NOT NULL CHECK (checked_at > 0)
       )`);
-      await this.client.execute(`CREATE TABLE IF NOT EXISTS linked_devices (id TEXT PRIMARY KEY NOT NULL, record TEXT NOT NULL)`);
+      await this.client.execute(`CREATE TABLE IF NOT EXISTS linked_devices (id TEXT PRIMARY KEY NOT NULL, token_hash TEXT NOT NULL UNIQUE, record TEXT NOT NULL)`);
       this.markHealthy();
     } catch (error) {
       this.markFailed(error);
@@ -179,7 +179,12 @@ export class LibSqlWorldRepository implements WorldRepository {
   }
 
   async saveLinkedDevice(device: LinkedDevice): Promise<void> {
-    await this.requireClient().execute({ sql: 'INSERT INTO linked_devices (id, record) VALUES (?, ?)', args: [device.id, JSON.stringify(device)] });
+    await this.requireClient().execute({ sql: 'INSERT INTO linked_devices (id, token_hash, record) VALUES (?, ?, ?) ON CONFLICT(id) DO NOTHING', args: [device.id, device.tokenHash, JSON.stringify(device)] });
+  }
+
+  async findLinkedDevice(tokenHash: string): Promise<LinkedDevice | null> {
+    const result = await this.requireClient().execute({ sql: 'SELECT record FROM linked_devices WHERE token_hash = ?', args: [tokenHash] });
+    return result.rows[0] ? JSON.parse(String(result.rows[0].record)) as LinkedDevice : null;
   }
 
   async deleteLinkedDevice(id: string): Promise<void> {
