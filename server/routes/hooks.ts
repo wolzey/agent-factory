@@ -1,3 +1,4 @@
+import { publicBranding } from '../../shared/factory-branding.js';
 import type { FastifyInstance } from 'fastify';
 import type { HookPayload, ServerConfig, EmoteType, ChatMessage } from '../../shared/types.js';
 import { VALID_EMOTES, CHAT_MESSAGE_MAX_LENGTH } from '../../shared/constants.js';
@@ -170,7 +171,7 @@ export function registerHookRoutes(
   app.get('/api/config', async (_request, reply) => {
     // The file also holds private installation settings. Never serialize it wholesale.
     const { title, environment, graphicDeath } = serverConfig;
-    return reply.send({ title, environment, graphicDeath });
+    return reply.header('Cache-Control', 'no-store').send({ title, environment, graphicDeath, branding: publicBranding(serverConfig.branding) });
   });
 
   app.get('/api/health', async (_request, reply) => {

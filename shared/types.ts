@@ -350,6 +350,7 @@ export type EnvironmentType = 'arcade' | 'farm' | 'office' | 'mining' | 'factory
 
 // === Server Config ===
 export interface ServerConfig {
+  branding?: import('./factory-branding.js').FactoryBranding;
   title: string;
   environment?: EnvironmentType;
   graphicDeath?: boolean;
