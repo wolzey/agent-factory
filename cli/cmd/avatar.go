@@ -32,8 +32,10 @@ func runAvatar(cmd *cobra.Command, args []string) error {
 
 	device, identityErr := identity.LoadOrCreate()
 	initial := cfg.Avatar
+	revision := ""
 	if identityErr == nil {
 		if current, syncErr := syncAvatar(cmd.Context(), avatarHTTPClient, cfg.ServerURL, device.Secret, nil); syncErr == nil {
+			revision = current.Revision
 			if current.Saved {
 				initial = current.Avatar
 			}
@@ -60,8 +62,8 @@ func runAvatar(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	if identityErr != nil {
 		ui.Warn("Avatar saved locally. Your installation identity could not be loaded, so the factory has not been updated.")
-	} else if _, syncErr := syncAvatar(cmd.Context(), avatarHTTPClient, cfg.ServerURL, device.Secret, &result.Avatar); syncErr != nil {
-		ui.Warn("Avatar saved locally, but not synced: " + syncErr.Error())
+	} else if _, syncErr := syncAvatar(cmd.Context(), avatarHTTPClient, cfg.ServerURL, device.Secret, &result.Avatar, revision); syncErr != nil {
+		ui.Warn("Avatar saved locally; the factory save could not be confirmed: " + syncErr.Error())
 		ui.Info("Run 'agent-factory avatar' and save again when the factory is available.")
 	} else {
 		ui.Success("Avatar updated in the factory and saved locally!")

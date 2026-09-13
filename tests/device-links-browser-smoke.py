@@ -10,7 +10,7 @@ with sync_playwright() as p:
     page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
     native=p.request.new_context(base_url=origin)
     token='afn1_'+encoded(secrets.token_bytes(32))
-    created=native.post('/api/auth/devices/link',data={'deviceName':'iPad · local test','tokenHash':encoded(hashlib.sha256(token.encode()).digest())})
+    created=native.post('/api/auth/devices/link',data={'deviceName':'iPad · local test','tokenHash':encoded(hashlib.sha256(token.encode()).digest()),'avatarWrite':True})
     assert created.status==200;link=created.json();headers={'Authorization':'Bearer '+token}
     assert native.post('/api/auth/devices/link/exchange',headers=headers,data={'requestId':link['requestId']}).json()['status']=='pending'
     context.request.post(origin+'/__test/login')
@@ -20,13 +20,14 @@ with sync_playwright() as p:
     page.get_by_role('button',name='Check code',exact=True).click()
     expect(page.locator('.device-approval')).to_be_visible()
     expect(page.locator('.device-approval h3')).to_contain_text('iPad · local test')
+    expect(page.locator('.device-approval')).to_contain_text('edit')
     Path('/tmp/af-device-link-evidence').mkdir(exist_ok=True)
     page.screenshot(path='/tmp/af-device-link-evidence/browser-approval.png',full_page=True)
     page.get_by_role('button',name='Connect this device',exact=True).click()
     expect(page.get_by_role('status')).to_contain_text('Approved.')
     exchange=native.post('/api/auth/devices/link/exchange',headers=headers,data={'requestId':link['requestId']})
     assert exchange.status==200 and exchange.json()['ownerId']=='A'*43
-    assert native.get('/api/auth/native/session',headers=headers).status==200
+    assert native.get('/api/auth/native/session',headers=headers).json()['device']['avatarWrite'] is True
     page.get_by_role('button',name='Refresh devices',exact=True).click()
     expect(page.locator('.device-list')).to_contain_text('iPad · local test')
     page.set_viewport_size({'width':390,'height':844})

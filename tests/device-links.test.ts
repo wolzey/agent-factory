@@ -35,6 +35,48 @@ describe('native device grants', () => {
     expect(() => restarted.begin('Another device', nativeTokenHash(key))).toThrow('credential_already_linked');
     expect(new AuthService('secret').authenticateDevice(`Bearer ${key}`)).toEqual({ kind: 'invalid' });
   }));
+  it('requires explicit avatar-write approval and persists the exact granted scope', () => fixture(async (links, repo, clock) => {
+    const key = token(), link = links.begin('Editable iPad', nativeTokenHash(key), true);
+    expect(links.inspect(link.userCode).avatarWrite).toBe(true);
+    expect(() => links.begin('iPad', nativeTokenHash(key), false)).toThrow('scope_changed');
+    await expect(links.approve(link.userCode, principal)).rejects.toMatchObject({ status: 428 });
+    await links.approve(link.userCode, principal, true); await links.exchange(link.requestId, key);
+    const oldKey = token(), old = links.begin('Old read-only app', nativeTokenHash(oldKey));
+    await links.approve(old.userCode, principal, true); await links.exchange(old.requestId, oldKey);
+    const restarted = new DeviceLinks(repo, () => clock.now); await restarted.initialize();
+    expect(restarted.authenticate(key)?.avatarWrite).toBe(true);
+    expect(restarted.authenticate(oldKey)?.avatarWrite).toBe(false);
+  }));
+  it('patches only the authenticated owner, preserves legacy fields, and rejects stale writes and revoked grants', () => fixture(async (links, repo) => {
+    const app = Fastify(); await app.register(cookie);
+    const profiles = new AvatarProfiles(repo, new StateManager('factory25d')); await profiles.initialize();
+    registerDeviceLinkRoutes(app, new AuthService('test-secret'), links, profiles);
+    const key = token(), readKey = token();
+    for (const [credential, write] of [[key, true], [readKey, false]] as const) {
+      const link = links.begin('iPad', nativeTokenHash(credential), write);
+      await links.approve(link.userCode, principal, write); await links.exchange(link.requestId, credential);
+    }
+    try {
+      const initial = await profiles.save(principal.ownerId, { ...profiles.get(principal.ownerId).avatar, hat: 'party', trail: 'sparkle', graphicDeath: true });
+      const patch = (credential: string, revision: unknown, changes: unknown) => app.inject({ method: 'PATCH', url: '/api/auth/native/avatar', headers: { authorization: `Bearer ${credential}` }, payload: { revision, changes } });
+      expect((await patch(readKey, initial.revision, { hairStyle: 2 })).statusCode).toBe(403);
+      expect((await patch(key, undefined, { hairStyle: 2 })).statusCode).toBe(428);
+      expect((await patch(key, initial.revision, { ownerId: other.ownerId })).statusCode).toBe(400);
+      expect((await patch(key, initial.revision, { hairStyle: 99 })).statusCode).toBe(400);
+      const replies = await Promise.all([patch(key, initial.revision, { hairStyle: 2 }), patch(key, initial.revision, { hairStyle: 3 })]);
+      expect(replies.map(r => r.statusCode).sort()).toEqual([200, 409]);
+      const canonical = profiles.get(principal.ownerId);
+      expect(replies.find(r => r.statusCode === 409)!.json().profile).toEqual(canonical);
+      expect(canonical.avatar).toMatchObject({ hat: 'party', trail: 'sparkle', graphicDeath: true });
+      expect(profiles.get(other.ownerId).saved).toBe(false);
+      const restarted = new AvatarProfiles(repo, new StateManager('factory25d')); await restarted.initialize();
+      expect(restarted.get(principal.ownerId)).toEqual(canonical);
+      const session = await app.inject({ url: '/api/auth/native/session', headers: { authorization: `Bearer ${key}` } });
+      expect(session.json().profile).toEqual(canonical);
+      await links.revoke(links.authenticate(key)!.id, principal.ownerId);
+      expect((await patch(key, canonical.revision, { hairStyle: 4 })).statusCode).toBe(401);
+    } finally { await app.close(); }
+  }));
   it('expires pending links, rejects takeover, and never revives revoked grants through exchange retry', () => fixture(async (links, repo, clock) => {
     const key = token(), link = links.begin('Mac', nativeTokenHash(key));
     await links.approve(link.userCode, principal);

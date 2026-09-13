@@ -36,14 +36,14 @@ func TestAvatarSyncPreservesDesignerFields(t *testing.T) {
 				t.Error("designer choices changed during save")
 			}
 		}
-		_ = json.NewEncoder(w).Encode(avatarProfile{Avatar: avatar, Saved: true})
+		_ = json.NewEncoder(w).Encode(avatarProfile{Avatar: avatar, Saved: true, Revision: "revision-1"})
 	}))
 	defer server.Close()
 	current, err := syncAvatar(context.Background(), server.Client(), server.URL, "fixture-only", nil)
 	if err != nil || !current.Saved || *current.Avatar.HairStyle != hair {
 		t.Fatalf("load failed: %v", err)
 	}
-	if _, err := syncAvatar(context.Background(), server.Client(), server.URL, "fixture-only", &avatar); err != nil {
+	if _, err := syncAvatar(context.Background(), server.Client(), server.URL, "fixture-only", &avatar, "revision-1"); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Join(methods, ",") != "GET,PUT" {

@@ -33,16 +33,17 @@ function hook(session_id = 'one', ownerId: string | undefined = owner, avatar: A
 function memoryRepository(): AvatarProfileRepository {
   return { loadAvatarProfiles: async () => [], saveAvatarProfile: vi.fn(async () => {}) };
 }
+let initialRevision = '';
 async function fixture(repository = memoryRepository()) {
   const state = new StateManager('factory25d');
   state.handleHookEvent(hook()); state.handleHookEvent(hook('two')); state.handleHookEvent(hook('other', otherOwner));
-  const profiles = new AvatarProfiles(repository, state); await profiles.initialize();
+  const profiles = new AvatarProfiles(repository, state); await profiles.initialize(); initialRevision = profiles.get(owner).revision;
   const app = Fastify(); await app.register(cookie);
   registerAvatarRoutes(app, auth, profiles);
   registerHookRoutes(app, state, new BroadcastManager(), { title: 'Test' }, auth, () => ({ healthy: true, lastSavedRevision: 0, lastError: null }), new RemoteSessionRegistry());
   return { app, state, profiles, repository };
 }
-const request = { method: 'PUT' as const, url: '/api/avatar', headers: { origin: 'http://factory.test', host: 'factory.test', 'x-avatar-owner': owner }, cookies: { af_session: browserCookie }, payload: { avatar: red } };
+const request = { method: 'PUT' as const, url: '/api/avatar', headers: { origin: 'http://factory.test', host: 'factory.test', 'x-avatar-owner': owner }, cookies: { af_session: browserCookie }, get payload() { return { avatar: red, revision: initialRevision }; } };
 
 describe('avatar editing access and validation', () => {
   it('requires a browser identity and rejects cross-site or originless saves', async () => {
@@ -56,7 +57,7 @@ describe('avatar editing access and validation', () => {
   it('loads the current owner appearance without exposing anyone else’s profile', async () => {
     const { app } = await fixture();
     const response = await app.inject({ method: 'GET', url: '/api/avatar?ownerId=' + otherOwner, cookies: request.cookies });
-    expect(response.json()).toEqual({ avatar: blue, saved: false });
+    expect(response.json()).toEqual({ avatar: blue, saved: false, revision: expect.any(String) });
     expect(response.headers['cache-control']).toBe('no-store'); await app.close();
   });
   it('rejects stale editor requests after a browser switches identities', async () => {
@@ -71,7 +72,7 @@ describe('avatar editing access and validation', () => {
     const { app, state } = await fixture();
     const before = structuredClone(state.get('one'))!;
     const changes: StateNotification[] = []; state.onStateChange(change => changes.push(change));
-    const response = await app.inject({ ...request, payload: { avatar: red, ownerId: otherOwner } });
+    const response = await app.inject({ ...request, payload: { avatar: red, ownerId: otherOwner, revision: initialRevision } });
     expect(response.statusCode).toBe(200);
     expect(state.get('one')).toEqual({ ...before, avatar: red });
     expect(state.get('two')?.avatar).toEqual(red); expect(state.get('other')?.avatar).toEqual(blue);
@@ -101,11 +102,11 @@ describe('durable avatar preferences and terminal compatibility', () => {
     const { app, state, profiles } = await fixture(); await profiles.save(owner, red);
     const headers = { authorization: `Bearer ${device}` };
     const loaded = await app.inject({ method: 'GET', url: '/api/avatar/installation?ownerId=' + otherOwner, headers });
-    expect(loaded.json()).toEqual({ avatar: red, saved: true });
+    expect(loaded.json()).toEqual({ avatar: red, saved: true, revision: expect.any(String) });
     const next = { ...blue, hairStyle: 2, faceAccessory: 1, facialHair: 4, headAccessory: 6, mouthStyle: 1, shirtDesign: 9, hairColor: '#604332', pantsColor: '#2b3440', shoeColor: '#555555', skinTone: '#ae704e' };
     const before = structuredClone(state.get('one'));
-    const saved = await app.inject({ method: 'PUT', url: '/api/avatar/installation', headers, payload: { avatar: next, ownerId: otherOwner } });
-    expect(saved.statusCode).toBe(200); expect(saved.json()).toEqual({ avatar: next, saved: true });
+    const saved = await app.inject({ method: 'PUT', url: '/api/avatar/installation', headers, payload: { avatar: next, ownerId: otherOwner, revision: loaded.json().revision } });
+    expect(saved.statusCode).toBe(200); expect(saved.json()).toEqual({ avatar: next, saved: true, revision: expect.any(String) });
     expect(state.get('one')).toEqual({ ...before, avatar: next });
     expect(state.get('two')?.avatar).toEqual(next); expect(state.get('other')?.avatar).toEqual(blue);
     const browser = await app.inject({ method: 'GET', url: '/api/avatar', cookies: request.cookies });
@@ -113,7 +114,7 @@ describe('durable avatar preferences and terminal compatibility', () => {
     // A stale hook does not undo either editor's deliberate save.
     await app.inject({ method: 'POST', url: '/api/hooks', headers, payload: hook('one', owner, red) });
     expect(state.get('one')?.avatar).toEqual(next);
-    await app.inject(request); expect(profiles.get(owner).avatar).toEqual(red);
+    await app.inject({ ...request, payload: { avatar: red, revision: profiles.get(owner).revision } }); expect(profiles.get(owner).avatar).toEqual(red);
     await app.close();
   });
 
@@ -132,9 +133,9 @@ describe('durable avatar preferences and terminal compatibility', () => {
     const put = { method: 'PUT' as const, url: '/api/avatar/installation', headers: { authorization: `Bearer ${device}` } };
     expect((await app.inject({ ...put, payload: { avatar: { ...red, hairStyle: 9 } } })).statusCode).toBe(400);
     vi.mocked(repository.saveAvatarProfile).mockRejectedValueOnce(new Error('offline'));
-    expect((await app.inject({ ...put, payload: { avatar: red } })).statusCode).toBe(503);
+    expect((await app.inject({ ...put, payload: { avatar: red, revision: profiles.get(owner).revision } })).statusCode).toBe(503);
     expect(profiles.get(owner).avatar).toEqual(blue);
-    expect((await app.inject({ ...put, payload: { avatar: red } })).statusCode).toBe(200);
+    expect((await app.inject({ ...put, payload: { avatar: red, revision: profiles.get(owner).revision } })).statusCode).toBe(200);
     await app.close();
   });
 
@@ -177,7 +178,7 @@ describe('durable avatar preferences and terminal compatibility', () => {
     repository = new LibSqlWorldRepository({ url, production: false }); await repository.initialize();
     const restored = new StateManager('factory25d'); restored.restoreWorld((await repository.load())!);
     const loaded = new AvatarProfiles(repository, restored); await loaded.initialize();
-    expect(loaded.get(owner)).toEqual({ avatar: red, saved: true });
+    expect(loaded.get(owner)).toEqual({ avatar: red, saved: true, revision: expect.any(String) });
     restored.handleHookEvent(hook('after-restart'));
     expect(restored.get('after-restart')?.avatar).toEqual(red); await repository.close();
   });
@@ -196,5 +197,19 @@ describe('durable avatar preferences and terminal compatibility', () => {
     await Promise.all([first, last]);
     expect(repository.saveAvatarProfile).toHaveBeenLastCalledWith(owner, blue);
     expect(profiles.get(owner).avatar).toEqual(blue); expect(state.get('one')?.avatar).toEqual(blue); await app.close();
+  });
+});
+
+describe('uncertain avatar persistence', () => {
+  it('reconciles a committed write whose acknowledgement was lost before accepting another CAS', async () => {
+    let stored: Array<{ownerId: string; avatar: AvatarConfig}> = [];
+    const repository = { loadAvatarProfiles: async () => stored, saveAvatarProfile: async (ownerId: string, avatar: AvatarConfig) => { stored = [{ ownerId, avatar }]; throw new Error('acknowledgement lost'); } };
+    const profiles = new AvatarProfiles(repository, new StateManager('factory25d')); await profiles.initialize();
+    const before = profiles.get('alice');
+    await expect(profiles.save('alice', { ...before.avatar, color: '#123456' }, before.revision)).rejects.toThrow('acknowledgement lost');
+    expect(profiles.get('alice').avatar.color).toBe('#123456');
+    await expect(profiles.save('alice', before.avatar, before.revision)).rejects.toThrow('avatar_changed');
+    const restarted = new AvatarProfiles(repository, new StateManager('factory25d')); await restarted.initialize();
+    expect(restarted.get('alice')).toEqual(profiles.get('alice'));
   });
 });

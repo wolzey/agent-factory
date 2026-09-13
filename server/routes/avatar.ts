@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { AuthService } from '../auth.js';
-import type { AvatarProfiles } from '../avatar-profiles.js';
+import { AvatarConflict, type AvatarProfiles } from '../avatar-profiles.js';
 import { readBrowserPrincipal } from './auth.js';
 import { isSameHostOrigin, usesSecureTransport } from '../request-security.js';
 import { parseAvatarConfig } from '../../shared/avatar-customization.js';
@@ -22,15 +22,17 @@ export function registerAvatarRoutes(app: FastifyInstance, auth: AuthService, pr
   app.get('/api/avatar/installation', async (request, reply) => {
     const ownerId = installationOwner(request, reply);
     if (!ownerId) return;
-    return profiles.get(ownerId);
+    return profiles.read(ownerId);
   });
-  app.put<{ Body: { avatar?: unknown } }>('/api/avatar/installation', { bodyLimit: 4096 }, async (request, reply) => {
+  app.put<{ Body: { avatar?: unknown; revision?: unknown } }>('/api/avatar/installation', { bodyLimit: 4096 }, async (request, reply) => {
     const ownerId = installationOwner(request, reply);
     if (!ownerId) return;
     const avatar = parseAvatarConfig(request.body?.avatar);
     if (!avatar) return reply.status(400).send({ error: 'That appearance is invalid.' });
-    try { return await profiles.save(ownerId, avatar); }
-    catch {
+    if (typeof request.body?.revision !== 'string') return reply.status(428).send({ error: 'Reload your avatar before saving; this client needs revision support.' });
+    try { return await profiles.save(ownerId, avatar, request.body.revision); }
+    catch (error) {
+      if (error instanceof AvatarConflict) return reply.status(409).send({ error: 'avatar_changed', profile: error.profile });
       request.log.error('Could not persist terminal avatar profile');
       return reply.status(503).send({ error: 'Your avatar could not be saved. Please try again.' });
     }
@@ -43,10 +45,10 @@ export function registerAvatarRoutes(app: FastifyInstance, auth: AuthService, pr
     if (request.headers['x-avatar-owner'] && request.headers['x-avatar-owner'] !== principal.ownerId) {
       return reply.status(409).send({ error: 'Your connection changed. Reopen the avatar editor.' });
     }
-    return reply.send(profiles.get(principal.ownerId));
+    return reply.send(await profiles.read(principal.ownerId));
   });
 
-  app.put<{ Body: { avatar?: unknown } }>('/api/avatar', { bodyLimit: 4096 }, async (request, reply) => {
+  app.put<{ Body: { avatar?: unknown; revision?: unknown } }>('/api/avatar', { bodyLimit: 4096 }, async (request, reply) => {
     reply.header('Cache-Control', 'no-store');
     const principal = readBrowserPrincipal(request, auth);
     if (!principal) return reply.status(401).send({ error: 'Connect your browser to edit your avatar.' });
@@ -60,10 +62,12 @@ export function registerAvatarRoutes(app: FastifyInstance, auth: AuthService, pr
     }
     const avatar = parseAvatarConfig(request.body?.avatar);
     if (!avatar) return reply.status(400).send({ error: 'That appearance is invalid. Reload the editor and try again.' });
+    if (typeof request.body?.revision !== 'string') return reply.status(428).send({ error: 'Reload the editor before saving.' });
     try {
       // Ownership comes exclusively from the verified browser cookie.
-      return reply.send(await profiles.save(principal.ownerId, avatar));
-    } catch {
+      return reply.send(await profiles.save(principal.ownerId, avatar, request.body.revision as string));
+    } catch (error) {
+      if (error instanceof AvatarConflict) return reply.status(409).send({ error: 'avatar_changed', profile: error.profile });
       request.log.error('Could not persist avatar profile');
       return reply.status(503).send({ error: 'Your avatar couldn’t be saved. Please try again.' });
     }
