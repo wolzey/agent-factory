@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { AuthService } from '../auth.js';
-import type { AvatarProfiles } from '../avatar-profiles.js';
+import { AvatarConflict, type AvatarProfiles } from '../avatar-profiles.js';
+import { parseAvatarConfig, AVATAR_COLORS, AVATAR_STYLES } from '../../shared/avatar-customization.js';
 import { DeviceLinks, DeviceLinkError, LINK_TTL_MS } from '../device-links.js';
 import { readBrowserPrincipal } from './auth.js';
 import { isSameHostOrigin, usesSecureTransport } from '../request-security.js';
@@ -39,11 +40,11 @@ export function registerDeviceLinkRoutes(app: FastifyInstance, auth: AuthService
   }
   app.get('/api/auth/devices/capabilities', async (_request, reply) => {
     reply.header('Cache-Control', 'no-store');
-    return { version: 1, linkExpiresIn: LINK_TTL_MS / 1000, scopes: ['identity:read', 'avatar:read'], nativeCommands: false };
+    return { version: 1, linkExpiresIn: LINK_TTL_MS / 1000, scopes: ['identity:read', 'avatar:read', 'avatar:write'], avatarEditing: 1, nativeCommands: false };
   });
-  app.post<{ Body: { deviceName?: unknown; tokenHash?: unknown } }>('/api/auth/devices/link', { bodyLimit: 1024 }, async (request, reply) => {
+  app.post<{ Body: { deviceName?: unknown; tokenHash?: unknown; avatarWrite?: unknown } }>('/api/auth/devices/link', { bodyLimit: 1024 }, async (request, reply) => {
     if (!allowed(request, reply, 'create', 20)) return;
-    return result(reply, () => links.begin(request.body?.deviceName, request.body?.tokenHash));
+    return result(reply, () => links.begin(request.body?.deviceName, request.body?.tokenHash, request.body?.avatarWrite ?? false));
   });
   app.post<{ Body: { requestId?: unknown } }>('/api/auth/devices/link/exchange', { bodyLimit: 1024 }, async (request, reply) => {
     if (!allowed(request, reply, 'exchange', 240)) return;
@@ -57,9 +58,9 @@ export function registerDeviceLinkRoutes(app: FastifyInstance, auth: AuthService
     if (!browser(request, reply)) return;
     return result(reply, () => links.inspect(request.body?.code));
   });
-  app.post<{ Body: { code?: unknown } }>('/api/auth/devices/approve', { bodyLimit: 1024 }, async (request, reply) => {
+  app.post<{ Body: { code?: unknown; allowAvatarWrite?: unknown } }>('/api/auth/devices/approve', { bodyLimit: 1024 }, async (request, reply) => {
     const principal = browser(request, reply); if (!principal) return;
-    return result(reply, () => links.approve(request.body?.code, principal));
+    return result(reply, () => links.approve(request.body?.code, principal, request.body?.allowAvatarWrite));
   });
   app.get('/api/auth/devices', async (request, reply) => {
     const principal = browser(request, reply, false); if (!principal) return;
@@ -73,7 +74,24 @@ export function registerDeviceLinkRoutes(app: FastifyInstance, auth: AuthService
     if (!allowed(request, reply, 'session', 240)) return;
     const device = links.authenticate(bearer(request));
     if (!device) return reply.code(401).send({ authenticated: false });
-    return { ...links.session(device), profile: profiles.get(device.ownerId) };
+    return { ...links.session(device), profile: await profiles.read(device.ownerId) };
+  });
+  app.patch<{ Body: { revision?: unknown; changes?: unknown } }>('/api/auth/native/avatar', { bodyLimit: 4096 }, async (request, reply) => {
+    if (!allowed(request, reply, 'avatar', 60)) return;
+    const device = links.authenticate(bearer(request));
+    if (!device) return reply.code(401).send({ authenticated: false });
+    if (device.avatarWrite !== true) return reply.code(403).send({ error: 'avatar_write_approval_required' });
+    const changes = request.body?.changes;
+    const allowedFields = new Set<string>(['spriteIndex', ...AVATAR_COLORS, ...Object.keys(AVATAR_STYLES)]);
+    if (!changes || typeof changes !== 'object' || Array.isArray(changes) || !Object.keys(changes).length || Object.keys(changes).some(key => !allowedFields.has(key))) return reply.code(400).send({ error: 'invalid_avatar_patch' });
+    if (typeof request.body.revision !== 'string') return reply.code(428).send({ error: 'avatar_revision_required' });
+    const avatar = parseAvatarConfig({ ...(await profiles.read(device.ownerId)).avatar, ...changes });
+    if (!avatar) return reply.code(400).send({ error: 'invalid_avatar_patch' });
+    try { return await profiles.save(device.ownerId, avatar, request.body.revision); }
+    catch (error) {
+      if (error instanceof AvatarConflict) return reply.code(409).send({ error: 'avatar_changed', profile: error.profile });
+      return reply.code(503).send({ error: 'avatar_save_unconfirmed' });
+    }
   });
   app.post('/api/auth/native/logout', async (request, reply) => {
     if (!allowed(request, reply, 'logout', 30)) return;

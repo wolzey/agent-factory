@@ -8,6 +8,7 @@ const HASH = /^[A-Za-z0-9_-]{43}$/;
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 export interface LinkedDevice extends AuthPrincipal {
+  avatarWrite?: boolean;
   id: string; name: string; tokenHash: string; createdAt: number; expiresAt: number;
 }
 export interface DeviceRepository {
@@ -18,6 +19,7 @@ export interface DeviceRepository {
 }
 interface LinkRequest {
   id: string; code: string; tokenHash: string; name: string; expiresAt: number;
+  avatarWrite?: boolean;
   principal?: AuthPrincipal; deviceId?: string; grant?: LinkedDevice;
 }
 export class DeviceLinkError extends Error {
@@ -27,7 +29,7 @@ export function nativeTokenHash(token: string): string {
   return createHash('sha256').update(token).digest('base64url');
 }
 export function publicDevice(device: LinkedDevice) {
-  return { id: device.id, name: device.name, createdAt: device.createdAt, expiresAt: device.expiresAt };
+  return { id: device.id, name: device.name, createdAt: device.createdAt, expiresAt: device.expiresAt, avatarWrite: device.avatarWrite === true };
 }
 
 // One authoritative process per factory, as for world state. Pending links expire on restart;
@@ -41,6 +43,7 @@ export class DeviceLinks {
     for (const device of await this.repository.loadLinkedDevices()) {
       if (!HASH.test(device.tokenHash) || !HASH.test(device.ownerId) || !device.id ||
           !device.name || device.name.length > 60 || !device.username || device.username.length > 100 ||
+          (device.avatarWrite !== undefined && typeof device.avatarWrite !== 'boolean') ||
           !Number.isSafeInteger(device.createdAt) || !Number.isSafeInteger(device.expiresAt)) throw new Error('Invalid stored device');
       if (device.expiresAt > this.now()) this.devices.set(device.id, device);
       else await this.repository.deleteLinkedDevice(device.id);
@@ -53,22 +56,23 @@ export class DeviceLinks {
     for (const [id, device] of this.devices) if (device.expiresAt <= this.now()) this.devices.delete(id);
     for (const [id, link] of this.pending) if (link.expiresAt <= this.now()) this.pending.delete(id);
   }
-  begin(name: unknown, tokenHash: unknown) {
+  begin(name: unknown, tokenHash: unknown, avatarWrite: unknown = false) {
     if (typeof name !== 'string' || !name.trim() || name.trim().length > 60 || /[\x00-\x1f\x7f]/.test(name) ||
         typeof tokenHash !== 'string' || !HASH.test(tokenHash)) throw new DeviceLinkError(400, 'invalid_request');
+    if (typeof avatarWrite !== 'boolean') throw new DeviceLinkError(400, 'invalid_request');
     this.prune();
     if ([...this.devices.values()].some(device => device.tokenHash === tokenHash)) throw new DeviceLinkError(409, 'credential_already_linked');
     const existing = [...this.pending.values()].find(link => link.tokenHash === tokenHash);
-    if (existing) return this.describe(existing);
+    if (existing) { if (!!existing.avatarWrite !== avatarWrite) throw new DeviceLinkError(409, 'scope_changed'); return this.describe(existing); }
     if (this.pending.size >= 1000) throw new DeviceLinkError(429, 'busy');
     let code: string;
     do { code = [...randomBytes(10)].map(value => ALPHABET[value % ALPHABET.length]).join(''); }
     while ([...this.pending.values()].some(link => link.code === code));
-    const link: LinkRequest = { id: randomBytes(32).toString('base64url'), code, tokenHash, name: name.trim(), expiresAt: this.now() + LINK_TTL_MS };
+    const link: LinkRequest = { id: randomBytes(32).toString('base64url'), code, tokenHash, name: name.trim(), avatarWrite, expiresAt: this.now() + LINK_TTL_MS };
     this.pending.set(link.id, link); return this.describe(link);
   }
   private describe(link: LinkRequest) {
-    return { requestId: link.id, userCode: `${link.code.slice(0,5)}-${link.code.slice(5)}`, deviceName: link.name, expiresAt: link.expiresAt, pollIntervalSeconds: 3 };
+    return { requestId: link.id, userCode: `${link.code.slice(0,5)}-${link.code.slice(5)}`, deviceName: link.name, expiresAt: link.expiresAt, pollIntervalSeconds: 3, avatarWrite: link.avatarWrite === true };
   }
   private byCode(value: unknown) {
     this.prune();
@@ -78,9 +82,10 @@ export class DeviceLinks {
     return link;
   }
   inspect(code: unknown) { return this.describe(this.byCode(code)); }
-  approve(code: unknown, principal: AuthPrincipal) {
+  approve(code: unknown, principal: AuthPrincipal, allowAvatarWrite: unknown = false) {
     return this.serial(async () => {
       const link = this.byCode(code);
+      if (link.avatarWrite && allowAvatarWrite !== true) throw new DeviceLinkError(428, 'avatar_write_approval_required');
       if (link.principal && link.principal.ownerId !== principal.ownerId) throw new DeviceLinkError(409, 'already_approved');
       link.principal = { ...principal }; return { approved: true };
     });
@@ -105,7 +110,7 @@ export class DeviceLinks {
       // Only its commitment was sent at begin; approval cannot be claimed by another device.
       // A lost success response is recoverable via session authentication or this same exchange.
       const device: LinkedDevice = link.grant ??= { ...link.principal, id: randomUUID(), name: link.name,
-        tokenHash: link.tokenHash, createdAt: this.now(), expiresAt: this.now() + DEVICE_TTL_MS };
+        tokenHash: link.tokenHash, avatarWrite: link.avatarWrite === true, createdAt: this.now(), expiresAt: this.now() + DEVICE_TTL_MS };
       await this.repository.saveLinkedDevice(device);
       this.devices.set(device.id, device); link.deviceId = device.id;
       return this.session(device);
