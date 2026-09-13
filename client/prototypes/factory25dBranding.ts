@@ -10,6 +10,7 @@ export function onFactoryBranding(receive: () => void) { listeners.add(receive);
 const changed = () => { for (const receive of listeners) receive(); };
 export function disposeFactoryBranding() { generation++; request?.abort(); request=undefined; logo=undefined; }
 export async function applyFactoryBranding(identity: FactoryIdentity, host: string) {
+  if (JSON.stringify(current)===JSON.stringify(identity) && (logo || !identity.branding?.logoUrl || request)) return;
   const epoch = ++generation; request?.abort(); request = undefined;
   current = identity; logo = undefined; changed();
   if (!identity.branding?.logoUrl) return;
@@ -24,6 +25,7 @@ export async function applyFactoryBranding(identity: FactoryIdentity, host: stri
     const blob = new Blob(chunks, { type: 'image/png' });
     const header = new DataView(await blob.slice(0, 24).arrayBuffer());
     if (header.byteLength < 24 || header.getUint32(0) !== 0x89504e47 || header.getUint32(4) !== 0x0d0a1a0a || header.getUint32(16) > 1024 || header.getUint32(20) > 1024) return;
+    clearTimeout(timeout);
     objectUrl = URL.createObjectURL(blob); const image = new Image(); image.src = objectUrl; await image.decode();
     if (epoch !== generation || controller.signal.aborted) return;
     logo = image; changed();

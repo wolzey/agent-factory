@@ -42,3 +42,17 @@ it('refreshes changed branding without a title change and handles explicit logo 
   window.dispatchEvent(new Event('focus'));await vi.advanceTimersByTimeAsync(0);expect(receive).toHaveBeenLastCalledWith({title:next.title,branding:next.branding});
   stop();
 });
+
+it('delivers unchanged identity refreshes so failed artwork downloads can retry', async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal('document', Object.assign(new EventTarget(), {hidden:false}));
+  vi.stubGlobal('window', new EventTarget());
+  const identity=createBranding({title:'Retry Lab'});
+  const receive=vi.fn(), fetcher=vi.fn().mockResolvedValue({ok:true,json:async()=>identity});
+  const stop=watchFactoryIdentity(receive,'https://factory.example',fetcher);
+  await vi.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(receive).toHaveBeenCalledTimes(2);
+  expect(receive.mock.calls[0]).toEqual(receive.mock.calls[1]);
+  stop();
+});
