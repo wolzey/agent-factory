@@ -46,3 +46,21 @@ Server/browser work lives on `wolzey/factory-branding`, based on current main; d
 To remove branding, remove the logo setting and use the neutral title/accent, then restart. Roll back the server/browser commit if needed; updated native clients still accept the legacy title-only response. Content-addressed image downloads may remain cached, but no longer appear after clients receive logo removal.
 
 There is no new administrator authorization model in this version. A future settings screen must add explicit operator authorization, durable storage and conditional updates before exposing configuration writes.
+
+## Validation
+
+- Server/browser unit suite: 1,305 tests pass in a full run with two workers. Production browser/server build passes.
+- Two independent Chromium clients consume the same production-serialized identity, recover from an intentionally failed first PNG request, render the PNG and shared title, open the shelf preview/download, and refresh a same-title revision to change the accent and remove the logo. The interactive flag's stir/scatter/reset check passes.
+- Native: 132 Unity tests pass, including all three scene bindings, title-only compatibility, rejected origins, byte/image bounds, aspect fitting, factory switching and explicit removal. A Unity render uses the same serialized fixture, and the Mac Xcode export builds successfully. A native release containing this feature is still required; the earlier notarized neutral candidate predates it.
+
+To reproduce the local browser check (Python environment with Playwright/Chromium required):
+
+```sh
+node --import tsx tests/support/branding-fixture.ts /tmp/factory-branding-fixture
+pnpm exec vite --host 127.0.0.1 --port 4293 --strictPort
+python tests/branding-browser-smoke.py --fixture-dir /tmp/factory-branding-fixture --output /tmp/factory-branding-proof
+```
+
+Run the Python command separately while Vite is running. The fixture blocks non-local requests and intercepts all API traffic; it never contacts a live factory.
+
+Visual evidence and review notes: [branding verification](evidence/factory-branding/README.md).
