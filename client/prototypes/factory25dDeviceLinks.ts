@@ -1,6 +1,6 @@
 import './factory25dDeviceLinks.css';
 type Principal = { ownerId: string; username: string };
-type Device = { id: string; name: string; createdAt: number; expiresAt: number };
+type Device = { id: string; name: string; createdAt: number; expiresAt: number; avatarWrite?: boolean };
 
 export function createDeviceLinks(getPrincipal: () => Principal | undefined) {
   const dialog = document.createElement('dialog'); dialog.className = 'factory-device-links'; dialog.setAttribute('aria-labelledby', 'device-links-title');
@@ -8,10 +8,10 @@ export function createDeviceLinks(getPrincipal: () => Principal | undefined) {
     <div class="device-body"><p class="device-origin"></p><p class="device-account"></p>
     <form><label for="factory-device-code">Code shown in the Mac or iPad app</label><div class="device-code-row"><input id="factory-device-code" placeholder="ABCDE-FGHJK" maxlength="16" autocomplete="off" autocapitalize="characters" spellcheck="false" required><button>Check code</button></div></form>
     <section class="device-approval" hidden><span class="device-eyebrow">REQUESTING DEVICE</span><h3></h3><p>Approve only if this name and code match the app you are connecting.</p><button class="device-approve">Connect this device</button></section>
-    <p class="device-status" role="status" aria-live="polite"></p><section><h3>Connected devices</h3><p class="device-scope">Devices can read your identity and avatar. Disconnecting revokes that device’s access.</p><ul class="device-list"></ul><button class="device-refresh">Refresh devices</button></section></div>`;
+    <p class="device-status" role="status" aria-live="polite"></p><section><h3>Connected devices</h3><p class="device-scope">Each device’s approved permissions are shown below. Disconnecting revokes that device’s access.</p><ul class="device-list"></ul><button class="device-refresh">Refresh devices</button></section></div>`;
   document.body.append(dialog);
   const input = dialog.querySelector<HTMLInputElement>('input')!, status = dialog.querySelector<HTMLElement>('.device-status')!, approval = dialog.querySelector<HTMLElement>('.device-approval')!, list = dialog.querySelector('ul')!;
-  let owner = '', checkedCode = '', generation = 0, inspection = 0, controller = new AbortController();
+  let owner = '', checkedCode = '', generation = 0, inspection = 0, requestedWrite = false, controller = new AbortController();
   const lifetime = new AbortController(), events = { signal: lifetime.signal };
   async function request(path: string, method = 'GET', body?: unknown) {
     const current = generation, identity = owner;
@@ -31,7 +31,7 @@ export function createDeviceLinks(getPrincipal: () => Principal | undefined) {
       if (!data.devices.length) { const row = document.createElement('li'); row.textContent = 'No connected devices yet.'; list.append(row); }
       for (const device of data.devices) {
         const row = document.createElement('li'), info = document.createElement('span'), button = document.createElement('button');
-        info.textContent = `${device.name} · expires ${new Date(device.expiresAt).toLocaleDateString()}`;
+        info.textContent = `${device.name} · ${device.avatarWrite ? 'read and edit avatar' : 'read only'} · expires ${new Date(device.expiresAt).toLocaleDateString()}`;
         button.textContent = 'Disconnect'; let confirming = false;
         button.addEventListener('click', async () => {
           if (!confirming) { confirming = true; button.textContent = 'Confirm disconnect'; return; }
@@ -57,14 +57,14 @@ export function createDeviceLinks(getPrincipal: () => Principal | undefined) {
   dialog.querySelector('form')!.addEventListener('submit', async event => {
     event.preventDefault(); approval.hidden = true; checkedCode = ''; status.textContent = 'Checking code…';
     const code = input.value.trim(), attempt = ++inspection;
-    try { const link = await request('/api/auth/devices/inspect', 'POST', { code }); if (attempt !== inspection) return; checkedCode = link.userCode; approval.querySelector('h3')!.textContent = `${link.deviceName} · ${link.userCode}`; approval.hidden = false; status.textContent = ''; }
+    try { const link = await request('/api/auth/devices/inspect', 'POST', { code }); if (attempt !== inspection) return; checkedCode = link.userCode; requestedWrite = link.avatarWrite === true; approval.querySelector('p')!.textContent = requestedWrite ? 'This device will read your identity and edit your avatar across your factory sessions. Approve only if the name and code match your app.' : 'This device will read your identity and avatar. Approve only if the name and code match your app.'; approval.querySelector('h3')!.textContent = `${link.deviceName} · ${link.userCode}`; approval.hidden = false; status.textContent = ''; }
     catch (error) { fail(error); }
   }, events);
   input.addEventListener('input', () => { inspection++; checkedCode = ''; approval.hidden = true; }, events);
   dialog.querySelector('.device-approve')!.addEventListener('click', async () => {
     if (!checkedCode) return;
     const code = checkedCode; checkedCode = ''; approval.hidden = true;
-    try { await request('/api/auth/devices/approve', 'POST', { code }); status.textContent = 'Approved. The app will finish connecting; refresh to see it below.'; }
+    try { await request('/api/auth/devices/approve', 'POST', { code, allowAvatarWrite: requestedWrite }); status.textContent = 'Approved. The app will finish connecting; refresh to see it below.'; }
     catch (error) { fail(error); }
   }, events);
   dialog.querySelector('.device-refresh')!.addEventListener('click', () => { void refresh(); }, events);

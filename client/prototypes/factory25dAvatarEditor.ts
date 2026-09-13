@@ -52,7 +52,7 @@ export function createAvatarEditor(getContext: () => Context | undefined, onOpen
   const reconnectMessage = 'Reconnect this browser to save. Your preview is still here.';
   function current() { const context = getContext(); return dialog.open && !!owner && (!context || owner === context.ownerId); }
   function controls() {
-    save.disabled = loading || saving || !draft || owner !== getContext()?.ownerId || JSON.stringify(draft) === baseline;
+    save.disabled = loading || saving || !!conflict || !draft || owner !== getContext()?.ownerId || JSON.stringify(draft) === baseline;
     save.textContent = saving ? 'saving…' : 'save avatar';
     closeButton.disabled = cancel.disabled = saving;
     for (const element of dialog.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>('.avatar-options input, .avatar-options select, .avatar-options button')) element.disabled = loading || saving || !draft;
@@ -111,7 +111,7 @@ export function createAvatarEditor(getContext: () => Context | undefined, onOpen
   function finish() {
     scenePreview.close();
     generation++; request?.abort(); request = undefined;
-    owner = undefined; draft = undefined; loading = saving = false;
+    owner = undefined; draft = undefined; loading = saving = false; conflict = undefined; recovery.hidden = true;
     document.body.classList.remove('avatar-editor-open');
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
   }
@@ -122,19 +122,50 @@ export function createAvatarEditor(getContext: () => Context | undefined, onOpen
   // Keep movement, chat and camera shortcuts behind the modal from receiving input.
   dialog.addEventListener('keydown', event => event.stopPropagation(), events);
   dialog.addEventListener('keyup', event => event.stopPropagation(), events);
-  async function api(method: 'GET' | 'PUT', signal: AbortSignal, avatar?: AvatarConfig) {
+  let revision: string | undefined;
+  let conflict: { avatar: AvatarConfig; revision: string } | undefined;
+  const recovery = document.createElement('div'); recovery.hidden = true;
+  const reload = document.createElement('button'), reapply = document.createElement('button');
+  reload.type = reapply.type = 'button'; reload.textContent = 'load latest'; reapply.textContent = 'reapply my edits';
+  recovery.append(reload, reapply); status.after(recovery);
+  function resolveConflict(keepEdits: boolean) {
+    if (!conflict || !draft || !current() || owner !== getContext()?.ownerId) return;
+    const before = JSON.parse(baseline) as AvatarConfig;
+    const edits = Object.fromEntries(Object.entries(draft).filter(([key, value]) => before[key as keyof AvatarConfig] !== value));
+    const normalized = { ...conflict.avatar, ...resolveAvatar(conflict.avatar) };
+    baseline = JSON.stringify(normalized); draft = keepEdits ? { ...normalized, ...edits } : normalized;
+    revision = conflict.revision; conflict = undefined; recovery.hidden = true;
+    status.textContent = keepEdits ? 'Your edits are reapplied. Review and save when ready.' : 'Loaded the saved avatar.';
+    paintFields(); updatePreview();
+  }
+  reload.addEventListener('click', () => resolveConflict(false), events);
+  reapply.addEventListener('click', () => resolveConflict(true), events);
+  function equalAvatar(a: AvatarConfig, b: AvatarConfig) { return JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort()); }
+  async function reconcileSave(avatar: AvatarConfig, signal: AbortSignal, sequence: number) {
+    const result = await api('GET', signal);
+    if (!current() || sequence !== generation) throw new Error('Connection changed.');
+    const parsed = parseAvatarConfig(result.avatar);
+    if (!parsed || !result.revision) throw new Error('Couldn’t check the saved appearance. Your draft is retained.');
+    if (equalAvatar(parsed, avatar)) return result;
+    conflict = { avatar: parsed, revision: result.revision }; recovery.hidden = false;
+    throw new Error('The saved avatar differs from this draft. Load the latest version or deliberately reapply your edits.');
+  }
+  async function api(method: 'GET' | 'PUT', signal: AbortSignal, avatar?: AvatarConfig): Promise<{avatar: AvatarConfig; revision?: string}> {
     if (previewApi) return previewApi(method, signal, avatar);
+    const sequence = generation;
     let response: Response;
     try {
       response = await fetch('/api/avatar', { method, credentials: 'same-origin',
         headers: { 'X-Avatar-Owner': owner!, ...(avatar ? { 'Content-Type': 'application/json' } : {}) },
-        ...(avatar ? { body: JSON.stringify({ avatar }) } : {}),
+        ...(avatar ? { body: JSON.stringify({ avatar, revision }) } : {}),
         signal: AbortSignal.any([signal, AbortSignal.timeout(12000)]) });
     } catch {
+      if (method === 'PUT' && avatar && current() && sequence === generation) return reconcileSave(avatar, signal, sequence);
       throw new Error(method === 'PUT' ? 'Couldn’t confirm the save. Your changes are still here—try again.' : 'Couldn’t reach the factory. Close the editor and try again.');
     }
-    if (!response.ok) throw new Error(response.status === 409 ? 'Your connection changed. Close the editor and open it again.' : response.status === 401 ? 'Your connection expired. Reconnect this browser, then try again.' : method === 'PUT' ? 'Couldn’t save your avatar. Your changes are still here—try again.' : 'Couldn’t load your avatar. Close the editor and try again.');
-    try { return await response.json(); } catch { throw new Error('Couldn’t read the saved appearance. Please try again.'); }
+    if (method === 'PUT' && avatar && (response.status === 409 || response.status >= 500)) return reconcileSave(avatar, signal, sequence);
+    if (!response.ok) throw new Error(response.status === 409 ? 'Your avatar or connection changed elsewhere. Close and reopen the editor to load the latest appearance before editing again.' : response.status === 401 ? 'Your connection expired. Reconnect this browser, then try again.' : method === 'PUT' ? 'Couldn’t save your avatar. Your changes are still here—try again.' : 'Couldn’t load your avatar. Close the editor and try again.');
+    try { const result = await response.json(); if (current() && sequence === generation && typeof result.revision === 'string') revision = result.revision; return result; } catch { throw new Error('Couldn’t read the saved appearance. Please try again.'); }
   }
   form.addEventListener('submit', event => {
     event.preventDefault();
