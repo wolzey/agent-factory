@@ -1,3 +1,5 @@
+import { factoryHost } from './factory25dBoardData';
+import { applyFactoryBranding, disposeFactoryBranding, brandingTexture, factoryIdentity } from './factory25dBranding';
 import { installSharedPickups } from './factory25dSharedPickup';
 import { createSharedProps } from './factory25dSharedProps';
 import { createWindowReflections } from './factory25dWindowReflections';
@@ -35,9 +37,8 @@ import { resolveSkyClock } from '../sky/clock';
 import { WORKSTATIONS } from './factory25dWorkstations';
 import { createMountainView } from './factory25dMountains';
 import { requireElement } from './dom';
-import { signTexture } from './factory25dLabels';
-import { createWallClock, factoryTitleTexture } from './factory25dSigns';
-import { watchFactoryTitle } from './factory25dSite';
+import { createWallClock } from './factory25dSigns';
+import { watchFactoryIdentity } from './factory25dSite';
 import { installWeatherShortcut } from './factory25dDebug';
 import { createWindowWeather } from './factory25dWeather';
 import { createWhiteboardInteraction } from './factory25dWhiteboard';
@@ -365,21 +366,8 @@ const duckHunt = createDuckHunt(sideRoomScene, canvas, { sky: backdropTexture, o
 createHangingPothos(scene, glassTop + 0.35);
 const reducedSceneMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-function textPlane(
-  text: string,
-  width: number,
-  height: number,
-  textColor: string,
-  background: string,
-): THREE.Mesh {
-  const texture = signTexture(text, textColor, background, 2, width / height);
-  return new THREE.Mesh(
-    new THREE.PlaneGeometry(width, height),
-    new THREE.MeshBasicMaterial({ map: texture, transparent: true }),
-  );
-}
-
-const factorySign = textPlane('FLUID FACTORY', 2.8, 0.3, '#ff52de', '#080b1a');
+const factorySign = new THREE.Mesh(new THREE.PlaneGeometry(2.8,.3),new THREE.MeshBasicMaterial({map:brandingTexture(2.8/.3,()=>factoryIdentity().title,'#080b1a')}));
+factorySign.name='factory-brand-title';
 factorySign.position.set(0, glassTop + 0.22, -4.255);
 scene.add(factorySign);
 let configuredTitle = '', titleDisposed = false;
@@ -387,11 +375,10 @@ function applyFactoryTitle(title: string) {
   if (titleDisposed) return;
   configuredTitle = title; document.title = title;
   canvas.setAttribute('aria-label', `${title} · live agent workspace`);
-  const material = factorySign.material as THREE.MeshBasicMaterial;
-  material.map?.dispose(); material.map = factoryTitleTexture(title); material.needsUpdate = true;
+
 }
-applyFactoryTitle('FLUID FACTORY');
-const stopTitle = watchFactoryTitle(applyFactoryTitle);
+applyFactoryTitle('Agent Factory');
+const stopTitle = watchFactoryIdentity(identity => { applyFactoryTitle(identity.title); void applyFactoryBranding(identity, factoryHost()); });
 void document.fonts.ready.then(() => { if (configuredTitle) applyFactoryTitle(configuredTitle); });
 const wallClock = createWallClock(scene, glassTop + 0.22);
 for (const x of [-4.65, 4.65]) {
@@ -600,7 +587,7 @@ vendingMachine.root.position.set(FRONT_VENDING.x,0,FRONT_VENDING.z-INTERIOR_Z);
 vendingMachine.root.rotation.y=FRONT_VENDING.rotationY;
 const teamDesk = createTeamDesk(interior, canvas, camera, renderer, () => factoryControls.state.stop(), mountainView.setVisitors, liveAgents.contributionFor);
 const brandLibrary = createBrandLibrary(interior, canvas, () => factoryControls.state.stop(), camera, renderer);
-brandLibrary.addTrigger(brandFlag.target, 'patio', 'Open the WE flag and brand shelf');
+brandLibrary.addTrigger(brandFlag.target, 'patio', 'Open the factory flag and brand shelf');
 
 function cornerCouch(x: number, z: number): void {
   const group = new THREE.Group();
@@ -1075,4 +1062,4 @@ function animate(): void {
 const whatsNew = createWhatsNew(() => roomNavigation.request('patio'));
 const stopSceneLoop = startSceneLoop(animate);
 
-if (import.meta.hot) import.meta.hot.dispose(() => { stopSceneLoop(); newspaper.dispose(); sharedPickups?.dispose(); sharedProps?.dispose(); windowReflections.dispose(); whatsNew.dispose(); duckHunt.dispose(); sceneEvents.abort(); titleDisposed = true; ambientBackdrop.dispose(); loungeRadio.dispose(); roomStaff.dispose(); stationTickets.dispose(); mountainView.dispose(); garageDriving.dispose();brandLibrary.dispose();brandFlag.dispose();mistFlag.dispose();thunderstorm.dispose();lightInteractions.dispose();snackCarry.dispose();vendingMachine.dispose();garage.dispose(); windowWeather.dispose(); stopTitle(); patio.dispose(); sceneAudio.dispose(); stopWeather(); visitorBasketball.dispose(); basketballChallenges.dispose(); factoryControls.dispose(); avatarStage.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.dispose(); teamDesk.dispose(); weatherStatus.remove(); renderer.dispose(); });
+if (import.meta.hot) import.meta.hot.dispose(() => { stopSceneLoop(); disposeFactoryBranding(); factorySign.material.map?.dispose(); factorySign.material.dispose(); newspaper.dispose(); sharedPickups?.dispose(); sharedProps?.dispose(); windowReflections.dispose(); whatsNew.dispose(); duckHunt.dispose(); sceneEvents.abort(); titleDisposed = true; ambientBackdrop.dispose(); loungeRadio.dispose(); roomStaff.dispose(); stationTickets.dispose(); mountainView.dispose(); garageDriving.dispose();brandLibrary.dispose();brandFlag.dispose();mistFlag.dispose();thunderstorm.dispose();lightInteractions.dispose();snackCarry.dispose();vendingMachine.dispose();garage.dispose(); windowWeather.dispose(); stopTitle(); patio.dispose(); sceneAudio.dispose(); stopWeather(); visitorBasketball.dispose(); basketballChallenges.dispose(); factoryControls.dispose(); avatarStage.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.dispose(); teamDesk.dispose(); weatherStatus.remove(); renderer.dispose(); });

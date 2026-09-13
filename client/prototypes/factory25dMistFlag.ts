@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import './vendor/mistLogo.js';
-import type { MistLogo } from './vendor/mistLogo.js';
-import { MIST_FLAG, MIST_INK_WINDOW, createMistClothGeometry, mistCanvasPoint, mistClothVertex } from './factory25dMistCloth';
+import { createFactoryInk } from './factory25dFactoryInk';
+import { onFactoryBranding } from './factory25dBranding';
+import { MIST_FLAG, createMistClothGeometry, mistClothVertex } from './factory25dMistCloth';
 import { createPatioFlagPole } from './factory25dPatioFlagCloth';
 import './factory25dMistFlag.css';
 
-/** The real authored Mist canvas is an animated ink layer on a lit cloth mesh. */
+/** Factory artwork forms an interactive ink layer on a lit cloth mesh. */
 export function createMistFlag(parent: THREE.Scene, canvas: HTMLCanvasElement) {
   const root = new THREE.Group(); root.name = 'interactive-mist-patio-flag';
   root.position.set(MIST_FLAG.x, 0, MIST_FLAG.z); parent.add(root);
@@ -19,7 +19,7 @@ export function createMistFlag(parent: THREE.Scene, canvas: HTMLCanvasElement) {
 
   // A measurable, inert host lets the original pointer API retain its exact
   // coordinate system. It has no autonomous RAF, audio, focus or accessibility UI.
-  const logo = document.createElement('factory-mist-logo') as MistLogo;
+  const logo = createFactoryInk();
   logo.className = 'mist-flag-source'; logo.inert = true; logo.setAttribute('aria-hidden', 'true');
   for (const [name, value] of Object.entries({ mode: 'live', color: '#080d12', cols: '52', variant: 'glyph', sound: 'off', 'external-clock': '' })) logo.setAttribute(name, value);
   document.body.append(logo); logo.seek(54); logo.advance(0);
@@ -43,16 +43,14 @@ export function createMistFlag(parent: THREE.Scene, canvas: HTMLCanvasElement) {
   cloth.name = 'mist-flag-cloth';
   const positions = geometry.getAttribute('position'), uvs = geometry.getAttribute('uv');
   function paint() {
-    const area = MIST_INK_WINDOW;
     ink.drawImage(fabricCanvas, 0, 0);
-    // The authored canvas uses device pixels; its crop is in logical pixels.
-    const sx=logo.canvas.width/1024, sy=logo.canvas.height/576;
-    ink.drawImage(logo.canvas, area.x*sx, area.y*sy, area.width*sx, area.height*sy, 0, 0, 1024, 576); texture.needsUpdate = true;
+    ink.drawImage(logo.canvas,0,0,1024,576); texture.needsUpdate=true;
   }
   paint();
+  const stopBranding=onFactoryBranding(paint);
   const host = canvas.parentElement!, abort = new AbortController(), events = { signal: abort.signal, capture: true };
   const button = document.createElement('button'); button.type = 'button'; button.className = 'mist-flag-hotspot'; button.hidden = true;
-  button.setAttribute('aria-label', 'Scatter the Mist flag logo'); button.title = 'mist · hover to stir, click to scatter'; host.append(button);
+  button.setAttribute('aria-label', 'Scatter the factory flag artwork'); button.title = 'factory flag · hover to stir, click to scatter'; host.append(button);
   let disposed = false, available = false, camera: THREE.Camera | undefined, reduced = false, hovered = false;
   let pointer: Pick<MouseEvent, 'clientX' | 'clientY' | 'target'> | undefined;
   let lastInteraction = -Infinity, inkAwake = false;
@@ -71,7 +69,7 @@ export function createMistFlag(parent: THREE.Scene, canvas: HTMLCanvasElement) {
   function refreshHover() {
     const uv = pointer && hit(pointer);
     if (!uv || reduced) { if (hovered) logo.unstir(); hovered = false; button.classList.remove('is-hovered'); return; }
-    const p = mistCanvasPoint(uv, logo.canvas.getBoundingClientRect()); wakeInk(); logo.stir(p.x, p.y);
+    wakeInk(); logo.stir(uv.x*1024,(1-uv.y)*576);
     hovered = true; button.classList.add('is-hovered');
   }
   host.addEventListener('pointermove', event => {
@@ -131,7 +129,7 @@ export function createMistFlag(parent: THREE.Scene, canvas: HTMLCanvasElement) {
       if (inkTick !== lastInk) { lastInk = inkTick; logo.advance(inkTime); inkTime = 0; paint(); }
     },
     dispose() {
-      if (disposed) return; disposed = true; abort.abort(); leave(); button.remove(); logo.remove(); root.removeFromParent(); pole.dispose(); resources.forEach(resource => resource.dispose());
+      if (disposed) return; disposed = true; abort.abort(); leave(); button.remove(); stopBranding(); logo.dispose(); root.removeFromParent(); pole.dispose(); resources.forEach(resource => resource.dispose());
     },
   };
 }

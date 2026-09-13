@@ -1,3 +1,4 @@
+import { brandingTexture, factoryIdentity } from './factory25dBranding';
 import { garageElevatorPose } from './factory25dWorld';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -41,7 +42,7 @@ export function createGarage(factory:THREE.Scene,canvas:HTMLCanvasElement,home:T
   const texture=new THREE.CanvasTexture(c);texture.magFilter=THREE.NearestFilter;texture.colorSpace=THREE.SRGBColorSpace;
   return new THREE.Mesh(new THREE.PlaneGeometry(width,height),new THREE.MeshBasicMaterial({map:texture}));
  }
- const sign=label('FLUID GARAGE',3.6,.42,'#ee95ed');sign.position.set(0,3.22,-4.02);room.add(sign);
+ const sign=new THREE.Mesh(new THREE.PlaneGeometry(3.6,.42),new THREE.MeshBasicMaterial({map:brandingTexture(3.6/.42,()=>factoryIdentity().title+' · GARAGE','#080b1a')}));sign.name='factory-brand-garage-title';sign.position.set(0,3.22,-4.02);room.add(sign);
  const windows=createGarageWindows(room,windowMaterial,skyMaterial,3.598,cloudMaterial,windowWeather);
  const wallFixtures=new THREE.Group();room.add(wallFixtures);
  for(const x of [-6.25,0,6.25])box([.65,.045,.12],[x,2.96,-4.23],lit,wallFixtures);
@@ -185,5 +186,5 @@ export function createGarage(factory:THREE.Scene,canvas:HTMLCanvasElement,home:T
   const rect=canvas.getBoundingClientRect();const point=(open?lowerLift.callPoint:upperLift.callPoint).clone().project(projectionCamera);
   down.style.left=`${rect.left+Math.max(8,Math.min(canvas.clientWidth-52,(point.x+1)*canvas.clientWidth/2-22))}px`;down.style.top=`${rect.top+Math.max(8,Math.min(canvas.clientHeight-52,(1-point.y)*canvas.clientHeight/2-22))}px`;
  if(open)furnishings.update(now/1000,matchMedia('(prefers-reduced-motion: reduce)').matches);
- },dispose(){furnishings.dispose();lit.dispose();floorSection.dispose();lighting.dispose();windows.dispose();miniWork.dispose();document.body.classList.remove('garage-open','garage-travelling');upperLift.root.removeFromParent();transit.remove();down.remove();nav.remove();status.remove();collection.remove();document.removeEventListener('visibilitychange',resumeTrip);window.removeEventListener('factory-finish-floor-trip',skipTrip);document.removeEventListener('keydown',escape);pickHost.removeEventListener('click',select,true);}};
+ },dispose(){sign.material.map?.dispose();sign.material.dispose();furnishings.dispose();lit.dispose();floorSection.dispose();lighting.dispose();windows.dispose();miniWork.dispose();document.body.classList.remove('garage-open','garage-travelling');upperLift.root.removeFromParent();transit.remove();down.remove();nav.remove();status.remove();collection.remove();document.removeEventListener('visibilitychange',resumeTrip);window.removeEventListener('factory-finish-floor-trip',skipTrip);document.removeEventListener('keydown',escape);pickHost.removeEventListener('click',select,true);}};
 }

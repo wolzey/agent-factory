@@ -94,8 +94,8 @@ it('drives motion from accepted selections and actual releases, with no duplicat
 });
 
 it('rocks the complete rigid cabinet while keeping placement, pile and floor lighting unchanged', () => {
-  vi.stubGlobal('document', { hidden: false, createElement: () => ({ width: 1, height: 1, getContext: () => ({
-    fillRect() {}, putImageData() {}, createImageData: (width: number, height: number) => ({ data: new Uint8ClampedArray(width * height * 4) }),
+  vi.stubGlobal('document', { hidden: false, fonts: {ready: Promise.resolve()}, createElement: () => ({ width: 1, height: 1, getContext: () => ({
+    clearRect() {}, fillRect() {}, putImageData() {}, createImageData: (width: number, height: number) => ({ data: new Uint8ClampedArray(width * height * 4) }),
   }) }) });
   const scene = new THREE.Group(), machine = createVendingMachine(scene);
   machine.root.position.set(-1, 0, 7.05); machine.root.rotation.y = -Math.PI / 3;

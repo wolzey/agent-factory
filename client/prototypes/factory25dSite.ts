@@ -1,3 +1,5 @@
+import { publicBranding } from '../../shared/factory-branding';
+import type { FactoryIdentity } from './factory25dBranding';
 import { factoryHost, onFactoryConnection } from './factory25dBoardData';
 
 export function readFactoryTitle(value: unknown): string | undefined {
@@ -7,7 +9,7 @@ export function readFactoryTitle(value: unknown): string | undefined {
 }
 
 /** Preserve the last valid title during outages; refresh configuration on return/reconnect. */
-export function watchFactoryTitle(receive: (title: string) => void,
+export function watchFactoryIdentity(receive: (identity: FactoryIdentity) => void,
   host = factoryHost(), fetcher: typeof fetch = (input, init) => fetch(input, init)) {
   let request: AbortController | undefined, stopped = false, previous = '';
   async function refresh() {
@@ -19,8 +21,13 @@ export function watchFactoryTitle(receive: (title: string) => void,
         credentials: 'omit', cache: 'no-store', signal: controller.signal,
       });
       if (!response.ok) return;
-      const title = readFactoryTitle(await response.json());
-      if (!stopped && title && title !== previous) { previous = title; receive(title); }
+      const value = await response.json();
+      const title = readFactoryTitle(value);
+      if (!title) return;
+      const branding = publicBranding(value.branding);
+      if (value.branding !== undefined && !branding) return;
+      const identity = { title, branding }, key = JSON.stringify(identity);
+      if (!stopped && key !== previous) { previous = key; receive(identity); }
     } catch { /* Keep the room's title while its server is unavailable. */ }
     finally { clearTimeout(timeout); if (request === controller) request = undefined; }
   }
@@ -34,4 +41,8 @@ export function watchFactoryTitle(receive: (title: string) => void,
     stopped = true; request?.abort(); clearInterval(timer); stopConnection();
     document.removeEventListener('visibilitychange', visible); window.removeEventListener('focus', visible);
   };
+}
+
+export function watchFactoryTitle(receive: (title: string) => void, host = factoryHost(), fetcher: typeof fetch = (input, init) => fetch(input, init)) {
+  return watchFactoryIdentity(identity => receive(identity.title), host, fetcher);
 }

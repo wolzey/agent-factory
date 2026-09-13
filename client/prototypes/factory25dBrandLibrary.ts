@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createBrandShelf } from './factory25dBrandShelf';
-import { BRAND_ASSETS, brandAssetUrl, brandPngSize, filterBrandAssets, type BrandAsset } from './factory25dBrandAssets';
+import { factoryHost } from './factory25dBoardData';
+import { factoryIdentity, onFactoryBranding } from './factory25dBranding';
 import { blendCamera, cameraPose } from './factory25dCameraMotion';
 import { brandClosePose } from './factory25dBrandFraming';
 import './factory25dBrandLibrary.css';
@@ -11,17 +12,16 @@ export function createBrandLibrary(parent: THREE.Group, canvas: HTMLCanvasElemen
   const abort = new AbortController(), events = { signal: abort.signal };
   const shelf = createBrandShelf(parent);
   const triggers: Array<{ target: THREE.Object3D; room: Room; button: HTMLButtonElement; bounds: THREE.Box3 }> = [];
-  let active = false, opening = false, moving = false, available: Room | undefined, previousFocus: HTMLElement | null = null, brand = 'All';
+  let active = false, opening = false, moving = false, available: Room | undefined, previousFocus: HTMLElement | null = null;
   const camera = roomCamera.clone(), reduced = matchMedia('(prefers-reduced-motion: reduce)');
   let sourceCamera = roomCamera, from = cameraPose(roomCamera), roomPose = cameraPose(roomCamera), started = 0;
   let originalHeight = 1, width = 0, height = 0, activeTarget: THREE.Object3D = shelf.root;
   const originalSize = new THREE.Vector2(), focus = new THREE.Vector3(), size = new THREE.Vector3();
   const targetRotation = new THREE.Quaternion();
   let closePose = cameraPose(camera);
-  const urls = new Set<string>(), timers = new Set<ReturnType<typeof setTimeout>>();
   const dialog = document.createElement('dialog'); dialog.className = 'brand-library';
   dialog.setAttribute('aria-labelledby', 'brand-library-title');
-  dialog.innerHTML = `<section class="brand-library-sheet"><header class="brand-library-header"><div><p>FLUID FACTORY / BRAND SHELF</p><h2 id="brand-library-title">the brand shelf</h2><span>Fluid, We Commerce + Mist logos, ready for your next thing.</span></div><a class="brand-bundle" href="/brand/factory-brand-assets.zip" download="factory-brand-assets.zip">download all ↓ <small>9 logos + Mist HTML · ZIP</small></a></header><div class="brand-library-tools"><div class="brand-library-filters" role="group" aria-label="Filter by brand"></div><input type="search" aria-label="Find a logo" placeholder="find a logo…"></div><p class="brand-library-count" role="status"></p><div class="brand-library-grid"></div><footer>Original SVGs stay crisp at any size. PNGs have a transparent background.</footer></section><nav class="brand-library-dock pixel-island"><button type="button">← room</button><span>brand shelf</span></nav>`;
+  dialog.innerHTML = `<section class="brand-library-sheet"><header class="brand-library-header"><div><p>FACTORY / BRAND SHELF</p><h2 id="brand-library-title">the brand shelf</h2><span>Artwork shared by everyone in this factory.</span></div></header><div class="brand-library-tools"><div class="brand-library-filters" role="group" aria-label="Filter by brand"></div><input type="search" aria-label="Find a logo" placeholder="find a logo…"></div><p class="brand-library-count" role="status"></p><div class="brand-library-grid"></div><footer>Branding is configured by this factory’s server administrator.</footer></section><nav class="brand-library-dock pixel-island"><button type="button">← room</button><span>brand shelf</span></nav>`;
   document.body.append(dialog);
   const grid = dialog.querySelector<HTMLElement>('.brand-library-grid')!;
   const count = dialog.querySelector<HTMLElement>('.brand-library-count')!;
@@ -69,70 +69,40 @@ export function createBrandLibrary(parent: THREE.Group, canvas: HTMLCanvasElemen
     const localBounds = new THREE.Box3().setFromObject(target).applyMatrix4(target.matrixWorld.clone().invert());
     triggers.push({ target, room, button, bounds: localBounds });
   }
-  async function png(asset: BrandAsset, button: HTMLButtonElement) {
-    button.disabled = true; button.textContent = 'making…';
-    try {
-      const image = new Image(); image.src = brandAssetUrl(asset); await image.decode();
-      if (abort.signal.aborted) return;
-      const size = brandPngSize(asset), output = document.createElement('canvas');
-      output.width = size.width; output.height = size.height;
-      output.getContext('2d')!.drawImage(image, 0, 0, size.width, size.height);
-      const blob = await new Promise<Blob | null>(resolve => output.toBlob(resolve, 'image/png'));
-      if (!blob || abort.signal.aborted) return;
-      const url = URL.createObjectURL(blob); urls.add(url);
-      const link = document.createElement('a'); link.href = url; link.download = `${asset.id}.png`;
-      document.body.append(link); link.click(); link.remove();
-      const timer = setTimeout(() => { URL.revokeObjectURL(url); urls.delete(url); timers.delete(timer); }, 60_000); timers.add(timer);
-      count.textContent = `${asset.brand} ${asset.title.toLowerCase()} · transparent PNG ready`;
-    } catch { if (!abort.signal.aborted) count.textContent = 'PNG could not be created. You can still download the original SVG.'; }
-    finally { button.disabled = false; button.textContent = 'PNG ↓'; }
-  }
   function paint() {
-    const assets = filterBrandAssets(brand, search.value);
-    count.textContent = `${assets.length} of ${BRAND_ASSETS.length} original logo files`;
-    grid.replaceChildren();
-    for (const asset of assets) {
-      const card = document.createElement('article'); card.className = 'brand-asset';
-      const preview = document.createElement('div'); preview.className = 'brand-asset-preview'; preview.dataset.surface = asset.variant === 'White' ? 'ink' : 'paper';
-      const image = document.createElement('img'); image.src = brandAssetUrl(asset); image.alt = `${asset.brand} ${asset.title.toLowerCase()}, ${asset.variant.toLowerCase()}`;
-      image.width = asset.width; image.height = asset.height; preview.append(image);
-      const details = document.createElement('div'); details.className = 'brand-asset-details';
-      const label = document.createElement('p'); label.textContent = `${asset.brand} / ${asset.variant}`;
-      const title = document.createElement('h3'); title.textContent = asset.title;
-      const actions = document.createElement('div'); actions.className = 'brand-asset-actions';
-      const svg = document.createElement('a'); svg.href = brandAssetUrl(asset); svg.download = `${asset.id}.svg`; svg.textContent = 'SVG ↓'; svg.setAttribute('aria-label', `Download ${asset.brand} ${asset.title} ${asset.variant} SVG`);
-      const raster = document.createElement('button'); raster.type = 'button'; raster.textContent = 'PNG ↓'; raster.setAttribute('aria-label', `Download ${asset.brand} ${asset.title} ${asset.variant} PNG`);
-      // Cards are replaced when filtering; local listeners are collected with them.
-      raster.addEventListener('click', () => { void png(asset, raster); });
-      actions.append(svg, raster);
-      if(asset.brand==='Mist'){
-        const html=document.createElement('a');html.href='/brand/mist-logo-original.html';html.download='mist-logo-original.html';html.textContent='HTML ↓';html.setAttribute('aria-label','Download animated Mist HTML');actions.append(html);
-      } details.append(label, title, actions); card.append(preview, details); grid.append(card);
-    }
-    if (!assets.length) { const empty = document.createElement('p'); empty.className = 'brand-library-empty'; empty.textContent = 'No logos match that. Try Fluid, We Commerce, white, or black.'; grid.append(empty); }
+    const identity=factoryIdentity(), path=identity.branding?.logoUrl;
+    dialog.querySelector('header p')!.textContent=identity.title+' / BRAND SHELF';
+    filters.hidden=true; grid.replaceChildren();
+    const matches=path && (identity.title+' logo').toLowerCase().includes(search.value.toLowerCase());
+    count.textContent=path?'1 shared factory logo':'Neutral artwork · no logo configured';
+    if(matches) {
+      const card=document.createElement('article');card.className='brand-asset';
+      const preview=document.createElement('div');preview.className='brand-asset-preview';preview.dataset.surface='ink';
+      const image=document.createElement('img');image.src=new URL(path,factoryHost()).href;image.alt=identity.title+' logo';preview.append(image);
+      const details=document.createElement('div');details.className='brand-asset-details';
+      const title=document.createElement('h3');title.textContent=identity.title;
+      const link=document.createElement('a');link.href=image.src;link.download='factory-logo.png';link.textContent='Download PNG ↓';
+      details.append(title,link);card.append(preview,details);grid.append(card);
+    } else { const empty=document.createElement('p');empty.textContent=path?'No logo matches your search.':'The server administrator can add a factory logo.';grid.append(empty); }
   }
-  for (const name of ['All', 'Fluid', 'We Commerce', 'Mist']) {
-    const button = document.createElement('button'); button.type = 'button'; button.textContent = name; button.setAttribute('aria-pressed', String(name === brand));
-    button.addEventListener('click', () => { brand = name; for (const item of filters.querySelectorAll('button')) item.setAttribute('aria-pressed', String(item === button)); paint(); }, events); filters.append(button);
-  }
+  const stopBranding=onFactoryBranding(paint);
   search.addEventListener('input', paint, events); back.addEventListener('click', close, events);
   dialog.addEventListener('cancel', event => { event.preventDefault(); close(); }, events);
   dialog.addEventListener('keydown', event => event.stopPropagation(), events);
   dialog.addEventListener('click', event => { if (event.target === dialog) close(); }, events);
-  for (const [name, label, selectedBrand, query] of [
-    ['fluid-logo-sculpture', 'Fluid sculpture', 'Fluid', 'symbol'],
-    ['we-commerce-postcard', 'We Commerce postcard', 'We Commerce', 'signature'],
-    ['mist-logo-plaque', 'Mist plaque', 'Mist', ''],
-    ['fluid-mug', 'Fluid mug', 'Fluid', ''],
-    ['we-commerce-enamel-badge', 'We Commerce badge', 'We Commerce', 'symbol'],
-    ['folded-we-commerce-tee', 'We Commerce shirt', 'We Commerce', 'symbol'],
+  for (const [name, label] of [
+    ['fluid-logo-sculpture', 'Block sculpture', 'Fluid', 'symbol'],
+    ['we-commerce-postcard', 'Factory postcard', 'We Commerce', 'signature'],
+    ['mist-logo-plaque', 'Factory plaque', 'Mist', ''],
+    ['fluid-mug', 'Factory mug', 'Fluid', ''],
+    ['we-commerce-enamel-badge', 'Factory badge', 'We Commerce', 'symbol'],
+    ['folded-we-commerce-tee', 'Factory shirt', 'We Commerce', 'symbol'],
   ]) {
     const target = shelf.root.getObjectByName(name); if (!target) continue;
     const button = document.createElement('button'); button.type = 'button'; button.className = 'brand-artifact-hotspot';
     button.setAttribute('aria-label', `View logos on ${label}`); button.title = label; button.hidden = true;
     button.addEventListener('click', () => {
-      brand = selectedBrand; search.value = query;
-      for (const filter of filters.querySelectorAll('button')) filter.setAttribute('aria-pressed', String(filter.textContent === brand));
+      search.value = '';
       for (const artifact of artifactButtons) artifact.button.setAttribute('aria-pressed', String(artifact.button === button));
       paint(); sheet.scrollTo({ top: 0, behavior: reduced.matches ? 'instant' : 'smooth' });
     }, events);
@@ -190,7 +160,7 @@ export function createBrandLibrary(parent: THREE.Group, canvas: HTMLCanvasElemen
     },
     dispose() {
       if (active) finishClose(); abort.abort(); shelf.dispose(); dialog.remove(); triggers.forEach(({ button }) => button.remove());
-      timers.forEach(clearTimeout); urls.forEach(url => URL.revokeObjectURL(url));
+      stopBranding();
     },
   };
 }

@@ -37,17 +37,14 @@ it('keeps reduced motion in one soft drape regardless of time or changing weathe
   expect(calm.y).toBeLessThan(0);
 });
 
-it('uses the original logo without distortion on a lit, reusable fabric mesh', () => {
+it('starts with neutral artwork on a lit, reusable fabric mesh', () => {
   const drawImage = vi.fn();
-  const context = {fillRect: vi.fn(), setLineDash: vi.fn(), strokeRect: vi.fn(), drawImage};
+  const context = {clearRect: vi.fn(), fillRect: vi.fn(), setLineDash: vi.fn(), strokeRect: vi.fn(), drawImage};
   const canvas = {width: 0, height: 0, getContext: () => context};
   const image = {src: '', naturalWidth: 1024, naturalHeight: 1024, onload: null as null | (() => void), removeAttribute: vi.fn()};
   vi.stubGlobal('document', {createElement: (type: string) => type === 'canvas' ? canvas : image});
   const parent = new THREE.Scene(), flag = createBrandFlag(parent);
-  expect(image.src).toBe('/brand/we-commerce-logomark-white.svg'); image.onload?.();
-  expect(drawImage).toHaveBeenCalledOnce();
-  const [, , , width, height] = drawImage.mock.calls[0];
-  expect(width / height).toBeCloseTo(1);
+  expect(image.src).toBe(''); expect(context.clearRect).toHaveBeenCalled();
   expect(canvas.width / canvas.height).toBeCloseTo(BRAND_FLAG.width / BRAND_FLAG.height);
   expect(flag.root.position.toArray()).toEqual([20.7, 0, -4.35]);
   const cloth = flag.target as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
@@ -65,6 +62,5 @@ it('uses the original logo without distortion on a lit, reusable fabric mesh', (
   const textureDispose = vi.spyOn(cloth.material.map!, 'dispose'), geometryDispose = vi.spyOn(geometry, 'dispose');
   flag.dispose(); flag.dispose();
   expect(parent.children).toHaveLength(0); expect(image.onload).toBeNull();
-  expect(image.removeAttribute).toHaveBeenCalledWith('src');
   expect(textureDispose).toHaveBeenCalledOnce(); expect(geometryDispose).toHaveBeenCalledOnce();
 });
