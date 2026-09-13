@@ -28,7 +28,7 @@ export function createWhatsNew(visitPatio: () => void) {
   const updateAttention = () => { root.dataset.attention = String(!document.hidden); };
   document.addEventListener('visibilitychange', updateAttention, events); updateAttention();
   const dialog = document.createElement('dialog'); dialog.className = 'factory-changelog'; dialog.setAttribute('aria-labelledby', 'factory-changelog-title');
-  dialog.innerHTML = '<header><div><span class="factory-update-eyebrow">FLUID FACTORY</span><h2 id="factory-changelog-title">What’s new</h2></div><button type="button" aria-label="Close changelog">×</button></header><div class="factory-changelog-entries" tabindex="0" aria-label="Release history"></div>';
+  dialog.innerHTML = '<header><div><span class="factory-update-eyebrow">AGENT FACTORY</span><h2 id="factory-changelog-title">What’s new</h2></div><button type="button" aria-label="Close changelog">×</button></header><div class="factory-changelog-entries" tabindex="0" aria-label="Release history"></div>';
   const entries = dialog.querySelector('.factory-changelog-entries')!;
   const archiveMotions = new Set<Animation>();
   for (const [index, release] of factoryChangelog.entries()) {

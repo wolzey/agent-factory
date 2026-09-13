@@ -39,10 +39,12 @@
     "@fastify/websocket": "^11.3.0",
     "@libsql/client": "^0.18.0",
     "fastify": "^5.12.1",
+    "pngjs": "^7.0.0",
     "three": "^0.185.1"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
+    "@types/pngjs": "^6.0.5",
     "@types/three": "0.185.0",
     "concurrently": "^9.2.1",
     "tsx": "^4.21.0",

@@ -1,3 +1,4 @@
+import { onFactoryBranding, paintFactoryArtwork } from './factory25dBranding';
 import * as THREE from 'three';
 
 import { PATIO_FLAG, createPatioFlagGeometry, createPatioFlagPole, patioFlagVertex } from './factory25dPatioFlagCloth';
@@ -5,10 +6,9 @@ export { patioFlagVertex as brandFlagVertex, createPatioFlagGeometry as createPe
 
 export const BRAND_FLAG = {
   ...PATIO_FLAG, x: 20.7, z: -4.35,
-  logo: '/brand/we-commerce-logomark-white.svg', logoAspect: 1,
 } as const;
 
-/** The original WE artwork on the same rectangular cloth as the Mist flag. */
+/** Factory artwork on the same rectangular cloth as the interactive flag. */
 export function createBrandFlag(parent: THREE.Scene | THREE.Group) {
   const root = new THREE.Group(); root.name = 'personal-we-patio-flag';
   root.position.set(BRAND_FLAG.x, 0, BRAND_FLAG.z); parent.add(root);
@@ -62,20 +62,12 @@ export function createBrandFlag(parent: THREE.Scene | THREE.Group) {
     }
     position.needsUpdate = true; geometry.computeVertexNormals(); geometry.computeBoundingSphere();
   }
-  const logo = document.createElement('img');
-  logo.onload = () => {
-    if (disposed) return;
-    paintFabric();
-    const aspect = logo.naturalWidth > 0 && logo.naturalHeight > 0 ? logo.naturalWidth / logo.naturalHeight : BRAND_FLAG.logoAspect;
-    const width = Math.min(canvas.width * .7, canvas.height * .90 * aspect), height = width / aspect;
-    context.drawImage(logo, (canvas.width - width) / 2 - canvas.width * .055, (canvas.height - height) / 2, width, height);
-    texture.needsUpdate = true;
-  };
-  logo.src = BRAND_FLAG.logo;
+  const art=document.createElement('canvas');art.width=640;art.height=360;
+  const stopBranding = onFactoryBranding(() => { paintFabric(); paintFactoryArtwork(art.getContext('2d')!,640,360);context.drawImage(art,0,0);texture.needsUpdate=true; });
   update(0, 0, false);
   return { root, target, update, dispose() {
     if (disposed) return; disposed = true;
-    logo.onload = null; logo.removeAttribute('src');
+    stopBranding();
     root.removeFromParent(); pole.dispose(); texture.dispose();
     for (const resource of [...geometries, ...materials]) resource.dispose();
   } };

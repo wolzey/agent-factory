@@ -1,3 +1,4 @@
+import { loadBranding, registerBrandingAssets } from './branding.js';
 import { welcomeChallengeOwner } from './welcome-challenge-config.js';
 import { PickupMotionManager } from './pickup-motion.js';
 import { RoomPropsManager } from './room-props.js';
@@ -111,6 +112,9 @@ async function main() {
 
   // Server config
   const serverConfig = loadServerConfig();
+  const identity = loadBranding(serverConfig.title);
+  serverConfig.title = identity.title; serverConfig.branding = identity.branding;
+  registerBrandingAssets(app, identity);
 
   // Auth
   const tokenSecret = loadOrCreateSecret();

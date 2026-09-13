@@ -488,3 +488,7 @@ MIT
 ### GitHub App contribution counts
 
 Install a private GitHub App per organization/deployment to replace bundled contribution counts with live, repository-scoped totals. Configuration, callback behavior, Render setup, and migration steps are in [the GitHub App setup guide](docs/github-app.md).
+
+### Factory branding
+
+The server can publish one title, accent color and logo for all browser and native users. Configure `FACTORY_BRANDING_FILE` (operator JSON) or the `FACTORY_TITLE`, `FACTORY_ACCENT_COLOR` and `FACTORY_BRANDING_LOGO` environment overrides, then restart. See [factory branding configuration](docs/factory-branding.md) for PNG limits, deployment, client refresh and rollback details.

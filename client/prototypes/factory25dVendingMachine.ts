@@ -1,3 +1,4 @@
+import { brandingTexture } from './factory25dBranding';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { contactShadow } from './factory25dContactShadows';
@@ -100,7 +101,8 @@ export function createVendingMachine(parent: THREE.Object3D) {
     const panel = new THREE.Mesh(new THREE.PlaneGeometry(width, height), mat);
     panel.position.set(x, y, .316); visual.add(panel); return mat;
   };
-  const header = sign('FLUID', .715, .103, 0, 1.24, '#243f3d', '#ffe5b9', .65);
+  const header = sign('SNACKS', .715, .103, 0, 1.24, '#243f3d', '#ffe5b9', .65);
+  const brandHeader = brandingTexture(.715/.103, undefined, '#243f3d'); textures.add(brandHeader); header.map = header.emissiveMap = brandHeader;
   sign('SNACKS + SIPS', .48, .039, -.0675, .456, '#9fdfd8', '#244340', .35);
   sign('REFRESH', .28, .033, -.06, .15, '#8fb5aa', '#171c23', .12);
 

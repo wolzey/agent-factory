@@ -300,7 +300,8 @@ export function createCloudVolume(renderer: THREE.WebGLRenderer, width: number, 
         ? { presence: .85, shape: 1, drift: 3 + Math.sin(elapsed * .025) * .18 }
         : cloudFigureAt(figureElapsed, figurePreview);
       uniforms.cloudFigureCompany.value = clearBrand ? -1 : cloudFigureCompanyAt(figureElapsed, figurePreview);
-      uniforms.cloudFigure.value.set(figure.presence * uniforms.cloudBillows.value,
+      // Company-specific cloud marks stay disabled until custom cloud masks are supported.
+      uniforms.cloudFigure.value.set(0,
         figure.shape, figure.drift);
       uniforms.cloudLight.value.set(arc * 0.35, 1.55 - Math.abs(arc) * 0.12, -0.35).normalize();
       uniforms.cloudLit.value.copy(color(palette.cloud));
