@@ -1,3 +1,4 @@
+import type { LinkedDevice } from '../device-links.js';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { createClient, type Client } from '@libsql/client';
@@ -93,6 +94,7 @@ export class LibSqlWorldRepository implements WorldRepository {
         records TEXT NOT NULL,
         checked_at INTEGER NOT NULL CHECK (checked_at > 0)
       )`);
+      await this.client.execute(`CREATE TABLE IF NOT EXISTS linked_devices (id TEXT PRIMARY KEY NOT NULL, token_hash TEXT NOT NULL UNIQUE, record TEXT NOT NULL)`);
       this.markHealthy();
     } catch (error) {
       this.markFailed(error);
@@ -169,6 +171,24 @@ export class LibSqlWorldRepository implements WorldRepository {
       sql: 'INSERT INTO avatar_profiles (owner_id, avatar) VALUES (?, ?) ON CONFLICT(owner_id) DO UPDATE SET avatar = excluded.avatar',
       args: [ownerId, JSON.stringify(avatar)],
     });
+  }
+
+  async loadLinkedDevices(): Promise<LinkedDevice[]> {
+    const result = await this.requireClient().execute('SELECT record FROM linked_devices');
+    return result.rows.map(row => JSON.parse(String(row.record)) as LinkedDevice);
+  }
+
+  async saveLinkedDevice(device: LinkedDevice): Promise<void> {
+    await this.requireClient().execute({ sql: 'INSERT INTO linked_devices (id, token_hash, record) VALUES (?, ?, ?) ON CONFLICT(id) DO NOTHING', args: [device.id, device.tokenHash, JSON.stringify(device)] });
+  }
+
+  async findLinkedDevice(tokenHash: string): Promise<LinkedDevice | null> {
+    const result = await this.requireClient().execute({ sql: 'SELECT record FROM linked_devices WHERE token_hash = ?', args: [tokenHash] });
+    return result.rows[0] ? JSON.parse(String(result.rows[0].record)) as LinkedDevice : null;
+  }
+
+  async deleteLinkedDevice(id: string): Promise<void> {
+    await this.requireClient().execute({ sql: 'DELETE FROM linked_devices WHERE id = ?', args: [id] });
   }
 
   status(): PersistenceStatus {

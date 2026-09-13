@@ -1,0 +1,29 @@
+.factory-device-links { width:min(520px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); padding:0; color:#e0e9df; background:#152329; border:2px solid #607876; box-shadow:0 0 0 4px #10191f,0 24px 80px #0009; font:13px/1.6 'Geist Pixel',monospace; }
+.factory-device-links::backdrop { background:#081215aa; }
+.factory-device-links * { box-sizing:border-box; }
+.factory-device-links [hidden] { display:none!important; }
+.factory-device-links header { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:24px; border-bottom:1px solid #405650; }
+.factory-device-links h2 { font:inherit; font-size:25px; margin:5px 0 0; }
+.factory-device-links h3 { font:inherit; font-size:16px; margin:8px 0; }
+.device-eyebrow { color:#bcd5bb; font-size:10px; letter-spacing:.08em; }
+.device-body { padding:20px 24px 24px; }
+.device-origin { margin:0; overflow-wrap:anywhere; color:#bcd5bb; }
+.device-account,.device-scope { color:#a1b7af; font-size:11px; }
+.factory-device-links form { margin:24px 0 16px; }
+.device-code-row button { flex-shrink:0; white-space:nowrap; }
+.device-code-row { display:flex; gap:8px; margin-top:8px; }
+.factory-device-links input,.factory-device-links button { font:inherit; color:inherit; border:1px solid #607876; border-radius:0; min-height:44px; padding:9px 12px; background:#263b40; }
+.factory-device-links input { width:100%; min-width:0; background:#0c181b; text-transform:uppercase; letter-spacing:.06em; }
+.factory-device-links button { cursor:pointer; }
+.factory-device-links :focus-visible { outline:2px solid #e1ecc7; outline-offset:3px; }
+.factory-device-links :disabled { opacity:.45; cursor:default; }
+.factory-device-links .device-close { border:0; background:none; font-size:26px; }
+.device-approval { padding:18px; border:1px solid #bcd5bb; background:#233b36; }
+.device-approval p { font-size:12px; }
+.factory-device-links .device-approve { background:#bcd5bb; color:#142923; width:100%; }
+.device-status { color:#f0cf9e; }
+.device-list { list-style:none; margin:16px 0; padding:0; }
+.device-list li { display:flex; gap:16px; align-items:center; justify-content:space-between; padding:14px 0; border-top:1px solid #405650; }
+.device-list span { overflow-wrap:anywhere; }
+.device-list button { font-size:11px; }
+@media(max-width:480px) { .factory-device-links header,.device-body { padding:18px; } .device-code-row { flex-wrap:wrap; } .device-code-row button { width:100%; } .device-list li { align-items:stretch; flex-direction:column; gap:8px; } }
