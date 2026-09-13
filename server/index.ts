@@ -34,6 +34,8 @@ import { startStaleReaper } from './cleanup.js';
 import { SessionRegistryWatcher } from './session-registry.js';
 import { RemoteSessionRegistry } from './remote-registry.js';
 import { AuthService, loadOrCreateSecret } from './auth.js';
+import { DeviceLinks } from './device-links.js';
+import { registerDeviceLinkRoutes } from './routes/device-links.js';
 import { AuthHandoffManager } from './auth-handoff.js';
 import { ControlManager } from './control-manager.js';
 import { GrabManager, parseGrabTarget } from './grab-manager.js';
@@ -132,6 +134,8 @@ async function main() {
   }
   const avatarProfiles = new AvatarProfiles(repository, state);
   await avatarProfiles.initialize();
+  const deviceLinks = new DeviceLinks(repository);
+  await deviceLinks.initialize();
   const team = new TeamRoster(repository, () => state.getAll(), ownerId => {
     const profile = avatarProfiles.get(ownerId); return profile.saved ? profile.avatar : undefined;
   });
@@ -172,6 +176,7 @@ async function main() {
   const remoteRegistry = new RemoteSessionRegistry();
   registerHookRoutes(app, state, broadcast, serverConfig, auth, () => persistence.status(), remoteRegistry);
   registerAuthRoutes(app, auth, authHandoffs);
+  registerDeviceLinkRoutes(app, auth, deviceLinks, avatarProfiles);
   registerAvatarRoutes(app, auth, avatarProfiles);
   registerTeamRoutes(app, team);
   registerContributionRoutes(app, contributions);
