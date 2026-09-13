@@ -21,11 +21,12 @@ var avatarHTTPClient = &http.Client{
 }
 
 type avatarProfile struct {
-	Avatar config.AvatarConfig `json:"avatar"`
-	Saved  bool                `json:"saved"`
+	Avatar   config.AvatarConfig `json:"avatar"`
+	Revision string              `json:"revision"`
+	Saved    bool                `json:"saved"`
 }
 
-func syncAvatar(ctx context.Context, client *http.Client, serverURL, secret string, avatar *config.AvatarConfig) (avatarProfile, error) {
+func syncAvatar(ctx context.Context, client *http.Client, serverURL, secret string, avatar *config.AvatarConfig, revisions ...string) (avatarProfile, error) {
 	var result avatarProfile
 	endpoint, err := url.Parse(strings.TrimRight(serverURL, "/") + "/api/avatar/installation")
 	if err != nil || endpoint.Host == "" || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" {
@@ -39,8 +40,11 @@ func syncAvatar(ctx context.Context, client *http.Client, serverURL, secret stri
 	method := http.MethodGet
 	var payload []byte
 	if avatar != nil {
+		if len(revisions) != 1 || revisions[0] == "" {
+			return result, fmt.Errorf("load the latest factory avatar before saving; your local draft is retained")
+		}
 		method = http.MethodPut
-		payload, err = json.Marshal(map[string]any{"avatar": avatar})
+		payload, err = json.Marshal(map[string]any{"avatar": avatar, "revision": revisions[0]})
 		if err != nil {
 			return result, fmt.Errorf("could not prepare avatar")
 		}
@@ -58,6 +62,9 @@ func syncAvatar(ctx context.Context, client *http.Client, serverURL, secret stri
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
+		if response.StatusCode == http.StatusConflict {
+			return result, fmt.Errorf("your avatar changed elsewhere; reopen the designer to load the latest version before saving")
+		}
 		if response.StatusCode == http.StatusNotFound {
 			return result, fmt.Errorf("this factory server needs the avatar sync update")
 		}
