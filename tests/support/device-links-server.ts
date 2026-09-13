@@ -1,0 +1,25 @@
+// Local-only verification server. It never imports production startup/configuration or credentials.
+import Fastify from 'fastify';
+import cookie from '@fastify/cookie';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { AuthService } from '../../server/auth.js';
+import { AuthHandoffManager } from '../../server/auth-handoff.js';
+import { registerAuthRoutes } from '../../server/routes/auth.js';
+import { DeviceLinks } from '../../server/device-links.js';
+import { registerDeviceLinkRoutes } from '../../server/routes/device-links.js';
+import { AvatarProfiles } from '../../server/avatar-profiles.js';
+import { StateManager } from '../../server/state.js';
+import { LibSqlWorldRepository } from '../../server/persistence/libsql-world-repository.js';
+if (process.env.NODE_ENV !== 'test') throw new Error('This fixture requires NODE_ENV=test');
+const dir = await mkdtemp(join(tmpdir(), 'factory-browser-links-'));
+const repository = new LibSqlWorldRepository({ url: `file:${join(dir, 'test.db')}`, production: false }); await repository.initialize();
+const auth = new AuthService('local-verification-only');
+const app = Fastify(); await app.register(cookie); registerAuthRoutes(app, auth, new AuthHandoffManager());
+const profiles = new AvatarProfiles(repository, new StateManager('factory25d')); await profiles.initialize();
+const links = new DeviceLinks(repository); await links.initialize(); registerDeviceLinkRoutes(app, auth, links, profiles);
+app.post('/__test/login', async (_request, reply) => { reply.setCookie('af_session', auth.issueBrowserSession({ ownerId: 'A'.repeat(43), username: 'Alice · local test' }), { path: '/', httpOnly: true, sameSite: 'strict' }); return { ok: true }; });
+app.get('/', async (_request, reply) => reply.type('text/html').send('<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Device linking · local verification</title></head><body style="background:#10191f"><script type="module" src="http://127.0.0.1:4260/tests/support/device-links-browser.ts"></script></body></html>'));
+for (const signal of ['SIGTERM','SIGINT'] as const) process.on(signal, async () => { await app.close(); await repository.close(); await rm(dir,{recursive:true,force:true}); process.exit(0); });
+await app.listen({ host:'127.0.0.1',port:4275 });

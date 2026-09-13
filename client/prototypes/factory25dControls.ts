@@ -28,6 +28,7 @@ import { FactoryControlState, factoryControlPhase } from './factory25dControlSta
 import { factoryHost, forgetFactoryLogin, onFactoryConnection, onFactoryMessage, sendFactoryCommand, type BoardData,
   isControlPreview, onControlPreview, connectControlPreview, logoutControlPreview, previewAvatar } from './factory25dBoardData';
 import type { createLiveAgents } from './factory25dLiveAgents';
+import { createDeviceLinks } from './factory25dDeviceLinks';
 import { createAvatarEditor, type AvatarScenePreview } from './factory25dAvatarEditor';
 import { createEmoteBar } from './factory25dEmoteBar';
 import { AgentAttentionEpisodes, agentAttentionSummary, findPersonalAttentionAgent, personalAgentAttention } from './factory25dAgentAttention';
@@ -622,6 +623,9 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   document.addEventListener('lostpointercapture', cancelAgentPress, options);
   const sessionActions = panel.querySelector('.factory-session-actions')!;
   const login = document.createElement('button'); login.textContent = 'connect this browser'; login.className = 'factory-login'; login.dataset.preview = String(preview); sessionActions.append(login);
+  const deviceLinks = !preview && factoryHost() === location.origin ? createDeviceLinks(() => data.principal) : undefined;
+  const devicesButton = document.createElement('button'); devicesButton.textContent = 'link / manage devices'; devicesButton.hidden = true; sessionActions.append(devicesButton);
+  devicesButton.addEventListener('click', () => deviceLinks?.open(), options);
   const logout = document.createElement('button'); logout.textContent = 'disconnect'; logout.hidden = true; sessionActions.append(logout);
   async function logOut() {
     if (preview) { avatarEditor.invalidate(); state.release(); grab.handleLoggedOut(); held.clear(); logoutControlPreview(); return true; }
@@ -672,7 +676,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     if (next.world && next.world !== data.world) clockOffset = next.world.serverTime - Date.now();
     data = next; void refreshPortrait(); state.sync(next.world?.agents ?? [], next.principal?.ownerId); avatarEditor.sync();
     login.hidden = !!next.principal; login.disabled = !next.connected;
-    logout.hidden = !next.principal; paint();
+    logout.hidden = !next.principal; devicesButton.hidden = !deviceLinks || !next.principal; deviceLinks?.sync(); paint();
     if (avatarRequested && next.principal && panel.open && (preview || factoryHost() === location.origin)) openAvatar();
   }
   const stopPreview = onControlPreview((scenario, next) => {
@@ -754,6 +758,6 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
       }
       for(const [id,visual] of sharedVisuals)if(!agents.entries.has(id)){visual.dispose();sharedVisuals.delete(id);}
     },
-    dispose() { for(const visual of sharedVisuals.values())visual.dispose();islandTransitions.dispose(); menuSize.disconnect(); soundObserver.disconnect(); clearInterval(soundMeter); if(soundPanel) soundAnchor.replaceWith(soundPanel); soundDock.remove(); quickMute.remove(); for(const motion of pickupMotions.values())motion.dispose();profileMenu.dispose(); roomMenu.dispose(); toolbarTooltip.dispose(); toolbarFocus.dispose(); avatarEditor.dispose(); emoteBar.dispose(); stop(); state.release(); grab.destroy(); clearInterval(heartbeat); stopMessages(); stopConnection(); stopPreview(); abort.abort(); sizeToolbar.disconnect(); for (const { element, anchor } of docked) { if (element.isConnected) anchor.replaceWith(element); else anchor.remove(); } toolbar.remove(); document.body.classList.remove('factory-toolbar-ready'); document.body.style.removeProperty('--factory-toolbar-height'); panel.remove(); attentionAnnouncer.remove(); },
+    dispose() { deviceLinks?.dispose(); for(const visual of sharedVisuals.values())visual.dispose();islandTransitions.dispose(); menuSize.disconnect(); soundObserver.disconnect(); clearInterval(soundMeter); if(soundPanel) soundAnchor.replaceWith(soundPanel); soundDock.remove(); quickMute.remove(); for(const motion of pickupMotions.values())motion.dispose();profileMenu.dispose(); roomMenu.dispose(); toolbarTooltip.dispose(); toolbarFocus.dispose(); avatarEditor.dispose(); emoteBar.dispose(); stop(); state.release(); grab.destroy(); clearInterval(heartbeat); stopMessages(); stopConnection(); stopPreview(); abort.abort(); sizeToolbar.disconnect(); for (const { element, anchor } of docked) { if (element.isConnected) anchor.replaceWith(element); else anchor.remove(); } toolbar.remove(); document.body.classList.remove('factory-toolbar-ready'); document.body.style.removeProperty('--factory-toolbar-height'); panel.remove(); attentionAnnouncer.remove(); },
   };
 }
