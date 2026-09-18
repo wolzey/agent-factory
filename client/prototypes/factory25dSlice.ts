@@ -893,10 +893,18 @@ magentaBounce.intensity = 0.58;
 
 const weatherStatus = document.createElement('p'); weatherStatus.className = 'live-weather-status';
 weatherSelect.parentElement!.append(weatherStatus);
+const weatherBadge = document.createElement('p'); weatherBadge.className = 'live-weather-badge';
+document.body.append(weatherBadge);
+function showWeatherSource() {
+  const message = liveWeather ? weatherStatus.textContent ?? 'weather connecting' : `preview weather · ${weatherSelect.value}`;
+  weatherBadge.textContent = message;
+  document.querySelector('#window-open')?.setAttribute('title', message);
+}
+weatherSelect.addEventListener('change', showWeatherSource, { signal: sceneEvents.signal });
 const stopWeather = watchLiveWeather(next => {
   latestLiveWeather = next;
   if (liveWeather) { weatherTransition.select(next, performance.now()); weatherSettled = false; }
-}, message => { weatherStatus.textContent = message; });
+}, message => { weatherStatus.textContent = message; showWeatherSource(); });
 let lastSunUpdate = -Infinity;
 // Batch only explicitly constructed fixed architecture; dynamic props stay separate.
 for(const parent of [scene,interior])roomBatchSavings+=batchStaticSiblings(parent,fixedRoomBoxes);
@@ -1075,4 +1083,4 @@ function animate(): void {
 const whatsNew = createWhatsNew(() => roomNavigation.request('patio'));
 const stopSceneLoop = startSceneLoop(animate);
 
-if (import.meta.hot) import.meta.hot.dispose(() => { stopSceneLoop(); newspaper.dispose(); sharedPickups?.dispose(); sharedProps?.dispose(); windowReflections.dispose(); whatsNew.dispose(); duckHunt.dispose(); sceneEvents.abort(); titleDisposed = true; ambientBackdrop.dispose(); loungeRadio.dispose(); roomStaff.dispose(); stationTickets.dispose(); mountainView.dispose(); garageDriving.dispose();brandLibrary.dispose();brandFlag.dispose();mistFlag.dispose();thunderstorm.dispose();lightInteractions.dispose();snackCarry.dispose();vendingMachine.dispose();garage.dispose(); windowWeather.dispose(); stopTitle(); patio.dispose(); sceneAudio.dispose(); stopWeather(); visitorBasketball.dispose(); basketballChallenges.dispose(); factoryControls.dispose(); avatarStage.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.dispose(); teamDesk.dispose(); weatherStatus.remove(); renderer.dispose(); });
+if (import.meta.hot) import.meta.hot.dispose(() => { stopSceneLoop(); newspaper.dispose(); sharedPickups?.dispose(); sharedProps?.dispose(); windowReflections.dispose(); whatsNew.dispose(); duckHunt.dispose(); sceneEvents.abort(); titleDisposed = true; ambientBackdrop.dispose(); loungeRadio.dispose(); roomStaff.dispose(); stationTickets.dispose(); mountainView.dispose(); garageDriving.dispose();brandLibrary.dispose();brandFlag.dispose();mistFlag.dispose();thunderstorm.dispose();lightInteractions.dispose();snackCarry.dispose();vendingMachine.dispose();garage.dispose(); windowWeather.dispose(); stopTitle(); patio.dispose(); sceneAudio.dispose(); stopWeather(); visitorBasketball.dispose(); basketballChallenges.dispose(); factoryControls.dispose(); avatarStage.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.dispose(); teamDesk.dispose(); weatherStatus.remove(); weatherBadge.remove(); renderer.dispose(); });

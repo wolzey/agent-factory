@@ -12,7 +12,7 @@ it('keeps the last weather on failure and retries without updating after disposa
   const receive=vi.fn(),status=vi.fn(),current=vi.fn().mockResolvedValueOnce(CLEAR_WEATHER).mockRejectedValueOnce(new Error('offline')).mockResolvedValue(CLEAR_WEATHER);
   const stop=watchLiveWeather(receive,status,{current}); await vi.advanceTimersByTimeAsync(0);
   expect(receive).toHaveBeenCalledTimes(1);
-  await vi.advanceTimersByTimeAsync(300000); expect(receive).toHaveBeenCalledTimes(1); expect(status).toHaveBeenLastCalledWith(expect.stringContaining('reconnecting'));
-  await vi.advanceTimersByTimeAsync(300000); expect(receive).toHaveBeenCalledTimes(2);
-  stop(); await vi.advanceTimersByTimeAsync(300000); expect(receive).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(120000); expect(receive).toHaveBeenCalledTimes(1); expect(status).toHaveBeenLastCalledWith(expect.stringContaining('reconnecting'));
+  await vi.advanceTimersByTimeAsync(120000); expect(receive).toHaveBeenCalledTimes(2);
+  stop(); await vi.advanceTimersByTimeAsync(120000); expect(receive).toHaveBeenCalledTimes(2);
 });

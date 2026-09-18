@@ -1,3 +1,4 @@
+import { registerWeatherRoutes } from './routes/weather.js';
 import { welcomeChallengeOwner } from './welcome-challenge-config.js';
 import { PickupMotionManager } from './pickup-motion.js';
 import { RoomPropsManager } from './room-props.js';
@@ -179,6 +180,7 @@ async function main() {
   registerDeviceLinkRoutes(app, auth, deviceLinks, avatarProfiles);
   registerAvatarRoutes(app, auth, avatarProfiles);
   registerTeamRoutes(app, team);
+  registerWeatherRoutes(app);
   registerContributionRoutes(app, contributions);
   contributions.start();
 
