@@ -708,3 +708,6 @@ body.factory-toolbar-ready .factory-toolbar .factory-emote-bar.pixel-island {
   .factory-toolbar .horse-action-label { min-width:0; overflow:hidden; text-overflow:ellipsis; }
   .factory-toolbar .factory-toolbar-actions .duck-play.factory-game-action { flex:0 1 auto; min-width:44px; padding-inline:8px; gap:6px; }
 }
+
+.live-weather-badge { display:none; position:fixed; top:max(12px,env(safe-area-inset-top)); left:50%; transform:translateX(-50%); box-sizing:border-box; max-width:calc(100vw - 24px); width:max-content; margin:0; padding:8px 12px; background:#111b21e8; color:#d6dfdd; font:12px/1.5 'Geist Pixel',monospace; text-align:center; z-index:40; pointer-events:none; }
+.weather-open .live-weather-badge { display:block; }
