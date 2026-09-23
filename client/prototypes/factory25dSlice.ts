@@ -1081,6 +1081,12 @@ function animate(): void {
 }
 
 const whatsNew = createWhatsNew(() => roomNavigation.request('patio'));
-const stopSceneLoop = startSceneLoop(animate);
+// Up to 60fps within 5s of any input (driving, aiming, dragging, camera moves), 30fps while the
+// room is only being watched. Uncapped, a 120Hz display rendered this scene 120 times a second.
+let lastInputAt = performance.now();
+for (const type of ['pointerdown', 'pointermove', 'wheel', 'keydown', 'touchstart'] as const) {
+  window.addEventListener(type, () => { lastInputAt = performance.now(); }, { capture: true, passive: true, signal: sceneEvents.signal });
+}
+const stopSceneLoop = startSceneLoop(animate, () => (performance.now() - lastInputAt < 5_000 ? 1000 / 60 : 1000 / 30));
 
 if (import.meta.hot) import.meta.hot.dispose(() => { stopSceneLoop(); newspaper.dispose(); sharedPickups?.dispose(); sharedProps?.dispose(); windowReflections.dispose(); whatsNew.dispose(); duckHunt.dispose(); sceneEvents.abort(); titleDisposed = true; ambientBackdrop.dispose(); loungeRadio.dispose(); roomStaff.dispose(); stationTickets.dispose(); mountainView.dispose(); garageDriving.dispose();brandLibrary.dispose();brandFlag.dispose();mistFlag.dispose();thunderstorm.dispose();lightInteractions.dispose();snackCarry.dispose();vendingMachine.dispose();garage.dispose(); windowWeather.dispose(); stopTitle(); patio.dispose(); sceneAudio.dispose(); stopWeather(); visitorBasketball.dispose(); basketballChallenges.dispose(); factoryControls.dispose(); avatarStage.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.dispose(); teamDesk.dispose(); weatherStatus.remove(); weatherBadge.remove(); renderer.dispose(); });
