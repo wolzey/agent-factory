@@ -111,6 +111,13 @@ describe('every installer ships the same redaction', () => {
     expect(payloadFilter(hookScriptFrom(source))).toBe(canonical);
   });
 
+  // Matching filters were not enough: install.sh kept an older copy without the
+  // destination guard, so it sent the device secret to any http:// URL.
+  it.each(HOOK_SOURCES.slice(1))('$name is the whole CLI copy', source => {
+    const whole = (script: string) => script.replace(/\n$/, '');
+    expect(whole(hookScriptFrom(source))).toBe(whole(hookScriptFrom(HOOK_SOURCES[0])));
+  });
+
   it.each(HOOK_SOURCES)('$name does not forward the raw payload', source => {
     const script = hookScriptFrom(source);
     // The shape this replaced, and the fallback that reinstated it on any jq error.

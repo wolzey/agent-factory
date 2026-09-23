@@ -297,6 +297,30 @@ fi
 # Strip trailing slash to avoid double-slash in URLs
 SERVER_URL="${SERVER_URL%/}"
 
+# The server can only reject plaintext after the installation credential has
+# crossed the wire. Refuse unsafe destinations before invoking curl.
+safe_factory_url() {
+  local address="$1" authority host part
+  [[ "$address" != *[[:space:]\\\?\#]* ]] || return 1
+  case "$address" in
+    https://*) authority="${address#https://}" ;;
+    http://*) authority="${address#http://}" ;;
+    *) return 1 ;;
+  esac
+  authority="${authority%%/*}"
+  [[ "$authority" =~ ^([A-Za-z0-9.-]+|\[[A-Fa-f0-9:.]+\])(:[0-9]+)?$ ]] || return 1
+  [[ "$address" == https://* ]] && return 0
+  [[ "$authority" =~ ^localhost(:[0-9]+)?$ ]] && return 0
+  [[ "$authority" =~ ^\[(::1|0:0:0:0:0:0:0:1)\](:[0-9]+)?$ ]] && return 0
+  host="${authority%%:*}"
+  [[ "$host" =~ ^127\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]] || return 1
+  for part in "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"; do
+    [[ "$part" == 0 || "$part" != 0* ]] || return 1
+    (( 10#$part <= 255 )) || return 1
+  done
+}
+safe_factory_url "$SERVER_URL" || exit 0
+
 PAYLOAD=$(echo "$INPUT" | jq -c \
   --arg username "$USERNAME" \
   --argjson avatar "$AVATAR" \
@@ -372,12 +396,14 @@ CURL_ARGS=(
   "${SERVER_URL}/api/hooks"
   --connect-timeout 1
   --max-time 2
+  --max-redirs 0
 )
 if [ -n "$DEVICE_SECRET" ]; then
   CURL_ARGS=(-H "Authorization: Bearer ${DEVICE_SECRET}" "${CURL_ARGS[@]}")
 fi
 
-curl "${CURL_ARGS[@]}" > /dev/null 2>&1 &
+# Ignore ~/.curlrc so a user's global --location cannot forward credentials.
+curl --disable "${CURL_ARGS[@]}" > /dev/null 2>&1 &
 
 exit 0
 HOOKEOF
