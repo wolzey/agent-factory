@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createFixtureRock } from './factory25dFixtureRock';
 import type { FixtureCleanupJob } from './factory25dStaffCleanup';
 import type { SharedPropsConnection } from './factory25dSharedProps';
+import { setHidden, setPixels } from './dom';
 import './factory25dLightSwitches.css';
 
 export interface SceneLightSwitch {
@@ -147,17 +148,20 @@ export function createLightInteractions(canvas: HTMLCanvasElement, switches: Roo
           entry.motion?.sync(shared, options.shared!.now(), reduced);
         } else if (!options.shared) entry.motion?.update(dt, reduced);
         const { light, button } = entry;
-        button.hidden = document.hidden || !options.visible(light.room);
-        if (button.hidden) continue;
-        light.target.updateWorldMatrix(true, true);
-        point.copy(entry.center); light.target.localToWorld(point);
-        point.project(camera);
-        button.hidden = point.z < -1 || point.z > 1 || Math.abs(point.x) > 1 || Math.abs(point.y) > 1;
-        if (button.hidden) continue;
+        // Decide visibility before writing it: an off-screen switch used to flip hidden twice a frame.
+        let hidden = document.hidden || !options.visible(light.room);
+        if (!hidden) {
+          light.target.updateWorldMatrix(true, true);
+          point.copy(entry.center); light.target.localToWorld(point);
+          point.project(camera);
+          hidden = point.z < -1 || point.z > 1 || Math.abs(point.x) > 1 || Math.abs(point.y) > 1;
+        }
+        setHidden(button, hidden);
+        if (hidden) continue;
         entry.x = rect.left + (point.x + 1) * rect.width / 2;
         entry.y = rect.top + (1 - point.y) * rect.height / 2;
-        button.style.left = `${entry.x - parent.left - 22}px`;
-        button.style.top = `${entry.y - parent.top - 22}px`;
+        setPixels(button, 'left', entry.x - parent.left - 22);
+        setPixels(button, 'top', entry.y - parent.top - 22);
       }
       updateLabels();
     },

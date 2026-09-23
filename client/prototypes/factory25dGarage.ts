@@ -2,6 +2,7 @@ import { garageElevatorPose } from './factory25dWorld';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {propPart,standard} from './factory25dProps';
+import { setHidden, setPixels } from './dom';
 import './factory25dGarage.css';
 import {furnishGarage,garageConcrete} from './factory25dGarageFurnishings';
 import {contactShadow} from './factory25dContactShadows';
@@ -174,16 +175,17 @@ export function createGarage(factory:THREE.Scene,canvas:HTMLCanvasElement,home:T
   travelBackground.copy(factory.background as THREE.Color).lerp(scene.background as THREE.Color,floorProgress);
   if(physicalTrip)travelBackground.lerp(new THREE.Color('#344454'),Math.sin(Math.PI*floorProgress)*.65);
   floorSection.root.visible=physicalTrip&&floorProgress>0&&floorProgress<1;
-  down.hidden=!available||!!trip;
-  nav.hidden=!open||!!trip||!available;collection.hidden=!open||!!trip||(!available&&!carPickingAvailable);if(!available)status.hidden=true;
-  if(floorPreview!==undefined)down.hidden=nav.hidden=collection.hidden=true;
+  // Each control is written once per frame, and only when it changes (see setHidden).
+  const preview=floorPreview!==undefined;
+  setHidden(down,preview||!available||!!trip);
+  setHidden(nav,preview||!open||!!trip||!available);setHidden(collection,preview||!open||!!trip||(!available&&!carPickingAvailable));if(!available)setHidden(status,true);
   const floorLabel=open?'↑ 01':'↓ G';
   if(down.dataset.label!==floorLabel){down.textContent=floorLabel;down.dataset.label=floorLabel;down.setAttribute('aria-label',open?'Take elevator to the factory':'Take elevator to the garage');}
   floorTravelCamera(camera,home,floorProgress,physicalTrip);
   floorTravelCamera(lowerFloorCamera,home,floorProgress,physicalTrip,false);
-  canvas.dataset.floorProgress=floorProgress.toFixed(3);
+  const progress=floorProgress.toFixed(3);if(canvas.dataset.floorProgress!==progress)canvas.dataset.floorProgress=progress;
   const rect=canvas.getBoundingClientRect();const point=(open?lowerLift.callPoint:upperLift.callPoint).clone().project(projectionCamera);
-  down.style.left=`${rect.left+Math.max(8,Math.min(canvas.clientWidth-52,(point.x+1)*canvas.clientWidth/2-22))}px`;down.style.top=`${rect.top+Math.max(8,Math.min(canvas.clientHeight-52,(1-point.y)*canvas.clientHeight/2-22))}px`;
+  setPixels(down,'left',rect.left+Math.max(8,Math.min(canvas.clientWidth-52,(point.x+1)*canvas.clientWidth/2-22)));setPixels(down,'top',rect.top+Math.max(8,Math.min(canvas.clientHeight-52,(1-point.y)*canvas.clientHeight/2-22)));
  if(open)furnishings.update(now/1000,matchMedia('(prefers-reduced-motion: reduce)').matches);
  },dispose(){furnishings.dispose();lit.dispose();floorSection.dispose();lighting.dispose();windows.dispose();miniWork.dispose();document.body.classList.remove('garage-open','garage-travelling');upperLift.root.removeFromParent();transit.remove();down.remove();nav.remove();status.remove();collection.remove();document.removeEventListener('visibilitychange',resumeTrip);window.removeEventListener('factory-finish-floor-trip',skipTrip);document.removeEventListener('keydown',escape);pickHost.removeEventListener('click',select,true);}};
 }
