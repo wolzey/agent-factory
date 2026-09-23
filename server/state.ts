@@ -142,6 +142,16 @@ export class StateManager {
   get grabBounds() { return this.environment === 'factory25d' ? { ...FACTORY25D_BOUNDS, minY: -82 } : GRAB_POINTER_BOUNDS; }
 
   private crowdPaused = new Map<string, { movement: WorldMovement; activity: AgentActivity; retryAt: number }>();
+  // A paused walker stands still, so its route back to the same target is the same every 50ms tick.
+  private pausedRoutes = new Map<string, { from: Position; to: Position; waypoints: Position[]; clear: boolean }>();
+  private pausedRoute(id: string, from: Position, to: Position) {
+    const cached = this.pausedRoutes.get(id);
+    if (cached && cached.from.x === from.x && cached.from.y === from.y && cached.to.x === to.x && cached.to.y === to.y) return cached;
+    const waypoints = factory25dWaypoints(from, to);
+    const route = { from: { ...from }, to: { ...to }, waypoints, clear: factoryMovementIsClear({ from, to, waypoints }) };
+    this.pausedRoutes.set(id, route);
+    return route;
+  }
   private personalSpacePeople(except?: string) {
     return [...this.sessions.values()].filter(a=>a.sessionId!==except&&!this.garageDrivers.has(a.sessionId)&&!this.grabbedSession(a.sessionId)
       && !a.manualControl?.elevatorTrip && !(a.world.movement&&factoryElevatorTripAt(a.world.movement,this.now())));
@@ -174,8 +184,9 @@ export class StateManager {
       const from=this.currentWorldPosition(agent,timestamp);
       let movement=agent.world.movement;
       if(!movement){
-        const to=original.to,waypoints=factory25dWaypoints(from,to);
-        if(!factoryMovementIsClear({from,to,waypoints}))continue;
+        const to=original.to,route=this.pausedRoute(id,from,to);
+        if(!route.clear)continue;
+        const waypoints=[...route.waypoints];
         movement={from,to,waypoints,startedAt:timestamp,arrivesAt:timestamp+routeDistance(from,waypoints,to)/WORLD_MOVE_SPEED*1000};
       }
       if(timestamp>=movement.arrivesAt){this.crowdPaused.delete(id);continue;}
@@ -201,6 +212,7 @@ export class StateManager {
       if(!paused)changes.set(id,agent);
     }
     for(const id of this.crowdPaused.keys())if(!this.sessions.has(id))this.crowdPaused.delete(id);
+    for(const id of this.pausedRoutes.keys())if(!this.crowdPaused.has(id))this.pausedRoutes.delete(id);
     if(changes.size)this.commit([...changes.values()].map(agent=>({kind:'agent_upsert' as const,agent:clone(agent)})),false,timestamp);
   }
 
