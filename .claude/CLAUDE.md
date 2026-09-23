@@ -17,7 +17,7 @@ pnpm install
 pnpm dev          # server (tsx watch, port 4242) + client (Vite, port 5173)
 ```
 
-- Open **http://localhost:5173/?factoryServer=local**. Without that parameter, `factoryHost()` (`client/prototypes/factory25dBoardData.ts`) points localhost pages at the production server. You then see the live room read-only, and your local server goes unused.
+- Open **http://localhost:5173**. Development pages use their own server; add `?factoryServer=live` to mirror the production room read-only (`factoryHost()` in `client/prototypes/factory25dBoardData.ts`).
 - The server listens on `process.env.PORT` (default 4242), and Vite proxies `/api` and `/ws` to 4242. If your launcher exports `PORT`, run `PORT=4242 pnpm dev`.
 - Local state lives in `.data/agent-factory.db` (libSQL file). The server only uses Turso when `TURSO_DATABASE_URL` is set; production requires it together with `TURSO_AUTH_TOKEN`.
 - The local server also shows your own Claude Code sessions, read from `~/.claude/sessions`.

@@ -19,7 +19,7 @@ An occasional real idle agent can approach, board, reverse into the open floor, 
 
 ## Local checks and boundaries
 
-The explicit `controlsPreview` playground uses the same pure simulation privately and never sends driving input live. To check multiple browsers against a local backend, run the existing server on port 4242 and open the prototype with `?factoryServer=local`. Production uses the site's existing WebSocket connection.
+The explicit `controlsPreview` playground uses the same pure simulation privately and never sends driving input live. To check multiple browsers against a local backend, run the existing server on port 4242 and open the prototype locally; local previews use the local backend by default. Production uses the site's existing WebSocket connection.
 
 Ordinary driving stays inside the **garage**. The hovering DeLorean can approach the ramp exit: the final stretch gently draws it toward the opening, triggers a shared time jump, and returns it after the jump delay. Other cars cannot use the ramp. There is no separate racing screen, course, timer or leaderboard. Extending the connected outdoor world needs the landing/clearance work recorded in `garage-car-clearance.md`.
 
