@@ -2,6 +2,16 @@
 
 Highlights reconstructed from Git history. Dates reflect merges, or source commits for the original factory; exact deployment times were not tracked.
 
+## 2026-09-23 — Same factory. Less fan noise.
+
+Faster to load, easier on your laptop, and smoother when the room is busy.
+
+- **Easy on your laptop.** The room draws fewer frames while you’re just watching, and the lamps stop redrawing their shadows every frame. Leave it open all day.
+- **Faster first load.** The garage cars now download about 15 times smaller, and your browser keeps the rest between visits.
+- **Smoother when it’s busy.** Walking agents take a fraction of the server’s effort, and each viewer receives less data.
+
+Sources: [#68](https://github.com/wolzey/agent-factory/pull/68), [#69](https://github.com/wolzey/agent-factory/pull/69)
+
 ## 2026-09-11 — A little friendly competition
 
 Challenge a teammate to HORSE, or head outside for Duck Hunt.

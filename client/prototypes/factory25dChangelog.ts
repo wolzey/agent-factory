@@ -1,7 +1,22 @@
+export type FactoryRelease = {
+  id: string; date: string; title: string; summary: string;
+  changes: readonly { label: string; text: string }[];
+  prs: readonly number[]; commits?: readonly string[];
+  /** Button that takes you to the patio to try the release; omitted when there is nothing to visit. */
+  visit?: string;
+};
+
 /** Curated highlights. Dates refer to merges, or the source commit for the original factory. */
-export const factoryChangelog = [
+export const factoryChangelog: readonly FactoryRelease[] = [
+  { id: '2026-09-23-lighter', date: '2026-09-23', title: 'Same factory. Less fan noise.',
+    summary: 'Faster to load, easier on your laptop, and smoother when the room is busy.',
+    changes: [
+      { label: 'Easy on your laptop.', text: 'The room draws fewer frames while you’re just watching, and the lamps stop redrawing their shadows every frame. Leave it open all day.' },
+      { label: 'Faster first load.', text: 'The garage cars now download about 15 times smaller, and your browser keeps the rest between visits.' },
+      { label: 'Smoother when it’s busy.', text: 'Walking agents take a fraction of the server’s effort, and each viewer receives less data.' },
+    ], prs: [68, 69] },
   { id: '2026-09-11-games', date: '2026-09-11', title: 'A little friendly competition',
-    summary: 'Challenge a teammate to HORSE, or head outside for Duck Hunt.',
+    summary: 'Challenge a teammate to HORSE, or head outside for Duck Hunt.', visit: 'find Duck Hunt on the patio ↗',
     changes: [
       { label: 'Your shot.', text: 'Play asynchronous HORSE, even when your opponent is offline.' },
       { label: 'Out on the patio.', text: 'Five waves of Duck Hunt, three shots per wave, and tougher rounds as you go.' },
@@ -47,4 +62,4 @@ export const factoryChangelog = [
       { label: 'The original factory.', text: 'Pixel arcade cabinets turned agent sessions into a room you could watch.' },
       { label: 'Already feeling at home.', text: 'A front counter and purple lounge sat beside the arcade floor.' },
     ], prs: [], commits: ['71d910f', '501df9f'] },
-] as const;
+];

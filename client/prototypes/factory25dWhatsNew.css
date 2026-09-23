@@ -11,9 +11,10 @@
 .factory-updates[data-open="true"] .factory-update-preview { grid-template-rows:1fr; visibility:visible; }
 .factory-update-content { overflow:hidden; min-height:0; opacity:0; transform:translateY(12px); padding:0 24px; transition:opacity 150ms ease-out,transform 240ms cubic-bezier(.22,1,.36,1); }
 .factory-updates[data-open="true"] .factory-update-content { opacity:1; transform:translateY(0); }
-.factory-update-eyebrow { display:block; font-size:10px; letter-spacing:1px; opacity:.7; }
+/* Geist Pixel draws on a 0.08em grid, so 12.5px puts every glyph pixel (and the 1px tracking) on a whole screen pixel; at 10px it blurred into a plain thin face. */
+.factory-update-eyebrow { display:block; font:400 12.5px/1.2 'Geist Pixel',monospace; letter-spacing:1px; opacity:.7; }
 .factory-update-content .factory-update-eyebrow { margin-top:26px; }
-.factory-update-content h2 { font:600 21px/1.2 'Geist Pixel',monospace; margin:12px 0; }
+.factory-update-content h2 { font:600 21px/1.2 'Geist Pixel',monospace; margin:12px 0; text-wrap:balance; }
 .factory-update-content p { margin:0 0 20px; }
 .factory-update-actions { display:flex; flex-direction:column; gap:8px; padding-bottom:8px; }
 .factory-update-actions button { min-height:40px; padding:8px 12px; border:0; background:#4c2022; color:#fff0e9; font:inherit; cursor:pointer; }
@@ -89,6 +90,7 @@ body:has(dialog[open]) .factory-updates { visibility:hidden; }
 .factory-update-art { display:block; width:100%; height:auto; border-radius:0; clip-path:polygon(6px 0,calc(100% - 6px) 0,calc(100% - 6px) 3px,100% 3px,100% calc(100% - 3px),calc(100% - 6px) calc(100% - 3px),calc(100% - 6px) 100%,6px 100%,6px calc(100% - 3px),0 calc(100% - 3px),0 3px,6px 3px); margin:0 0 18px; }
 .factory-update-content>.factory-update-art { margin-top:24px; }
 .factory-update-content .factory-update-eyebrow { margin-top:0; }
+.factory-update-content>.factory-update-eyebrow:first-child { margin-top:24px; }
 .factory-changelog-featured>.factory-update-art { margin-bottom:22px; }
 .factory-changelog-try { min-height:44px; max-width:100%; margin-top:18px; padding:10px 18px; border:0; border-radius:0; background:#ffe15a; color:#302800; font:inherit; cursor:pointer; }
 .factory-changelog-try:hover { background:#ffeb86; }
@@ -138,6 +140,8 @@ body:has(dialog[open]) .factory-updates { visibility:hidden; }
 .factory-updates[data-compact="true"] .factory-update-trigger {padding:8px;gap:0;font-size:0;}
 .factory-updates[data-compact="true"] .factory-update-chevron {display:none;}
 .factory-updates[data-compact="true"] .factory-update-preview {position:absolute;bottom:72px;right:0;width:min(340px,calc(100vw - 24px));background:#000;clip-path:var(--pixel-capsule);}
+/* On its own the card ends at the buttons, so give them the same 24px as its sides. */
+.factory-updates[data-compact="true"] .factory-update-actions {padding-bottom:24px;}
 
 .factory-release-video { position:relative; }
 .factory-release-video video { display:block; width:100%; height:auto; }
