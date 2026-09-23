@@ -17,7 +17,7 @@ pnpm install
 pnpm dev          # server (tsx watch, port 4242) + client (Vite, port 5173)
 ```
 
-- Open **http://localhost:5173/?factoryServer=local**. Without that parameter, `factoryHost()` (`client/prototypes/factory25dBoardData.ts`) points localhost pages at the production server. You then see the live room read-only, and your local server goes unused.
+- Open **http://localhost:5173**. Development pages use their own server; add `?factoryServer=live` to mirror the production room read-only (`factoryHost()` in `client/prototypes/factory25dBoardData.ts`).
 - The server listens on `process.env.PORT` (default 4242), and Vite proxies `/api` and `/ws` to 4242. If your launcher exports `PORT`, run `PORT=4242 pnpm dev`.
 - Local state lives in `.data/agent-factory.db` (libSQL file). The server only uses Turso when `TURSO_DATABASE_URL` is set; production requires it together with `TURSO_AUTH_TOKEN`.
 - The local server also shows your own Claude Code sessions, read from `~/.claude/sessions`.
@@ -65,7 +65,7 @@ The server always runs the `factory25d` environment (`server/client-environment.
 
 - **The hook exists in four copies that must stay byte-identical:** `hooks/agent-factory-hook.sh`, `cli/internal/hooks/agent-factory-hook.sh`, and the heredocs in `install.sh` and `hooks/team-install.sh`. `tests/hook-redaction.test.ts` compares them. Edit the canonical file, then copy it into the other three.
 - **The hook sends an allowlist, never the raw payload.** Prompts, tool input and tool output must not leave the machine. It derives `session_name` and `git_action` locally, and refuses unsafe server URLs before sending the device secret.
-- **Claude Code hook events:** a hook on `WorktreeCreate` or `WorktreeRemove` replaces Claude Code's own git behaviour, so the installers don't register them. `FileChanged` needs a matcher.
+- **Claude Code hook events:** a hook on `WorktreeCreate` or `WorktreeRemove` replaces Claude Code's own git behaviour, so the installers don't register them. `FileChanged` needs a matcher. Hooks run with `async: true` except `SessionStart` and `SessionEnd`, so events can arrive out of order: the server pairs tool events by `tool_use_id`, and the hook retries `SessionStart` in the background.
 - **World changes go through `commit()` in `state.ts`.** It bumps the revision, broadcasts the delta, and schedules a checkpoint. Pass `immediatePersistence` for lifecycle changes (joins, removals, chat, avatars). Movement and activity wait for the 15s checkpoint.
 - **Per-frame DOM work in the client:** use `setHidden`/`setPixels` from `client/prototypes/dom.ts`, and decide visibility before writing it. Writing `hidden` twice a frame forces extra style and layout work.
 - **Vite fingerprints files emitted under `/assets/`, and the server caches them for a year.** Files in `client/assets` (the public dir) keep their names and are revalidated.

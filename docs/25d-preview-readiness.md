@@ -53,8 +53,8 @@ are preserved. They are not included in this branch.
   Blur, board focus, disconnect and takeover stop input or clear control.
 - Existing browser authentication and lounge chat sending use the same origin,
   existing conversation format and server echo. History survives reconnects.
-  Localhost previews read public live data without remote cookies or write
-  access. `?factoryServer=local` selects a local same-origin backend for development.
+  Localhost previews use their own same-origin backend; `?factoryServer=live` reads
+  public live data instead, without remote cookies or write access.
 - The production weather provider and solar calculation now drive automatic
   Salt Lake City weather and daylight. Manual weather/time overrides remain
   available; the rain-light preview URL retains its chosen weather. Provider

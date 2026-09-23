@@ -371,6 +371,8 @@ PAYLOAD=$(echo "$INPUT" | jq -c \
       hook_event_name: ($in.hook_event_name | cap_field),
       cwd: ($in.cwd | cap_field),
       tool_name: ($in.tool_name | cap_field),
+      # An opaque call id: async hooks arrive in any order, so the server pairs start and end.
+      tool_use_id: ($in.tool_use_id | cap_field),
       reason: ($in.reason | cap),
       agent_id: ($in.agent_id | cap_field),
       agent_type: ($in.agent_type | cap_field),
@@ -403,7 +405,17 @@ if [ -n "$DEVICE_SECRET" ]; then
 fi
 
 # Ignore ~/.curlrc so a user's global --location cannot forward credentials.
-curl --disable "${CURL_ARGS[@]}" > /dev/null 2>&1 &
+if [[ "$PAYLOAD" == *'"hook_event_name":"SessionStart"'* ]]; then
+  # A sleeping or restarting server would drop the one event that admits this
+  # session, hiding it until it ends. Retry for about a minute and a half, detached
+  # from the hook's stdio so Claude Code never waits on the retries.
+  ( for delay in 0 5 20 60; do
+      sleep "$delay"
+      curl --disable --fail "${CURL_ARGS[@]}" > /dev/null 2>&1 && break
+    done ) > /dev/null 2>&1 < /dev/null &
+else
+  curl --disable "${CURL_ARGS[@]}" > /dev/null 2>&1 &
+fi
 
 exit 0
 HOOKEOF
@@ -449,18 +461,24 @@ register_hooks() {
   local registered=0
   local skipped=0
 
+  # Session boundaries stay synchronous; every other event runs in the background so
+  # Claude Code does not wait on the hook around each tool call (the server pairs tool
+  # events by tool_use_id). Existing entries are brought in line on every install.
+  local SET_ASYNC='.hooks[$event] |= map(if (.hooks | type) == "array" then .hooks |= map(if ((.command // "") | tostring | contains("agent-factory-hook")) then (if $async then .async = true else del(.async) end) else . end) else . end)'
   for event in "${events[@]}"; do
-    local already
+    local already result async=true
+    case "$event" in SessionStart|SessionEnd) async=false ;; esac
     already=$(jq -r ".hooks.${event}[]?.hooks[]?.command // empty" "$temp" 2>/dev/null | grep -c "agent-factory-hook" || true)
 
     if [ "$already" -gt 0 ]; then
+      result=$(jq --arg event "$event" --argjson async "$async" "$SET_ASYNC" "$temp")
+      echo "$result" > "$temp"
       skipped=$((skipped + 1))
       continue
     fi
 
-    local result
-    result=$(jq --arg event "$event" --argjson entry "$hook_entry" \
-      '.hooks //= {} | .hooks[$event] //= [] | .hooks[$event] += [$entry]' "$temp")
+    result=$(jq --arg event "$event" --argjson entry "$hook_entry" --argjson async "$async" \
+      '.hooks //= {} | .hooks[$event] //= [] | .hooks[$event] += [$entry | if $async then .hooks[0].async = true else . end]' "$temp")
     echo "$result" > "$temp"
     registered=$((registered + 1))
   done

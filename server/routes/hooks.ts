@@ -9,6 +9,7 @@ import type { RemoteSessionRegistry } from '../remote-registry.js';
 import { normalizeHookPayload } from '../hook-payload.js';
 import { isSameHostOrigin, usesSecureTransport } from '../request-security.js';
 import { readBrowserPrincipal } from './auth.js';
+import { SessionCreationLimits, clientAddress } from '../session-limits.js';
 
 export function registerHookRoutes(
   app: FastifyInstance,
@@ -18,6 +19,7 @@ export function registerHookRoutes(
   auth: AuthService,
   getPersistenceStatus: () => PersistenceStatus,
   remoteRegistry: RemoteSessionRegistry,
+  limits = new SessionCreationLimits(),
 ) {
   app.post<{ Body: HookPayload }>('/api/hooks', async (request, reply) => {
     // Reduced to the fields the server uses before anything else touches it, so
@@ -41,6 +43,16 @@ export function registerHookRoutes(
     const incomingOwnerId = device.kind === 'authenticated' ? device.ownerId : undefined;
     if (existing?.ownerId && existing.ownerId !== incomingOwnerId) {
       return reply.status(403).send({ error: 'Agent session belongs to another installation' });
+    }
+
+    // Only a SessionStart for an unknown id adds an agent; other unknown ids are rejected as phantoms.
+    if (!existing && payload.hook_event_name === 'SessionStart') {
+      if (state.getAll().length >= limits.maxLiveAgents) {
+        return reply.status(429).send({ error: 'The factory is full' });
+      }
+      if (!limits.allow(clientAddress(request))) {
+        return reply.status(429).send({ error: 'Too many new agents from this address' });
+      }
     }
 
     // Existing legacy sessions remain unowned. This prevents someone from claiming

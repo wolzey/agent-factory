@@ -105,11 +105,12 @@ export function applyBoardChanges(data: BoardData, changes: unknown): BoardData 
   return { ...data, agents, chat, merges };
 }
 
+/** Development pages talk to their own server; `?factoryServer=live` mirrors production read-only. */
 export function factoryHost() {
   const ip = location.hostname.split('.').map(Number);
   const privateLan = ip.length === 4 && ip.every(part => Number.isInteger(part) && part >= 0 && part <= 255)
     && (ip[0] === 10 || ip[0] === 192 && ip[1] === 168 || ip[0] === 172 && ip[1] >= 16 && ip[1] <= 31);
-  return ((import.meta.env.DEV && privateLan) || ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) && new URLSearchParams(location.search).get('factoryServer') !== 'local'
+  return ((import.meta.env.DEV && privateLan) || ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) && new URLSearchParams(location.search).get('factoryServer') === 'live'
     ? 'https://fluid-factory.onrender.com' : location.origin;
 }
 let chatSocket: WebSocket | null = null;

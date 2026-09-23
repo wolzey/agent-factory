@@ -8,7 +8,7 @@ import (
 )
 
 func TestMakeHookEntryUsesStringCommandForCodex(t *testing.T) {
-	entry := makeHookEntry(TargetCodex, "/tmp/agent-factory-hook.sh")
+	entry := makeHookEntry(TargetCodex, "/tmp/agent-factory-hook.sh", "PreToolUse")
 	hookList, ok := entry["hooks"].([]interface{})
 	if !ok || len(hookList) != 1 {
 		t.Fatalf("hooks = %#v, want one hook", entry["hooks"])
@@ -130,6 +130,49 @@ func TestRegisterHooksRemovesRetiredClaudeEvents(t *testing.T) {
 	}
 	if !eventHasHook(hooksMap, "PreToolUse") || !eventHasHook(hooksMap, "SessionEnd") {
 		t.Errorf("current events were not registered: %#v", hooksMap)
+	}
+}
+
+func TestRegisterHooksRunsClaudeHooksAsyncExceptSessionBoundaries(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// An older install: blocking entries, plus another tool's hook that must be left alone.
+	existing := `{"hooks":{"PreToolUse":[` +
+		`{"hooks":[{"type":"command","command":"/tmp/agent-factory-hook.sh"}]},` +
+		`{"hooks":[{"type":"command","command":"/usr/local/bin/lint-guard"}]}],` +
+		`"SessionStart":[{"hooks":[{"type":"command","command":"/tmp/agent-factory-hook.sh","async":true}]}]}}`
+	if err := os.WriteFile(ClaudeSettingsPath(), []byte(existing), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := RegisterHooks(TargetClaude, "/tmp/agent-factory-hook.sh"); err != nil {
+		t.Fatal(err)
+	}
+
+	settings, err := readSettings(TargetClaude)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hooksMap := settings["hooks"].(map[string]interface{})
+	asyncOf := func(event string, index int) interface{} {
+		entry := hooksMap[event].([]interface{})[index].(map[string]interface{})
+		return entry["hooks"].([]interface{})[0].(map[string]interface{})["async"]
+	}
+	for _, event := range []string{"PreToolUse", "PostToolUse", "Stop", "UserPromptSubmit"} {
+		if asyncOf(event, 0) != true {
+			t.Errorf("%s agent-factory hook async = %v, want true", event, asyncOf(event, 0))
+		}
+	}
+	for _, event := range []string{"SessionStart", "SessionEnd"} {
+		if asyncOf(event, 0) != nil {
+			t.Errorf("%s agent-factory hook async = %v, want synchronous", event, asyncOf(event, 0))
+		}
+	}
+	if asyncOf("PreToolUse", 1) != nil {
+		t.Errorf("another tool's hook was changed: %#v", hooksMap["PreToolUse"])
 	}
 }
 

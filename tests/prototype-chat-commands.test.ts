@@ -36,7 +36,7 @@ describe('lounge chat commands', () => {
     expect(parseChatCommand('  /EMOTE Wave ')).toEqual({ kind: 'emote', emote: 'wave' });
     expect(parseChatCommand('/CHAT  Hi, @name!')).toEqual({ kind: 'chat', message: 'Hi, @name!' });
     expect(parseChatCommand('/chat /help')).toEqual({ kind: 'chat', message: '/help' });
-    expect(parseChatCommand('a'.repeat(520))).toEqual({ kind: 'chat', message: 'a'.repeat(500) });
+    expect(parseChatCommand('a'.repeat(520))).toEqual({ kind: 'chat', message: 'a'.repeat(200) });
   });
   it('shows help locally even when signed out or offline', async () => {
     const { execute, actions } = fixture({ authenticated: false, connected: false });

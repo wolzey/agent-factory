@@ -19,7 +19,7 @@ The patio has an upper terrace level with the factory doorway, seven lit steps d
 
 Automatic routes and manual movement use the shared retaining-wall and stair footprints, with 0.30 metres of clearance around the walls. Followers respect the same obstacles instead of spreading through the stair sides. Sprite feet, child agents, contact shadows, drag picking, memorials, weather particles and outdoor vortex effects use the terrace height. Server restoration rebuilds saved movement paths against the current layout and moves a blocked old pose to nearby open floor, retaining identity, station reservations and chat.
 
-Deploy the client and server together: the server supplies the authoritative walking paths. Local previews normally read the live factory's public feed, which may have an older floor plan during development. Use `factoryServer=local` with the local backend to test both together. Browser validation uses synthetic sessions intercepted only inside a temporary local test browser, never production data writes.
+Deploy the client and server together: the server supplies the authoritative walking paths. Local previews use the local backend, so client and server are tested together; add `?factoryServer=live` to read the live factory's public feed instead, which may have an older floor plan during development. Browser validation uses synthetic sessions intercepted only inside a temporary local test browser, never production data writes.
 
 ## Rain on the deck
 

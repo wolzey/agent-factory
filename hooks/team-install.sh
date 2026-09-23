@@ -207,6 +207,8 @@ PAYLOAD=$(echo "$INPUT" | jq -c \
       hook_event_name: ($in.hook_event_name | cap_field),
       cwd: ($in.cwd | cap_field),
       tool_name: ($in.tool_name | cap_field),
+      # An opaque call id: async hooks arrive in any order, so the server pairs start and end.
+      tool_use_id: ($in.tool_use_id | cap_field),
       reason: ($in.reason | cap),
       agent_id: ($in.agent_id | cap_field),
       agent_type: ($in.agent_type | cap_field),
@@ -239,7 +241,17 @@ if [ -n "$DEVICE_SECRET" ]; then
 fi
 
 # Ignore ~/.curlrc so a user's global --location cannot forward credentials.
-curl --disable "${CURL_ARGS[@]}" > /dev/null 2>&1 &
+if [[ "$PAYLOAD" == *'"hook_event_name":"SessionStart"'* ]]; then
+  # A sleeping or restarting server would drop the one event that admits this
+  # session, hiding it until it ends. Retry for about a minute and a half, detached
+  # from the hook's stdio so Claude Code never waits on the retries.
+  ( for delay in 0 5 20 60; do
+      sleep "$delay"
+      curl --disable --fail "${CURL_ARGS[@]}" > /dev/null 2>&1 && break
+    done ) > /dev/null 2>&1 < /dev/null &
+else
+  curl --disable "${CURL_ARGS[@]}" > /dev/null 2>&1 &
+fi
 
 exit 0
 HOOKEOF
@@ -276,13 +288,19 @@ EVENTS=("SessionStart" "SessionEnd" "PreToolUse" "PostToolUse" "SubagentStart" "
 TEMP_FILE=$(mktemp)
 cp "$SETTINGS_FILE" "$TEMP_FILE"
 
+# Session boundaries stay synchronous; every other event runs in the background so
+# Claude Code does not wait on the hook around each tool call (the server pairs tool
+# events by tool_use_id). Existing entries are brought in line on every install.
+SET_ASYNC='.hooks[$event] |= map(if (.hooks | type) == "array" then .hooks |= map(if ((.command // "") | tostring | contains("agent-factory-hook")) then (if $async then .async = true else del(.async) end) else . end) else . end)'
 for EVENT in "${EVENTS[@]}"; do
+  ASYNC=true; case "$EVENT" in SessionStart|SessionEnd) ASYNC=false ;; esac
   ALREADY=$(jq -r ".hooks.${EVENT}[]?.hooks[]?.command // empty" "$TEMP_FILE" 2>/dev/null | grep -c "agent-factory-hook" || true)
   if [ "$ALREADY" -gt 0 ]; then
-    continue
+    RESULT=$(jq --arg event "$EVENT" --argjson async "$ASYNC" "$SET_ASYNC" "$TEMP_FILE")
+  else
+    RESULT=$(jq --arg event "$EVENT" --argjson entry "$HOOK_ENTRY" --argjson async "$ASYNC" \
+      '.hooks //= {} | .hooks[$event] //= [] | .hooks[$event] += [$entry | if $async then .hooks[0].async = true else . end]' "$TEMP_FILE")
   fi
-  RESULT=$(jq --arg event "$EVENT" --argjson entry "$HOOK_ENTRY" \
-    '.hooks //= {} | .hooks[$event] //= [] | .hooks[$event] += [$entry]' "$TEMP_FILE")
   echo "$RESULT" > "$TEMP_FILE"
 done
 

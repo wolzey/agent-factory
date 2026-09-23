@@ -256,16 +256,24 @@ export function createLoungeDetails(
     spread: 0.09,
     opacity: 0.25,
   });
+  // Lamp shadows change only when something moves beneath them, so refresh them at 15Hz rather
+  // than every frame (they were about a third of the room's draw calls), and at once on a switch.
+  const lampShadows = [candleLight, lampLight, pool];
+  const refreshLampShadows = () => { for (const light of lampShadows) light.shadow.needsUpdate = true; };
+  for (const light of lampShadows) light.shadow.autoUpdate = false;
+  refreshLampShadows();
+  let lampShadowsAt = -Infinity;
   let candleOn = true;
   const lightSwitches: SceneLightSwitch[] = [{ id: 'lounge-candle', label: 'Lounge candle', kind: 'candle', target: candle,
     motionTargets: [candle, wick, flame, candleLight],
-    isOn: () => candleOn, setOn(on) { candleOn = on; flame.visible = on; candleLight.visible = on; candleLight.intensity = on ? .8 : 0; } }];
+    isOn: () => candleOn, setOn(on) { candleOn = on; flame.visible = on; candleLight.visible = on; candleLight.intensity = on ? .8 : 0; refreshLampShadows(); } }];
   function lampSwitch(id: string, label: string, target: THREE.Object3D, light: THREE.Light,
     material: THREE.MeshStandardMaterial, glow?: THREE.Object3D): SceneLightSwitch {
     let on = true; const emission = material.emissiveIntensity;
     return { id, label, kind: 'lamp', target, isOn: () => on, setOn(next) {
       on = next; light.visible = on; material.emissiveIntensity = on ? emission : 0;
       if (glow) glow.visible = on;
+      refreshLampShadows();
     } };
   }
   lightSwitches.push(lampSwitch('front-desk-lamp', 'Front desk lamp', shade, lampLight, shade.material, bulb),
@@ -290,6 +298,8 @@ export function createLoungeDetails(
         : Math.sin(time * 4.1) * 0.025 + Math.sin(time * 6.7) * 0.016;
       candleLight.intensity = candleOn ? 0.8 + flicker : 0;
       flame.scale.y = 1.5 + flicker * 2;
+      const now = performance.now();
+      if (now - lampShadowsAt >= 1000 / 15) { lampShadowsAt = now; refreshLampShadows(); }
     },
     dispose() { soccer.dispose(); activity.dispose(); },
   };

@@ -180,6 +180,22 @@ describe('hook payload redaction', () => {
     expect(payload.username).toBe('tester');
   });
 
+  it('forwards the opaque tool_use_id so the server can pair async start and end events', () => {
+    const payload = runHook({
+      session_id: 's1',
+      hook_event_name: 'PostToolUse',
+      cwd: '/work',
+      tool_name: 'Read',
+      tool_use_id: 'toolu_01ABC',
+      tool_input: { file_path: '/work/secret.env' },
+      tool_response: { content: 'API_KEY=sk-live-secret' },
+    });
+
+    expectKeys(payload, [...BASE_KEYS, 'tool_name', 'tool_use_id']);
+    expect(payload.tool_use_id).toBe('toolu_01ABC');
+    expect(JSON.stringify(payload)).not.toContain('secret');
+  });
+
   it('drops file contents written by Write and Edit', () => {
     const payload = runHook({
       session_id: 's1',

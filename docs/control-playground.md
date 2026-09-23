@@ -21,8 +21,8 @@ viewers receive translucent, ephemeral copies through the public `visitor_ball`
 WebSocket channel; it never changes agents, visit history, or shared scores. Inputs
 are bounded and rate-limited, and disconnects and timeouts remove abandoned ghosts.
 The playground keeps these shots local. For two-browser development testing, run
-the updated backend and use `factoryServer=local`; the ordinary local preview does
-not send visitor actions to the production feed.
+the updated backend (local previews use it by default); a preview opened with
+`?factoryServer=live` mirrors the production feed read-only and never sends visitor actions to it.
 
 `FactoryControlState` waits for matching server grants, stops movement before release,
 and invalidates control when ownership or the selected session disappears.

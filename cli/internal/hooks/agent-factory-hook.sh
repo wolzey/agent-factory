@@ -161,6 +161,8 @@ PAYLOAD=$(echo "$INPUT" | jq -c \
       hook_event_name: ($in.hook_event_name | cap_field),
       cwd: ($in.cwd | cap_field),
       tool_name: ($in.tool_name | cap_field),
+      # An opaque call id: async hooks arrive in any order, so the server pairs start and end.
+      tool_use_id: ($in.tool_use_id | cap_field),
       reason: ($in.reason | cap),
       agent_id: ($in.agent_id | cap_field),
       agent_type: ($in.agent_type | cap_field),
@@ -193,6 +195,16 @@ if [ -n "$DEVICE_SECRET" ]; then
 fi
 
 # Ignore ~/.curlrc so a user's global --location cannot forward credentials.
-curl --disable "${CURL_ARGS[@]}" > /dev/null 2>&1 &
+if [[ "$PAYLOAD" == *'"hook_event_name":"SessionStart"'* ]]; then
+  # A sleeping or restarting server would drop the one event that admits this
+  # session, hiding it until it ends. Retry for about a minute and a half, detached
+  # from the hook's stdio so Claude Code never waits on the retries.
+  ( for delay in 0 5 20 60; do
+      sleep "$delay"
+      curl --disable --fail "${CURL_ARGS[@]}" > /dev/null 2>&1 && break
+    done ) > /dev/null 2>&1 < /dev/null &
+else
+  curl --disable "${CURL_ARGS[@]}" > /dev/null 2>&1 &
+fi
 
 exit 0

@@ -66,7 +66,7 @@ it('sends the current site chat message shape only after same-origin browser aut
 });
 
 it('reads live history from localhost without using remote login cookies or sending chat', () => {
-  vi.stubGlobal('location', { hostname: 'localhost', origin: 'http://localhost:5173' });
+  vi.stubGlobal('location', { hostname: 'localhost', origin: 'http://localhost:5173', search: '?factoryServer=live' });
   stop = watchBoardData(data => changes.push(data));
   const socket = FactorySocket.instances[0];
   expect(socket.url.href).toBe('wss://fluid-factory.onrender.com/ws');
@@ -132,7 +132,7 @@ it('refreshes once when a same-origin reconnect announces a new build, preservin
 
 it('does not refresh a local preview when its public remote feed is deployed', () => {
   const reload = vi.fn();
-  vi.stubGlobal('location', {hostname:'localhost',origin:'http://localhost:5173',reload});
+  vi.stubGlobal('location', {hostname:'localhost',origin:'http://localhost:5173',search:'?factoryServer=live',reload});
   stop = watchBoardData(data => changes.push(data));
   const socket=FactorySocket.instances[0];
   socket.receive({type:'world_snapshot',snapshot:snapshot(1),buildId:'old'});
@@ -160,12 +160,14 @@ it('revokes local send access immediately after logout even if an older login ch
 });
 
 
-it('keeps phone previews read-only while retaining same-origin behavior for deployed hosts and explicit local servers', () => {
-  for (const hostname of ['192.168.86.247','10.0.0.4','172.20.1.4']) {
+it('keeps development pages on their own server unless they ask to mirror the live factory', () => {
+  for (const hostname of ['localhost','192.168.86.247','10.0.0.4','172.20.1.4']) {
     vi.stubGlobal('location',{hostname,origin:`http://${hostname}:5174`,search:''});
-    expect(factoryHost()).toBe('https://fluid-factory.onrender.com');
+    expect(factoryHost()).toBe(`http://${hostname}:5174`);
     vi.stubGlobal('location',{hostname,origin:`http://${hostname}:5174`,search:'?factoryServer=local'});
     expect(factoryHost()).toBe(`http://${hostname}:5174`);
+    vi.stubGlobal('location',{hostname,origin:`http://${hostname}:5174`,search:'?factoryServer=live'});
+    expect(factoryHost()).toBe('https://fluid-factory.onrender.com');
   }
   for (const hostname of ['factory.example','198.51.100.42']) {
     vi.stubGlobal('location',{hostname,origin:`https://${hostname}`,search:''});

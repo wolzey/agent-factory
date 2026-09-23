@@ -145,6 +145,15 @@ export class StateManager {
   get grabBounds() { return this.environment === 'factory25d' ? { ...FACTORY25D_BOUNDS, minY: -82 } : GRAB_POINTER_BOUNDS; }
 
   private crowdPaused = new Map<string, { movement: WorldMovement; activity: AgentActivity; retryAt: number }>();
+  // Async hooks can deliver a tool's start after its end, and parallel calls interleave. Pair them
+  // by tool_use_id: a start for a finished call is stale, and only the running call's end returns
+  // the agent to thinking. Events without an id (older hooks, pi, Codex) behave as before.
+  private toolCalls = new Map<string, { running?: string; finished: string[] }>();
+  private toolCallsFor(sessionId: string) {
+    let calls = this.toolCalls.get(sessionId);
+    if (!calls) { calls = { finished: [] }; this.toolCalls.set(sessionId, calls); }
+    return calls;
+  }
   // A paused walker stands still, so its route back to the same target is the same every 50ms tick.
   private pausedRoutes = new Map<string, { from: Position; to: Position; waypoints: Position[]; clear: boolean }>();
   private pausedRoute(id: string, from: Position, to: Position) {
@@ -1320,7 +1329,7 @@ export class StateManager {
           clearTimeout(pendingTimer);
           this.pendingRemovals.delete(id);
         }
-        this.sessions.delete(id);
+        this.sessions.delete(id); this.toolCalls.delete(id);
         // Don't clear knownSessions — allow the session to be re-created
         // by ensureSession() if it sends hooks later (e.g. user resumes work)
         reaped.push(id);
@@ -1356,7 +1365,7 @@ export class StateManager {
 
     if (existing && (wasStopped || hadPendingRemoval || longIdle)) {
       console.log(`[state] SESSION_RESUME: id=${payload.session_id} user=${existing.username} was=${existing.activity} idle=${now - existing.lastEventAt}ms — removing for respawn`);
-      this.sessions.delete(payload.session_id);
+      this.sessions.delete(payload.session_id); this.toolCalls.delete(payload.session_id);
       this.emit('remove', { sessionId: payload.session_id, agent: existing }, true);
       // Fall through to create a fresh session below
     } else if (existing) {
@@ -1423,7 +1432,7 @@ export class StateManager {
     // Remove after delay for exit animation (cancellable if session resumes)
     const timer = setTimeout(() => {
       this.pendingRemovals.delete(payload.session_id);
-      this.sessions.delete(payload.session_id);
+      this.sessions.delete(payload.session_id); this.toolCalls.delete(payload.session_id);
       // Don't clear knownSessions — allow the session to be re-created
       // by ensureSession() if the user resumes work later
       console.log(`[state] SESSION_REMOVED: id=${payload.session_id} (after ${STOPPED_REMOVAL_DELAY_MS}ms delay)`);
@@ -1436,6 +1445,15 @@ export class StateManager {
     const session = this.ensureSession(payload);
     if (!session) return;
     const toolName = payload.tool_name || 'unknown';
+    const calls = this.toolCallsFor(payload.session_id);
+    if (payload.tool_use_id && calls.finished.includes(payload.tool_use_id)) {
+      // Its PostToolUse arrived first; count the call without replaying a finished tool.
+      session.toolUseCount = (session.toolUseCount ?? 0) + 1;
+      session.lastEventAt = this.now();
+      this.emit('update', { agent: session });
+      return;
+    }
+    if (payload.tool_use_id) calls.running = payload.tool_use_id;
 
     session.activity = toolToActivity(toolName);
     session.currentTool = toolName;
@@ -1462,10 +1480,16 @@ export class StateManager {
     const session = this.ensureSession(payload);
     if (!session) return;
     const toolName = payload.tool_name;
+    const calls = this.toolCallsFor(payload.session_id), id = payload.tool_use_id;
+    if (id) { calls.finished.push(id); if (calls.finished.length > 32) calls.finished.shift(); }
 
-    session.activity = 'thinking';
-    session.currentTool = null;
-    delete session.attention;
+    // A parallel call, or an end arriving after Stop, leaves the current activity alone.
+    if (!id || id === calls.running) {
+      calls.running = undefined;
+      session.activity = 'thinking';
+      session.currentTool = null;
+      delete session.attention;
+    }
     session.lastEventAt = this.now();
     console.log(`[state] TOOL_COMPLETE: id=${payload.session_id} user=${session.username} tool=${payload.tool_name} activity=${session.activity}`);
 
@@ -1590,6 +1614,7 @@ export class StateManager {
       this.setAttention(session, 'ready');
     }
     session.currentTool = null;
+    this.toolCallsFor(payload.session_id).running = undefined;
     session.lastEventAt = this.now();
     console.log(`[state] STOP: id=${payload.session_id} user=${session.username} activity=${session.activity} preserved=${session.activity === 'waiting'}`);
     this.emit('update', { agent: session });
