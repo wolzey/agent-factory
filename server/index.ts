@@ -235,8 +235,10 @@ async function main() {
     socket.on('error', () => dropSocket('Browser disconnected'));
 
     socket.on('message', (raw: string | Buffer) => {
+      let type: unknown;
       try {
         const msg = JSON.parse(String(raw));
+        type = msg.type;
         switch (msg.type) {
           case 'radio_queue':
             if (!request.headers.origin || isSameHostOrigin(request.headers.origin, request.headers.host)) loungeRadio.receive(socket, msg);
@@ -360,8 +362,9 @@ async function main() {
             break;
           }
         }
-      } catch {
-        // Ignore malformed messages
+      } catch (error) {
+        // Malformed JSON from a browser is expected; a handler that throws is a bug worth seeing.
+        if (!(error instanceof SyntaxError)) app.log.error({ err: error, type: String(type).slice(0, 40) }, 'WebSocket message handler failed');
       }
     });
   });
