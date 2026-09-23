@@ -24,11 +24,9 @@ COPY docs/evidence/changelog/ ./docs/evidence/changelog/
 
 RUN pnpm run build
 
-# tsconfig.server.json has rootDir: "." so the compiled entry point
-# lands at dist/server/server/index.js. It resolves __dirname-relative
-# paths for the client dist and server-config.json — fix the layout:
-RUN mkdir -p dist/server/dist && \
-    cp -r dist/client dist/server/dist/client
+# tsconfig.server.json has rootDir: "." so the compiled entry point lands at
+# dist/server/server/index.js, which finds the client at dist/client
+# (see clientDistCandidates in server/index.ts).
 
 # ============================================================
 # Stage 3: Production image (minimal)
@@ -45,11 +43,13 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile --prod
 
-COPY --from=build /app/dist ./dist
+COPY --from=build --chown=appuser:appgroup /app/dist ./dist
 # Public deployment configuration; credentials are supplied through runtime secrets.
-COPY config/ ./config/
+COPY --chown=appuser:appgroup config/ ./config/
 
-RUN chown -R appuser:appgroup /app
+# Only /app itself needs to be writable (for example a local .data database);
+# a recursive chown would store node_modules and dist a second time.
+RUN chown appuser:appgroup /app
 
 ENV NODE_ENV=production
 ENV PORT=4242

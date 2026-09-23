@@ -10,6 +10,7 @@ import { createYoutubePlayer } from './factory25dYoutubePlayer';
 import { createRecordScratch } from './factory25dRecordScratch';
 import { createRadioDj } from './factory25dRadioDj';
 import { RoomMusicGain } from './factory25dMusicMeter';
+import { setHidden, setPixels } from './dom';
 
 /** Lounge DJ decks, with a nonmodal queue above the existing shared dock. */
 export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement, initialCamera: THREE.Camera,
@@ -225,13 +226,14 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
         close.setAttribute('aria-label', 'Stop music and close player');
         void player.join();
       }
-      trigger.hidden = !visible || !panel.hidden;
       station.update(camera);
       records.update(camera, visible && deckOnly && station.isActive());
       if (!visible && !panel.hidden && !minimized) hide();
+      // One write per frame: the trigger used to be hidden and then shown again whenever the panel was open.
+      if (!visible) setHidden(trigger, true);
       if (visible) {
         receiver.localToWorld(projected.set(0, .6, 0)); projected.project(camera);
-        trigger.hidden = projected.z < -1 || projected.z > 1;
+        setHidden(trigger, projected.z < -1 || projected.z > 1);
         const rect = canvas.getBoundingClientRect();
         const x=rect.left+(projected.x+1)*rect.width/2;
         let y=rect.top+(1-projected.y)*rect.height/2;
@@ -241,8 +243,8 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
         // If the booth falls behind the shared dock in a short window, expose
         // its existing target just above the dock instead of inviting a misclick.
         trigger.classList.toggle('lounge-radio-target-offset',!!obscured);
-        trigger.style.left = `${x}px`;
-        trigger.style.top = `${y}px`;
+        setPixels(trigger, 'left', x);
+        setPixels(trigger, 'top', y);
       }
       const now = performance.now();
       const audioPreferences=callbacks.preferences();

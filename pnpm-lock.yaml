@@ -12,9 +12,6 @@ importers:
 
   .:
     dependencies:
-      '@earendil-works/pi-coding-agent':
-        specifier: '*'
-        version: 0.84.3(ws@8.21.0)
       '@fastify/cookie':
         specifier: ^11.1.2
         version: 11.1.2
@@ -37,6 +34,9 @@ importers:
         specifier: ^0.185.1
         version: 0.185.1
     devDependencies:
+      '@earendil-works/pi-coding-agent':
+        specifier: ^0.84.3
+        version: 0.84.3(ws@8.21.0)
       '@types/node':
         specifier: ^25.5.0
         version: 25.5.0
@@ -1211,10 +1211,6 @@ packages:
   long@5.3.2:
     resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
 
-  lru-cache@11.2.7:
-    resolution: {integrity: sha512-aY/R+aEsRelme17KGQa/1ZSIpLpNYYrhcrepKTZgE+W3WM16YMCaPwOHLHsmopZHELU0Ojin1lPVxKR0MihncA==}
-    engines: {node: 20 || >=22}
-
   lru-cache@11.5.2:
     resolution: {integrity: sha512-4pfM1Ff0x50o0tQwb5ucw/RzNyD0/YJME6IVcStalZuMWxdt3sR3huStTtxz4PUmvZfRguvDejasvQ2kifR11g==}
     engines: {node: 20 || >=22}
@@ -1726,7 +1722,7 @@ snapshots:
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
       '@smithy/fetch-http-handler': 5.7.2
-      '@smithy/node-http-handler': 4.7.3
+      '@smithy/node-http-handler': 4.11.3
       '@smithy/types': 4.17.2
       tslib: 2.8.1
 
@@ -2766,7 +2762,7 @@ snapshots:
 
   hosted-git-info@9.0.3:
     dependencies:
-      lru-cache: 11.2.7
+      lru-cache: 11.5.2
 
   http-errors@2.0.1:
     dependencies:
@@ -2901,8 +2897,6 @@ snapshots:
       lightningcss-win32-x64-msvc: 1.32.0
 
   long@5.3.2: {}
-
-  lru-cache@11.2.7: {}
 
   lru-cache@11.5.2: {}
 

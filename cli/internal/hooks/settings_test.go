@@ -94,6 +94,45 @@ func TestRegisterHooksMigratesLegacyCodexSchema(t *testing.T) {
 	}
 }
 
+func TestRegisterHooksRemovesRetiredClaudeEvents(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hook := `{"type":"command","command":"/tmp/agent-factory-hook.sh"}`
+	own := `{"type":"command","command":"/usr/local/bin/clean-worktree"}`
+	existing := `{"hooks":{` +
+		`"WorktreeCreate":[{"hooks":[` + hook + `]}],` +
+		`"WorktreeRemove":[{"hooks":[` + hook + `]},{"hooks":[` + own + `]}],` +
+		`"FileChanged":[{"hooks":[` + hook + `]}]}}`
+	if err := os.WriteFile(ClaudeSettingsPath(), []byte(existing), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := RegisterHooks(TargetClaude, "/tmp/agent-factory-hook.sh"); err != nil {
+		t.Fatal(err)
+	}
+
+	settings, err := readSettings(TargetClaude)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hooksMap := settings["hooks"].(map[string]interface{})
+	for _, event := range []string{"WorktreeCreate", "FileChanged"} {
+		if _, ok := hooksMap[event]; ok {
+			t.Errorf("%s is still registered: %#v", event, hooksMap[event])
+		}
+	}
+	remove, _ := hooksMap["WorktreeRemove"].([]interface{})
+	if len(remove) != 1 || entryContainsHook(remove[0]) {
+		t.Errorf("WorktreeRemove = %#v, want only the user's own hook", hooksMap["WorktreeRemove"])
+	}
+	if !eventHasHook(hooksMap, "PreToolUse") || !eventHasHook(hooksMap, "SessionEnd") {
+		t.Errorf("current events were not registered: %#v", hooksMap)
+	}
+}
+
 func TestEnableCodexHooksInToml(t *testing.T) {
 	tests := []struct {
 		name  string

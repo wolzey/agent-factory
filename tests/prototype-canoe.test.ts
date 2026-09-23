@@ -38,6 +38,8 @@ describe('lake canoe outing', () => {
 
   it('keeps every hull and wake vertex inside the actual shoreline over a full circuit', () => {
     const { scene, canoe } = make(), transform = new THREE.Object3D(), point = new THREE.Vector3();
+    // Collected rather than asserted per vertex: tens of thousands of expect() calls outran the timeout.
+    const violations: string[] = [];
     for (let i = 0; i <= 360; i++) {
       const pose = canoeLakePose(i * 150 / 360);
       transform.position.set(pose.x, LANDSCAPE_LAKE.height, pose.z); transform.rotation.y = pose.yaw; transform.updateMatrix();
@@ -45,11 +47,12 @@ describe('lake canoe outing', () => {
         const positions = (scene.getObjectByName(name) as THREE.Mesh).geometry.getAttribute('position');
         for (let vertex = 0; vertex < positions.count; vertex++) {
           point.fromBufferAttribute(positions, vertex).applyMatrix4(transform.matrix);
-          expect(LANDSCAPE_LAKE.shoreDistance(point.x, point.z)).toBeLessThan(-.07);
-          expect(meadowHeight(point.x, point.z)).toBeLessThan(point.y);
+          if (!(LANDSCAPE_LAKE.shoreDistance(point.x, point.z) < -.07)) violations.push(`${name} vertex ${vertex} nears the shore at step ${i}`);
+          if (!(meadowHeight(point.x, point.z) < point.y)) violations.push(`${name} vertex ${vertex} sinks below the meadow at step ${i}`);
         }
       }
     }
+    expect(violations).toEqual([]);
     const first = canoeLakePose(0), last = canoeLakePose(150);
     expect(last.x).toBeCloseTo(first.x, 10); expect(last.z).toBeCloseTo(first.z, 10);
     canoe.dispose();

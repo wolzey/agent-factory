@@ -22,7 +22,7 @@ export function releaseArtwork(id: string, variant: 'full' | 'thumbnail' = 'full
   const capture = captures[id];
   if (!capture) return '';
   const thumbnail = variant === 'thumbnail';
-  if (id === '2026-09-11-games' && !thumbnail) return `<span class="factory-update-art factory-release-video"><video data-src="${gameplayClip}" poster="${capture.src}" muted loop playsinline preload="none" aria-label="Recorded local HORSE basketball shot" width="${capture.width}" height="${capture.height}"></video><button type="button" class="factory-release-playback" aria-label="Pause basketball replay">Pause</button></span>`;
+  if (id === '2026-09-11-games' && !thumbnail) return `<span class="factory-update-art factory-release-video"><video data-src="${gameplayClip}" data-poster="${capture.src}" muted loop playsinline preload="none" aria-label="Recorded local HORSE basketball shot" width="${capture.width}" height="${capture.height}"></video><button type="button" class="factory-release-playback" aria-label="Pause basketball replay">Pause</button></span>`;
   const frame = capture.frame;
   const framing = frame ? ` style="position:relative;aspect-ratio:${frame.width}/${frame.height}"` : '';
   const imageFraming = frame ? ` style="position:absolute;max-width:none;width:${capture.width / frame.width * 100}%;left:${-frame.x / frame.width * 100}%;top:${-frame.y / frame.height * 100}%;height:auto"` : '';

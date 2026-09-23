@@ -265,7 +265,10 @@ export function watchBoardData(onChange: (data: BoardData) => void) {
           if (world.snapshot && world.apply(message.delta) === 'applied') previous.world = world.snapshot!;
           revision = count(message.delta.revision); generation++;
         }
-        messageListeners.forEach(listener => listener(message));
+        // One failing feature must not stop the others, or the publish below, from seeing this message.
+        for (const listener of messageListeners) {
+          try { listener(message); } catch (error) { console.error('[factory] message listener failed', error); }
+        }
         // Ephemeral car poses do not change the roster or rebuild the room UI.
         if (message.type === 'garage_drive_state' || message.type === 'garage_drive_result'
           || message.type === 'pickup_state' || message.type === 'pickup_result'

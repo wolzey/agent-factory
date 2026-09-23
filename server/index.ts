@@ -18,7 +18,7 @@ import websocket from '@fastify/websocket';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync } from 'node:fs';
 
@@ -104,9 +104,16 @@ async function main() {
   ];
   const clientDist = clientDistCandidates.find((p) => existsSync(p));
   if (clientDist) {
+    // Vite fingerprints everything it emits under assets/, so those files never change.
+    const hashedAssets = join(clientDist, 'assets') + sep;
     await app.register(fastifyStatic, {
       root: clientDist,
       prefix: '/',
+      // The build writes .br and .gz beside each compressible file (vite.config.ts).
+      preCompressed: true,
+      setHeaders(reply, filePath) {
+        if (filePath.startsWith(hashedAssets)) reply.header('cache-control', 'public, max-age=31536000, immutable');
+      },
     });
   }
 
@@ -228,8 +235,10 @@ async function main() {
     socket.on('error', () => dropSocket('Browser disconnected'));
 
     socket.on('message', (raw: string | Buffer) => {
+      let type: unknown;
       try {
         const msg = JSON.parse(String(raw));
+        type = msg.type;
         switch (msg.type) {
           case 'radio_queue':
             if (!request.headers.origin || isSameHostOrigin(request.headers.origin, request.headers.host)) loungeRadio.receive(socket, msg);
@@ -353,8 +362,9 @@ async function main() {
             break;
           }
         }
-      } catch {
-        // Ignore malformed messages
+      } catch (error) {
+        // Malformed JSON from a browser is expected; a handler that throws is a bug worth seeing.
+        if (!(error instanceof SyntaxError)) app.log.error({ err: error, type: String(type).slice(0, 40) }, 'WebSocket message handler failed');
       }
     });
   });
@@ -394,7 +404,7 @@ async function main() {
     // Publish and checkpoint this revision before lifecycle callbacks can synchronously
     // create a later revision (for example, clearing a stopped control lease).
     team.sync(notification.delta);
-    persistence.schedule(state.getSnapshot(), notification.immediatePersistence);
+    persistence.schedule(() => state.getSnapshot(), notification.immediatePersistence);
     broadcast.broadcastWorldDelta(notification.delta);
     for (const change of notification.delta.changes) {
       if (change.kind === 'agent_remove') {
@@ -414,7 +424,7 @@ async function main() {
   });
 
   // Persist startup reconciliation and one-time legacy imports even when no hooks fire afterward.
-  persistence.schedule(state.getSnapshot(), true);
+  persistence.schedule(() => state.getSnapshot(), true);
 
   // Start stale cleanup, lifecycle pruning, and manual-control simulation.
   const staleTimer = startStaleReaper(state);

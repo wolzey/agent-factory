@@ -34,9 +34,9 @@ var hookEventsClaude = []string{
 	"InstructionsLoaded",
 	"ConfigChange",
 	"CwdChanged",
-	"FileChanged",
-	"WorktreeCreate",
-	"WorktreeRemove",
+	// Not FileChanged: it fires only for filenames listed as its matcher. Not
+	// WorktreeCreate or WorktreeRemove: a hook on those replaces Claude Code's own
+	// git worktree creation and cleanup, so worktrees were never removed.
 	"PreCompact",
 	"PostCompact",
 	"TeammateIdle",
@@ -132,7 +132,8 @@ func InstalledTargets() []HookTarget {
 }
 
 // RegisterHooks adds agent-factory hook entries to target hook settings
-// for each event type, skipping events that already have one.
+// for each event type, skipping events that already have one, and removes
+// its entries from events it no longer registers.
 func RegisterHooks(target HookTarget, hookScriptPath string) (registered, skipped int, err error) {
 	if target == TargetCodex {
 		if err := EnsureCodexHooksEnabled(); err != nil {
@@ -150,6 +151,7 @@ func RegisterHooks(target HookTarget, hookScriptPath string) (registered, skippe
 		normalizeCodexHookCommands(hooksMap)
 	}
 	events := eventsForTarget(target)
+	removeRetiredHooks(hooksMap, events)
 
 	for _, event := range events {
 		if eventHasHook(hooksMap, event) {
@@ -375,6 +377,38 @@ func normalizeCodexHookCommands(hooksMap map[string]interface{}) {
 					hook["command"] = path
 				}
 			}
+		}
+	}
+}
+
+// removeRetiredHooks drops agent-factory entries from events this version no
+// longer registers, so `update` (via _refresh-assets) also cleans up older installs.
+func removeRetiredHooks(hooksMap map[string]interface{}, events []string) {
+	wanted := make(map[string]bool, len(events))
+	for _, event := range events {
+		wanted[event] = true
+	}
+	for event, eventArr := range hooksMap {
+		if wanted[event] {
+			continue
+		}
+		arr, ok := eventArr.([]interface{})
+		if !ok {
+			continue
+		}
+		filtered := make([]interface{}, 0, len(arr))
+		for _, entry := range arr {
+			if !entryContainsHook(entry) {
+				filtered = append(filtered, entry)
+			}
+		}
+		if len(filtered) == len(arr) {
+			continue
+		}
+		if len(filtered) == 0 {
+			delete(hooksMap, event)
+		} else {
+			hooksMap[event] = filtered
 		}
 	}
 }

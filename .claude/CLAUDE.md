@@ -1,105 +1,87 @@
 # Agent Factory
 
-2D pixel-art visualization of Claude Code agent sessions. A Fastify server ingests hook events from Claude Code CLI sessions, maintains agent state, and broadcasts updates to a Phaser 3 game client over WebSocket. A Go CLI handles hook installation, authentication, and an interactive avatar designer.
+A shared, pixel-styled 3D room ("Fluid Factory") where each teammate's Claude Code, Codex and pi sessions appear as characters. A hook on each machine posts session events to a Fastify server. The server keeps the authoritative world, and streams revisioned deltas over WebSocket to a three.js client. A Go CLI installs the hooks and handles device linking and the avatar designer.
 
 ## Tech Stack
 
-- **Server**: Fastify 5.8.4 (TypeScript, Node.js ESM)
-- **Client**: Phaser 3.90.0 (TypeScript, Vite 8.0.2)
-- **CLI**: Go 1.25.1 (Cobra, Bubbletea, Lipgloss, Huh)
-- **Shared**: TypeScript types + constants consumed by both server and client
-- **Deploy**: Docker multi-stage build, Render.com
+- **Server**: Fastify 5 (TypeScript, Node ESM), `@fastify/websocket`, libSQL/Turso persistence
+- **Client**: three.js WebGL scene (Vite 8, TypeScript), plus DOM overlays for buttons, labels and panels
+- **CLI**: Go 1.25 (Cobra, Bubbletea, Lipgloss, Huh)
+- **Shared**: TypeScript types, constants and simulation code used by server and client (`shared/`, imported as `@shared/*` in the client)
+- **Deploy**: Docker multi-stage build on Render (`render.yaml`), which auto-deploys `main` of wolzey/agent-factory
 
-## Quick Start
+## Local Development
 
 ```bash
 pnpm install
-pnpm dev          # Starts server (tsx watch) + client (vite dev) concurrently
+pnpm dev          # server (tsx watch, port 4242) + client (Vite, port 5173)
 ```
 
-CLI (requires Go 1.25+):
-```bash
-cd cli && go build -o agent-factory && ./agent-factory install
+- Open **http://localhost:5173/?factoryServer=local**. Without that parameter, `factoryHost()` (`client/prototypes/factory25dBoardData.ts`) points localhost pages at the production server. You then see the live room read-only, and your local server goes unused.
+- The server listens on `process.env.PORT` (default 4242), and Vite proxies `/api` and `/ws` to 4242. If your launcher exports `PORT`, run `PORT=4242 pnpm dev`.
+- Local state lives in `.data/agent-factory.db` (libSQL file). The server only uses Turso when `TURSO_DATABASE_URL` is set; production requires it together with `TURSO_AUTH_TOKEN`.
+- The local server also shows your own Claude Code sessions, read from `~/.claude/sessions`.
+
+## Verifying Changes
+
+| Command | What it checks |
+|---------|----------------|
+| `pnpm test` | Vitest suite in `tests/` (about 20s) |
+| `pnpm exec tsc --noEmit -p tsconfig.client.json` | Client types |
+| `pnpm exec tsc --noEmit -p tsconfig.server.json` | Server types |
+| `pnpm build` | Type checks, Vite build (also writes `.br`/`.gz` files), server compile |
+| `cd cli && go test ./...` | Go CLI (its hook tests read `../hooks`, so run from the repo) |
+
+`tests/` does not have its own tsconfig; test files are only checked by Vitest at runtime.
+
+## Where Things Live
+
+```
+server/
+  index.ts              composition root: Fastify, static files, the WebSocket message switch, timers
+  state.ts              StateManager: sessions, hook events -> activity, movement and personal space, tickets, revisions
+  routes/               hooks.ts (/api/hooks, /api/state, /api/health), auth, device-links, avatar, team, weather
+  ws/broadcast.ts       socket registry and fan-out (serializes once per broadcast)
+  persistence/          libSQL world repository and WorldPersistence (checkpoint scheduling)
+  *-manager.ts, garage-driving.ts, room-props.ts, pickup-motion.ts, lounge-radio.ts, basketball-*.ts, station-tickets.ts
+                        one feature each, wired in index.ts
+client/
+  index.html            entry; prototype-25d-slice.html is an identical bookmark alias
+  prototypes/factory25dSlice.ts   scene setup and the animate() loop (the live client, despite the folder name)
+  prototypes/factory25dBoardData.ts   WebSocket connection, snapshots and deltas, factoryHost()
+  prototypes/factory25d*.ts       one feature per module (garage, lounge radio, whiteboard, minigames, ...)
+  state/WorldStore.ts   applies world deltas
+  assets/               Vite public dir: models, fonts, audio, brand art (not fingerprinted)
+shared/                 types.ts, constants.ts, factory25d-layout.ts (floor plan and routing), simulations
+hooks/agent-factory-hook.sh   the Claude Code hook (see below)
+extensions/agent-factory/     pi extension
+cli/                    Go CLI (cmd/, internal/); internal/hooks embeds a copy of the hook
+experiments/            archived prototypes; nothing imports them, and they are not deployed
 ```
 
-## Common Commands
+The server always runs the `factory25d` environment (`server/client-environment.ts`). The `arcade`/`farm`/`office`/`mining` paths in `state.ts` and `shared/world-layouts.ts` are legacy.
 
-| Command | Description |
-|---------|-------------|
-| `pnpm dev` | Start server + client in dev mode (port 4242 + 5173) |
-| `pnpm dev:server` | Start only the Fastify server with tsx watch |
-| `pnpm dev:client` | Start only the Vite dev server |
-| `pnpm build` | Build client (Vite) + server (tsc) for production |
-| `pnpm start` | Run the production build |
-| `cd cli && go build -o agent-factory` | Build the Go CLI binary |
+## Rules That Are Easy to Break
 
-## Project Structure
-
-```
-agent-factory/
-├── server/              # Fastify backend
-│   ├── index.ts         # Server bootstrap, WebSocket handler
-│   ├── routes/hooks.ts  # All HTTP API routes
-│   ├── ws/broadcast.ts  # WebSocket client management
-│   ├── state.ts         # Agent state machine (603 lines, core logic)
-│   ├── auth.ts          # HMAC-SHA256 token auth
-│   ├── session-store.ts # Debounced disk persistence
-│   ├── session-registry.ts # Claude session file watcher
-│   └── cleanup.ts       # Zombie session cleanup
-├── client/              # Phaser 3 game client
-│   ├── main.ts          # Phaser game config
-│   ├── scenes/          # BootScene, FactoryScene, UIScene
-│   ├── entities/        # AgentSprite, SubagentSprite, Machine
-│   ├── systems/         # AgentManager, LayoutManager
-│   ├── environments/    # Theme generators (Office, Arcade, Farm, Mining)
-│   ├── ui/              # DOM overlays (Chat, Login, CommandInput)
-│   ├── audio/           # jsfxr sound bank
-│   └── network/         # WebSocket client
-├── shared/              # Shared between server + client
-│   ├── types.ts         # All domain types (discriminated unions)
-│   └── constants.ts     # Activity mappings, emote lists
-├── cli/                 # Go CLI tool
-│   ├── main.go          # Entry point
-│   ├── cmd/             # Cobra commands (install, connect, chat, etc.)
-│   └── internal/        # Config, UI styles, hooks, avatar designer
-├── hooks/               # Shell hook scripts
-├── config/              # Default server config
-├── vite.config.ts       # Vite build config with @shared alias
-├── tsconfig.json        # Base TS config (strict, ES2022, bundler)
-├── Dockerfile           # Multi-stage production build
-└── render.yaml          # Render.com deployment config
-```
-
-## Architecture
-
-The system follows an event-driven architecture. Claude Code sessions emit hook events (tool use, model response, session start/end) that the Go CLI forwards to the Fastify server via HTTP POST. The server's `StateManager` processes these into visual agent states and broadcasts updates over WebSocket to all connected Phaser clients. Most textures are procedurally generated; the skyline window terrain and cloud masks, the plants, and the rock-paper-scissors icons are small PNGs under `client/assets/` served from Vite's public dir.
+- **The hook exists in four copies that must stay byte-identical:** `hooks/agent-factory-hook.sh`, `cli/internal/hooks/agent-factory-hook.sh`, and the heredocs in `install.sh` and `hooks/team-install.sh`. `tests/hook-redaction.test.ts` compares them. Edit the canonical file, then copy it into the other three.
+- **The hook sends an allowlist, never the raw payload.** Prompts, tool input and tool output must not leave the machine. It derives `session_name` and `git_action` locally, and refuses unsafe server URLs before sending the device secret.
+- **Claude Code hook events:** a hook on `WorktreeCreate` or `WorktreeRemove` replaces Claude Code's own git behaviour, so the installers don't register them. `FileChanged` needs a matcher.
+- **World changes go through `commit()` in `state.ts`.** It bumps the revision, broadcasts the delta, and schedules a checkpoint. Pass `immediatePersistence` for lifecycle changes (joins, removals, chat, avatars). Movement and activity wait for the 15s checkpoint.
+- **Per-frame DOM work in the client:** use `setHidden`/`setPixels` from `client/prototypes/dom.ts`, and decide visibility before writing it. Writing `hidden` twice a frame forces extra style and layout work.
+- **Vite fingerprints files emitted under `/assets/`, and the server caches them for a year.** Files in `client/assets` (the public dir) keep their names and are revalidated.
 
 ## Conventions
 
-- **Commits**: Conventional commits — `fix(scope): description`, `feat(scope): description`
-- **TypeScript**: `strict: true`, ESM with `.js` extensions in server imports, `@shared/*` path alias
-- **Shared types**: All domain types in `shared/types.ts`, imported by both server and client
-- **Error handling**: Silent fallbacks with `console.warn`; no custom Error classes
-- **Server routes**: All under `/api/` prefix with typed Fastify generics
-- **Go CLI**: Cobra `RunE` pattern, Charmbracelet ecosystem for TUI
+- **Commits**: Conventional Commits, for example `fix(scope): description` or `perf(scope): description`
+- **TypeScript**: `strict: true`, ESM with `.js` extensions in server imports, `@shared/*` alias in the client
+- **Shared types**: domain and wire types live in `shared/types.ts`
+- **Go CLI**: Cobra `RunE` pattern; create a command in `cli/cmd/` and register it in `root.go`
+- **Pull requests**: from a fork branch into wolzey/agent-factory `main`, which deploys on merge
 
-## When Making Changes
-
-1. If modifying shared types, update `shared/types.ts` and check both server and client compile
-2. If adding server routes, add to `server/routes/hooks.ts` using the typed handler pattern
-3. If adding visual effects, define in shared types, handle in AgentManager, implement in AgentSprite
-4. If adding CLI commands, create a new file in `cli/cmd/`, register in `root.go`
-5. Run `pnpm build` to verify the full build succeeds
-
-## Generated Skills
-
-The following skills provide detailed, repo-specific guidance for each technology:
+## Skills
 
 | Skill | Covers |
 |-------|--------|
 | [typescript](.claude/skills/typescript/SKILL.md) | Type system, discriminated unions, tsconfig setup, shared types |
 | [fastify](.claude/skills/fastify/SKILL.md) | Server routes, WebSocket, plugin registration, auth, state management |
-| [phaser](.claude/skills/phaser/SKILL.md) | Scene architecture, entities, procedural textures, tweens, themes |
 | [go-cli](.claude/skills/go-cli/SKILL.md) | Cobra commands, Bubbletea TUI, Huh forms, hook installation, GoReleaser |
-
-<!-- Updated by /conjure on 2026-04-07 -->
