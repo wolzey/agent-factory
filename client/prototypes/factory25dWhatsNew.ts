@@ -2,13 +2,13 @@ import { releaseArtwork } from './factory25dReleaseArtwork';
 import { factoryChangelog } from './factory25dChangelog';
 import './factory25dWhatsNew.css';
 
-const gamesArtwork = releaseArtwork(factoryChangelog[0].id);
+const latestArtwork = releaseArtwork(factoryChangelog[0].id, 'featured');
 
 export function createWhatsNew(visitPatio: () => void) {
   const abort = new AbortController(), events = { signal: abort.signal };
   const latest = factoryChangelog[0], storageKey = 'factory-whats-new-seen';
   const root = document.createElement('aside'); root.className = 'factory-updates'; root.setAttribute('aria-label', 'Factory updates');
-  root.innerHTML = `<div class="factory-update-preview" id="factory-update-preview" inert><div class="factory-update-content">${gamesArtwork}<span class="factory-update-eyebrow">JUST ADDED</span><h2></h2><p></p><div class="factory-update-actions"><button type="button" data-update="try">find Duck Hunt on the patio ↗</button><button type="button" data-update="history">view changelog</button></div></div></div><button type="button" class="factory-update-trigger" aria-expanded="false" aria-controls="factory-update-preview"><svg class="factory-update-gift" viewBox="0 0 16 16" aria-hidden="true" shape-rendering="crispEdges">
+  root.innerHTML = `<div class="factory-update-preview" id="factory-update-preview" inert><div class="factory-update-content">${latestArtwork}<span class="factory-update-eyebrow">JUST ADDED</span><h2></h2><p></p><div class="factory-update-actions"><button type="button" data-update="try"></button><button type="button" data-update="history">view changelog</button></div></div></div><button type="button" class="factory-update-trigger" aria-expanded="false" aria-controls="factory-update-preview"><svg class="factory-update-gift" viewBox="0 0 16 16" aria-hidden="true" shape-rendering="crispEdges">
 <path fill="#982b2b" d="M3 8h11v7H3z"/><path fill="#ec493f" d="M3 8h9v7H3z"/>
 <path fill="#ff7561" d="M3 8h2v7H3z"/><path fill="#ffe29a" d="M7 8h2v7H7z"/>
 <g class="factory-gift-glow" fill="#fff0b8"><path opacity=".3" d="M3 5h10v2H3zM4 7h8v2H4z"/><path d="M4 8h8v1H4z"/></g>
@@ -22,6 +22,8 @@ export function createWhatsNew(visitPatio: () => void) {
   const trigger = root.querySelector<HTMLButtonElement>('.factory-update-trigger')!;
   const preview = root.querySelector<HTMLElement>('.factory-update-preview')!;
   root.querySelector('h2')!.textContent = latest.title; root.querySelector('p')!.textContent = latest.summary;
+  const tryIt = root.querySelector<HTMLButtonElement>('[data-update="try"]')!;
+  if (latest.visit) tryIt.textContent = latest.visit; else tryIt.remove();
   try { root.dataset.unread = String(localStorage.getItem(storageKey) !== latest.id); } catch { root.dataset.unread = 'true'; }
   // Restart the occasional unread-gift cue after returning to the page,
   // rather than letting an animation advance unseen in a background tab.
@@ -46,11 +48,14 @@ export function createWhatsNew(visitPatio: () => void) {
     row.append(date); entries.append(row);
     if (index === 0) {
       article.className = 'factory-changelog-featured';
-      article.innerHTML = gamesArtwork;
-      article.append(heading, description);
-      const action = document.createElement('button'); action.type = 'button'; action.className = 'factory-changelog-try'; action.textContent = 'find Duck Hunt on the patio ↗';
-      action.addEventListener('click', () => { dialog.close(); visitPatio(); }, events);
-      article.append(list, action); row.append(article);
+      article.innerHTML = latestArtwork;
+      article.append(heading, description, list);
+      if (release.visit) {
+        const action = document.createElement('button'); action.type = 'button'; action.className = 'factory-changelog-try'; action.textContent = release.visit;
+        action.addEventListener('click', () => { dialog.close(); visitPatio(); }, events);
+        article.append(action);
+      }
+      row.append(article);
       const archiveHeading = document.createElement('h3'); archiveHeading.className = 'factory-archive-heading'; archiveHeading.textContent = 'Earlier updates'; entries.append(archiveHeading);
     } else {
       const details = document.createElement('details'); details.className = 'factory-release-archive';
@@ -108,7 +113,7 @@ export function createWhatsNew(visitPatio: () => void) {
   }
   root.addEventListener('keydown', event => event.stopPropagation(), events);
   trigger.addEventListener('click', event => { root.dataset.instant = String(event.detail === 0); expand(!open); }, events);
-  root.querySelector('[data-update="try"]')!.addEventListener('click', () => { expand(false); visitPatio(); }, events);
+  root.querySelector('[data-update="try"]')?.addEventListener('click', () => { expand(false); visitPatio(); }, events);
   let modalMotion: Animation | undefined;
   let contentMotions: Animation[] = [];
   const clearContentMotion = () => { contentMotions.forEach(motion => motion.cancel()); contentMotions = []; };
