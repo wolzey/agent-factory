@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { factoryHost, onFactoryConnection, onFactoryMessage, sendFactoryCommand, type BoardData } from './factory25dBoardData';
 import type { AvatarConfig, ChatMessage } from '@shared/types';
+import { CHAT_MESSAGE_MAX_LENGTH } from '@shared/constants';
 import type { TeamMember } from '@shared/team';
 import { ChatCommandHistory, chatSuggestions, completeChatSuggestion, executeChatCommand, type ChatSuggestion } from './factory25dChatCommands';
 import './factory25dChatCommands.css';
@@ -59,7 +60,7 @@ export function createLoungeChat(
   const back = document.createElement('button'); back.type = 'button'; back.textContent = '← lounge';
   const form = document.createElement('form');
   const input = document.createElement('input');
-  input.type = 'text'; input.maxLength = 506; input.placeholder = 'message the lounge';
+  input.type = 'text'; input.maxLength = CHAT_MESSAGE_MAX_LENGTH + '/chat '.length; // The server keeps 200 characters. input.placeholder = 'message the lounge';
   input.autocomplete = 'off'; input.spellcheck = false; input.setAttribute('aria-label', 'Message to the factory');
   input.setAttribute('role', 'combobox'); input.setAttribute('aria-autocomplete', 'list');
   input.setAttribute('aria-controls', 'lounge-chat-suggestions'); input.setAttribute('aria-expanded', 'false');

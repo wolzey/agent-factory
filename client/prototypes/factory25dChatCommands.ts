@@ -1,4 +1,4 @@
-import { VALID_EMOTES } from '@shared/constants';
+import { CHAT_MESSAGE_MAX_LENGTH, VALID_EMOTES } from '@shared/constants';
 import type { WSMessageToServer } from '@shared/types';
 
 export const CHAT_COMMANDS = [
@@ -45,10 +45,10 @@ export type ChatCommand =
 export function parseChatCommand(value: string): ChatCommand {
   const text = value.trim();
   if (!text) return { kind: 'empty' };
-  if (!text.startsWith('/')) return { kind: 'chat', message: text.slice(0, 500) };
+  if (!text.startsWith('/')) return { kind: 'chat', message: text.slice(0, CHAT_MESSAGE_MAX_LENGTH) };
   const space = text.search(/\s/), name = (space < 0 ? text : text.slice(0, space)).toLowerCase();
   const argument = space < 0 ? '' : text.slice(space).trim();
-  if (name === '/chat') return argument ? { kind: 'chat', message: argument.slice(0, 500) } : { kind: 'error', message: 'Type /chat followed by your message.' };
+  if (name === '/chat') return argument ? { kind: 'chat', message: argument.slice(0, CHAT_MESSAGE_MAX_LENGTH) } : { kind: 'error', message: 'Type /chat followed by your message.' };
   if (name === '/emote') return VALID_EMOTES.includes(argument.toLowerCase() as never)
     ? { kind: 'emote', emote: argument.toLowerCase() }
     : { kind: 'error', message: `Choose an emote: ${VALID_EMOTES.join(', ')}.` };
