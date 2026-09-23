@@ -155,11 +155,12 @@ func RegisterHooks(target HookTarget, hookScriptPath string) (registered, skippe
 
 	for _, event := range events {
 		if eventHasHook(hooksMap, event) {
+			setHookAsync(hooksMap, event, hookRunsAsync(target, event))
 			skipped++
 			continue
 		}
 
-		entry := makeHookEntry(target, hookScriptPath)
+		entry := makeHookEntry(target, hookScriptPath, event)
 
 		eventArr := getOrCreateArray(hooksMap, event)
 		hooksMap[event] = append(eventArr, entry)
@@ -413,15 +414,50 @@ func removeRetiredHooks(hooksMap map[string]interface{}, events []string) {
 	}
 }
 
-func makeHookEntry(target HookTarget, hookScriptPath string) map[string]interface{} {
+// hookRunsAsync reports whether a Claude Code hook should run in the background.
+// Claude Code otherwise waits for the hook (tens of milliseconds) before and after
+// every tool call. The server pairs tool events by tool_use_id, so arrival order does
+// not matter. SessionStart stays synchronous so it lands before the session's other
+// events; SessionEnd because Claude Code may exit before a background hook finishes.
+func hookRunsAsync(target HookTarget, event string) bool {
+	return target == TargetClaude && event != "SessionStart" && event != "SessionEnd"
+}
+
+// setHookAsync applies the async policy to existing agent-factory entries, so
+// `update` (via _refresh-assets) moves older installs off blocking hooks.
+func setHookAsync(hooksMap map[string]interface{}, event string, async bool) {
+	arr, _ := hooksMap[event].([]interface{})
+	for _, entry := range arr {
+		entryMap, ok := entry.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		hookList, _ := entryMap["hooks"].([]interface{})
+		for _, h := range hookList {
+			hook, ok := h.(map[string]interface{})
+			if !ok || !commandContainsHook(hook["command"]) {
+				continue
+			}
+			if async {
+				hook["async"] = true
+			} else {
+				delete(hook, "async")
+			}
+		}
+	}
+}
+
+func makeHookEntry(target HookTarget, hookScriptPath string, event string) map[string]interface{} {
 	command := interface{}(hookScriptPath)
+	hook := map[string]interface{}{
+		"type":    "command",
+		"command": command,
+	}
+	if hookRunsAsync(target, event) {
+		hook["async"] = true
+	}
 	entry := map[string]interface{}{
-		"hooks": []interface{}{
-			map[string]interface{}{
-				"type":    "command",
-				"command": command,
-			},
-		},
+		"hooks": []interface{}{hook},
 	}
 
 	if target == TargetCodex {

@@ -461,18 +461,24 @@ register_hooks() {
   local registered=0
   local skipped=0
 
+  # Session boundaries stay synchronous; every other event runs in the background so
+  # Claude Code does not wait on the hook around each tool call (the server pairs tool
+  # events by tool_use_id). Existing entries are brought in line on every install.
+  local SET_ASYNC='.hooks[$event] |= map(if (.hooks | type) == "array" then .hooks |= map(if ((.command // "") | tostring | contains("agent-factory-hook")) then (if $async then .async = true else del(.async) end) else . end) else . end)'
   for event in "${events[@]}"; do
-    local already
+    local already result async=true
+    case "$event" in SessionStart|SessionEnd) async=false ;; esac
     already=$(jq -r ".hooks.${event}[]?.hooks[]?.command // empty" "$temp" 2>/dev/null | grep -c "agent-factory-hook" || true)
 
     if [ "$already" -gt 0 ]; then
+      result=$(jq --arg event "$event" --argjson async "$async" "$SET_ASYNC" "$temp")
+      echo "$result" > "$temp"
       skipped=$((skipped + 1))
       continue
     fi
 
-    local result
-    result=$(jq --arg event "$event" --argjson entry "$hook_entry" \
-      '.hooks //= {} | .hooks[$event] //= [] | .hooks[$event] += [$entry]' "$temp")
+    result=$(jq --arg event "$event" --argjson entry "$hook_entry" --argjson async "$async" \
+      '.hooks //= {} | .hooks[$event] //= [] | .hooks[$event] += [$entry | if $async then .hooks[0].async = true else . end]' "$temp")
     echo "$result" > "$temp"
     registered=$((registered + 1))
   done
