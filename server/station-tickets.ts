@@ -15,6 +15,8 @@ export class StationTickets {
   private visits = new Map<string, StationTicketVisit>();
   private samples = new Map<string, Sample>();
   version = 0;
+  /** Changes only with wallets, which is all browsers read; visit time accrues far more often. */
+  walletVersion = 0;
   snapshot(): StationTicketState { return structuredClone({ wallets: [...this.wallets.values()], visits: [...this.visits.values()] }); }
   restore(state?: StationTicketState) {
     this.wallets.clear(); this.visits.clear(); this.samples.clear();
@@ -22,7 +24,7 @@ export class StationTickets {
       && Number.isSafeInteger(wallet.balance) && wallet.balance >= 0 && finiteCount(wallet.remainderMs) && wallet.remainderMs < TICKET_ACTIVE_MS) this.wallets.set(wallet.key, { ...wallet });
     for (const visit of state?.visits ?? []) if (typeof visit.sessionId === 'string' && typeof visit.ownerKey === 'string'
       && typeof visit.username === 'string' && WORKSTATIONS[visit.slotIndex] && finiteCount(visit.activeMs)) this.visits.set(visit.sessionId, { ...visit });
-    this.version++;
+    this.version++; this.walletVersion++;
   }
   private sample(agent: WorldAgent, now: number, grabbed: boolean): Sample {
     const slotIndex = agent.world.slotIndex ?? -1;
@@ -63,7 +65,7 @@ export class StationTickets {
     const wallet = this.wallets.get(visit.ownerKey) ?? { key: visit.ownerKey, username: visit.username, balance: 0, remainderMs: 0 };
     const total = wallet.remainderMs + visit.activeMs, count = Math.floor(total / TICKET_ACTIVE_MS);
     wallet.balance += count; wallet.remainderMs = total - count * TICKET_ACTIVE_MS;
-    this.wallets.set(wallet.key, wallet); this.version++;
+    this.wallets.set(wallet.key, wallet); this.version++; this.walletVersion++;
     if (count) return { id: `${sessionId}:${now}:${wallet.balance}`, slotIndex: visit.slotIndex, count, startedAt: now, collectAt: now + TICKET_COLLECT_MS };
   }
   forget(sessionId: string, now: number) {

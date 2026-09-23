@@ -103,6 +103,8 @@ export class StateManager {
   private sessions = new Map<string, WorldAgent>();
   private stationTickets = new StationTickets();
   private ticketVersion = 0;
+  private walletVersion = 0;
+  private ticketsSentAt = 0;
   private ticketCheckpointAt = 0;
   private tombstones = new Map<string, TombstoneState>();
   private chat: ChatMessage[] = [];
@@ -495,6 +497,7 @@ export class StateManager {
     this.revision = snapshot.revision;
     this.stationTickets.restore(snapshot.stationTickets);
     this.ticketVersion = this.stationTickets.version;
+    this.walletVersion = this.stationTickets.walletVersion;
     this.chat = snapshot.chat.slice(-CHAT_HISTORY_LIMIT).map(clone);
     this.tombstones = new Map(snapshot.tombstones.map(tombstone => [tombstone.sessionId, clone(tombstone)]));
     if (this.environment === 'factory25d') for (const stone of this.tombstones.values()) {
@@ -1902,9 +1905,13 @@ export class StateManager {
         if (current) { this.observeTickets(current, timestamp); change.agent = clone(current); }
         this.stationTickets.track(change.agent, timestamp, this.grabbedSession(change.agent.sessionId) || this.garageDrivers.has(change.agent.sessionId) || this.garageYielding.has(change.agent.sessionId));
       }
-      if (this.ticketVersion !== this.stationTickets.version) {
-        changes.push({ kind: 'station_tickets', tickets: this.stationTickets.snapshot() });
-        this.ticketVersion = this.stationTickets.version;
+      // Browsers read only wallet balances. Visit time accrues on nearly every commit, so without a
+      // wallet change the ledger rides along at most every 30s, keeping the persistence checkpoint.
+      const tickets = this.stationTickets;
+      if (this.ticketVersion !== tickets.version
+        && (this.walletVersion !== tickets.walletVersion || timestamp - this.ticketsSentAt >= 30_000)) {
+        changes.push({ kind: 'station_tickets', tickets: tickets.snapshot() });
+        this.ticketVersion = tickets.version; this.walletVersion = tickets.walletVersion; this.ticketsSentAt = timestamp;
       }
     }
     if (changes.length === 0) return;
