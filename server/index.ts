@@ -18,7 +18,7 @@ import websocket from '@fastify/websocket';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync } from 'node:fs';
 
@@ -104,9 +104,16 @@ async function main() {
   ];
   const clientDist = clientDistCandidates.find((p) => existsSync(p));
   if (clientDist) {
+    // Vite fingerprints everything it emits under assets/, so those files never change.
+    const hashedAssets = join(clientDist, 'assets') + sep;
     await app.register(fastifyStatic, {
       root: clientDist,
       prefix: '/',
+      // The build writes .br and .gz beside each compressible file (vite.config.ts).
+      preCompressed: true,
+      setHeaders(reply, filePath) {
+        if (filePath.startsWith(hashedAssets)) reply.header('cache-control', 'public, max-age=31536000, immutable');
+      },
     });
   }
 
