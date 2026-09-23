@@ -116,7 +116,14 @@ export function createWhatsNew(visitPatio: () => void) {
   const videos = [...root.querySelectorAll<HTMLVideoElement>('video'), ...dialog.querySelectorAll<HTMLVideoElement>('video')];
   const inView = new Set<HTMLVideoElement>();
   const userPaused = new Set<HTMLVideoElement>();
+  // A poster is a full-size capture (276KB for the games clip) that preload="none" does not
+  // defer. Fetch it on intent or on open, or 10s in, instead of competing with the first load.
+  const loadPosters = () => { for (const video of videos) if (video.dataset.poster && !video.hasAttribute('poster')) video.poster = video.dataset.poster; };
+  trigger.addEventListener('pointerenter', loadPosters, events);
+  trigger.addEventListener('focus', loadPosters, events);
+  const posterTimer = window.setTimeout(loadPosters, 10_000);
   function syncVideos() {
+    if (open || dialog.open) loadPosters();
     for (const video of videos) {
       const visible = inView.has(video) && !document.hidden && (dialog.contains(video) ? dialog.open : open && !dialog.open);
       const button = video.parentElement!.querySelector<HTMLButtonElement>('button')!;
@@ -184,5 +191,5 @@ export function createWhatsNew(visitPatio: () => void) {
   }, { ...events, capture:true });
   const observer = new ResizeObserver(position); const toolbar = document.querySelector<HTMLElement>('.factory-toolbar'); if (toolbar) observer.observe(toolbar);
   window.addEventListener('resize', position, events); position();
-  return { dispose() { abort.abort(); videoObserver.disconnect(); videos.forEach(video => video.pause()); archiveMotions.forEach(motion => motion.cancel()); modalMotion?.cancel(); clearContentMotion(); observer.disconnect(); dialog.remove(); root.remove(); toolbar?.style.removeProperty('left'); toolbar?.style.removeProperty('max-width'); toolbar?.style.removeProperty('--factory-toolbar-max-width'); } };
+  return { dispose() { abort.abort(); clearTimeout(posterTimer); videoObserver.disconnect(); videos.forEach(video => video.pause()); archiveMotions.forEach(motion => motion.cancel()); modalMotion?.cancel(); clearContentMotion(); observer.disconnect(); dialog.remove(); root.remove(); toolbar?.style.removeProperty('left'); toolbar?.style.removeProperty('max-width'); toolbar?.style.removeProperty('--factory-toolbar-max-width'); } };
 }
