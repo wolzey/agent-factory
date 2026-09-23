@@ -67,11 +67,15 @@ describe('the shared 2.5D factory', () => {
       ...Array.from({length:5},(_,i) => toFactoryWorld({x:-3.8+i*1.6,z:-3.7})),
       ...Array.from({length:4},(_,i) => toFactoryWorld({x:10.4+i*2.3,z:7.7}))];
     const starts = [layout.entrance, ...destinations];
+    // Collected rather than asserted per leg: thousands of expect() calls outran the timeout.
+    const violations: string[] = [];
     for (const start of starts) for (const destination of destinations) {
       const from=fromFactoryWorld(start), to=fromFactoryWorld(destination), route=[from,...routeToStation(from,to)];
-      expect(route.at(-1)).toEqual(to);
-      for(let i=1;i<route.length;i++) expect(clearFactorySegment(route[i-1],route[i])).toBe(true);
+      const end=route.at(-1)!;
+      if(end.x!==to.x||end.z!==to.z) violations.push(`route to ${to.x},${to.z} ends at ${end.x},${end.z}`);
+      for(let i=1;i<route.length;i++) if(!clearFactorySegment(route[i-1],route[i])) violations.push(`${from.x},${from.z} -> ${to.x},${to.z} crosses a prop on leg ${i}`);
     }
+    expect(violations).toEqual([]);
   });
 
   it('preserves conversations and avatar configuration while migrating the old layout', () => {
