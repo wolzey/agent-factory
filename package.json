@@ -32,6 +32,11 @@
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
   },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
+  },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",
     "@fastify/cors": "^11.3.0",
@@ -42,6 +47,7 @@
     "three": "^0.185.1"
   },
   "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.3",
     "@types/node": "^25.5.0",
     "@types/three": "0.185.0",
     "concurrently": "^9.2.1",
