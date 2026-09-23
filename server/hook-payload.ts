@@ -141,6 +141,8 @@ export function normalizeHookPayload(input: unknown): HookPayload | null {
 
   const optional: Record<string, unknown> = {
     tool_name: toolName,
+    // Opaque Claude Code call id; pairs a tool's start and end when async hooks arrive out of order.
+    tool_use_id: str(raw.tool_use_id, 128),
     reason: str(raw.reason),
     agent_id: str(raw.agent_id, MAX_FIELD_LENGTH),
     agent_type: str(raw.agent_type, MAX_FIELD_LENGTH),

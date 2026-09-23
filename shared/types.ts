@@ -236,6 +236,7 @@ export interface HookPayload {
   /** Assigned by the server after device authentication; never trusted from request JSON. */
   ownerId?: string;
   tool_name?: string;
+  tool_use_id?: string;
   agent_id?: string;
   agent_type?: string;
   source?: string;
