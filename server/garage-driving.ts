@@ -9,6 +9,8 @@ import type { BroadcastManager } from './ws/broadcast.js';
 
 export const GARAGE_INPUT_STALE_MS = 500;
 export const GARAGE_LEASE_IDLE_MS = 45_000;
+// A driving browser releases its controls after 2.5s without a packet, so repeat an unchanged state at least this often.
+const GARAGE_KEEPALIVE_MS = 1_000;
 type Peer = { id: string; car?: GarageCarId; inputAt: number; usedAt: number; actionAt: number };
 
 /** Temporary public socket leases, separate from authenticated avatar controls. */
@@ -18,6 +20,7 @@ export class GarageDrivingManager {
   private timer?: ReturnType<typeof setInterval>;
   private previous: number;
   private broadcastAt = -Infinity;
+  private broadcastCars = '';
   private markCursor = 0;
   private dirty = true;
   private nextDonut: number;
@@ -157,7 +160,11 @@ export class GarageDrivingManager {
     if (!this.enabled || !this.dirty) return;
     const snapshot = this.simulation.snapshot(now);
     snapshot.marks = snapshot.marks.filter(mark => mark.id > this.markCursor); snapshot.replaceMarks = false;
+    // A car waiting to re-park keeps the garage dirty without moving; skip repeats of the last packet.
+    const cars = JSON.stringify(snapshot.cars);
+    this.dirty = false;
+    if (!snapshot.marks.length && cars === this.broadcastCars && now - this.broadcastAt < GARAGE_KEEPALIVE_MS) return;
     if (snapshot.marks.length) this.markCursor = snapshot.marks.at(-1)!.id;
-    this.broadcast.broadcastGarageDriving(snapshot); this.broadcastAt = now; this.dirty = false;
+    this.broadcast.broadcastGarageDriving(snapshot); this.broadcastAt = now; this.broadcastCars = cars;
   }
 }
