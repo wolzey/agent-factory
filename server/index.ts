@@ -401,7 +401,7 @@ async function main() {
     // Publish and checkpoint this revision before lifecycle callbacks can synchronously
     // create a later revision (for example, clearing a stopped control lease).
     team.sync(notification.delta);
-    persistence.schedule(state.getSnapshot(), notification.immediatePersistence);
+    persistence.schedule(() => state.getSnapshot(), notification.immediatePersistence);
     broadcast.broadcastWorldDelta(notification.delta);
     for (const change of notification.delta.changes) {
       if (change.kind === 'agent_remove') {
@@ -421,7 +421,7 @@ async function main() {
   });
 
   // Persist startup reconciliation and one-time legacy imports even when no hooks fire afterward.
-  persistence.schedule(state.getSnapshot(), true);
+  persistence.schedule(() => state.getSnapshot(), true);
 
   // Start stale cleanup, lifecycle pruning, and manual-control simulation.
   const staleTimer = startStaleReaper(state);
