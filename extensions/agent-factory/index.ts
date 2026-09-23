@@ -29,6 +29,8 @@ const DEFAULT_AVATAR: AvatarConfig = {
 
 let sessionId = randomUUID();
 let toolUseCount = 0;
+// pi sends a tool's arguments only with tool_execution_start, so hold them until it ends.
+const toolArgs = new Map<string, unknown>();
 
 function configDir(): string {
   return process.env.AGENT_FACTORY_CONFIG_DIR || join(homedir(), ".config", "agent-factory");
@@ -249,6 +251,7 @@ export default function agentFactoryPiExtension(pi: ExtensionAPI) {
   pi.on("session_start", async (event, ctx) => {
     if (event.reason !== "reload") sessionId = randomUUID();
     toolUseCount = 0;
+    toolArgs.clear();
     await postHook({ hook_event_name: "SessionStart", reason: event.reason }, ctx);
   });
 
@@ -261,6 +264,7 @@ export default function agentFactoryPiExtension(pi: ExtensionAPI) {
 
   pi.on("tool_execution_start", async (event, ctx) => {
     toolUseCount += 1;
+    toolArgs.set(event.toolCallId, event.args);
     const sessionName = worktreeNameFrom(event.toolName, event.args);
     await postHook({
       hook_event_name: "PreToolUse",
@@ -274,8 +278,10 @@ export default function agentFactoryPiExtension(pi: ExtensionAPI) {
   pi.on("tool_execution_end", async (event, ctx) => {
     // Derived here for the same reason as in the shell hook: the server plays
     // the effect, but the command line never needs to leave this machine.
-    const gitAction = gitActionFrom(event.toolName, event.args);
-    const sessionName = worktreeNameFrom(event.toolName, event.args);
+    const args = toolArgs.get(event.toolCallId);
+    toolArgs.delete(event.toolCallId);
+    const gitAction = gitActionFrom(event.toolName, args);
+    const sessionName = worktreeNameFrom(event.toolName, args);
     await postHook({
       hook_event_name: "PostToolUse",
       tool_name: event.toolName,
@@ -289,5 +295,8 @@ export default function agentFactoryPiExtension(pi: ExtensionAPI) {
   pi.on("session_before_compact", async (_event, ctx) => postHook({ hook_event_name: "PreCompact" }, ctx));
   pi.on("session_compact", async (_event, ctx) => postHook({ hook_event_name: "PostCompact" }, ctx));
   pi.on("agent_end", async (_event, ctx) => postHook({ hook_event_name: "Stop" }, ctx));
-  pi.on("session_shutdown", async (event, ctx) => postHook({ hook_event_name: "SessionEnd", reason: event.reason }, ctx));
+  pi.on("session_shutdown", async (event, ctx) => {
+    toolArgs.clear();
+    await postHook({ hook_event_name: "SessionEnd", reason: event.reason }, ctx);
+  });
 }

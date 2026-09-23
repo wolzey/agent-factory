@@ -77,8 +77,8 @@ describe('pi extension redaction', () => {
     const handlers = loadExtension();
     const args = { command: 'psql -c "SELECT email FROM users"', content: 'sk-live-secret' };
 
-    await handlers.tool_execution_start({ toolName: 'Bash', args }, { cwd: '/work' });
-    await handlers.tool_execution_end({ toolName: 'Bash', args, isError: false }, { cwd: '/work' });
+    await handlers.tool_execution_start({ toolCallId: 't1', toolName: 'Bash', args }, { cwd: '/work' });
+    await handlers.tool_execution_end({ toolCallId: 't1', toolName: 'Bash', result: {}, isError: false }, { cwd: '/work' });
 
     for (const body of posted) {
       expect(body).not.toHaveProperty('tool_input');
@@ -88,21 +88,40 @@ describe('pi extension redaction', () => {
     }
   });
 
+  // Events are shaped like pi's own: arguments arrive only with tool_execution_start.
   it('derives git_action on tool completion without the command', async () => {
     const handlers = loadExtension();
 
-    await handlers.tool_execution_end(
-      { toolName: 'Bash', args: { command: 'git commit -m "internal notes"' }, isError: false },
+    await handlers.tool_execution_start(
+      { toolCallId: 'c1', toolName: 'Bash', args: { command: 'git commit -m "internal notes"' } },
       { cwd: '/work' },
     );
-    expect(posted[0].git_action).toBe('commit');
-    expect(JSON.stringify(posted[0])).not.toContain('internal notes');
+    await handlers.tool_execution_end({ toolCallId: 'c1', toolName: 'Bash', result: {}, isError: false }, { cwd: '/work' });
+    expect(posted[0]).not.toHaveProperty('git_action');
+    expect(posted[1].git_action).toBe('commit');
+    expect(JSON.stringify(posted)).not.toContain('internal notes');
 
-    await handlers.tool_execution_end(
-      { toolName: 'Read', args: { command: 'git commit -m x' }, isError: false },
+    await handlers.tool_execution_start(
+      { toolCallId: 'c2', toolName: 'Read', args: { command: 'git commit -m x' } },
       { cwd: '/work' },
     );
-    expect(posted[1]).not.toHaveProperty('git_action');
+    await handlers.tool_execution_end({ toolCallId: 'c2', toolName: 'Read', result: {}, isError: false }, { cwd: '/work' });
+    expect(posted[3]).not.toHaveProperty('git_action');
+  });
+
+  it('matches arguments to the tool call that ended', async () => {
+    const handlers = loadExtension();
+
+    await handlers.tool_execution_start(
+      { toolCallId: 'merge', toolName: 'Bash', args: { command: 'gh pr merge 12 --squash' } },
+      { cwd: '/work' },
+    );
+    await handlers.tool_execution_start({ toolCallId: 'list', toolName: 'Bash', args: { command: 'ls' } }, { cwd: '/work' });
+    await handlers.tool_execution_end({ toolCallId: 'list', toolName: 'Bash', result: {}, isError: false }, { cwd: '/work' });
+    await handlers.tool_execution_end({ toolCallId: 'merge', toolName: 'Bash', result: {}, isError: false }, { cwd: '/work' });
+
+    expect(posted[2]).not.toHaveProperty('git_action');
+    expect(posted[3].git_action).toBe('pr_merge');
   });
 
   it('sends a worktree name only for worktree tools', async () => {
