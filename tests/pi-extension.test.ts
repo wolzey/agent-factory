@@ -15,14 +15,33 @@ const posted: Record<string, unknown>[] = [];
 const postedHeaders: Record<string, string>[] = [];
 let testConfigDir: string;
 
-function loadExtension(): Record<string, Handler> {
+/** Hook posts run in the background, so let them settle before a test reads `posted`. */
+const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+
+function loadExtension({ settled = true } = {}): Record<string, Handler> {
   const handlers: Record<string, Handler> = {};
   const pi = {
-    on: (name: string, handler: Handler) => { handlers[name] = handler; },
+    on: (name: string, handler: Handler) => {
+      handlers[name] = settled ? async (event, ctx) => { await handler(event, ctx); await settle(); } : handler;
+    },
     registerCommand: () => {},
   };
   agentFactoryPiExtension(pi as never);
   return handlers;
+}
+
+/** A fetch whose responses the test releases one at a time. */
+function heldFetch() {
+  const releases: Array<() => void> = [];
+  vi.stubGlobal('fetch', (_url: string, init: { body: string; headers: Record<string, string> }) => {
+    posted.push(JSON.parse(init.body));
+    postedHeaders.push(init.headers);
+    return new Promise<Response>(resolve => releases.push(() => resolve({ ok: true } as Response)));
+  });
+  return {
+    get waiting() { return releases.length; },
+    async releaseAll() { while (releases.length) { releases.shift()!(); await settle(); } },
+  };
 }
 
 beforeEach(() => {
@@ -122,6 +141,35 @@ describe('pi extension redaction', () => {
 
     expect(posted[2]).not.toHaveProperty('git_action');
     expect(posted[3].git_action).toBe('pr_merge');
+  });
+
+  it('does not make pi wait for the server, and keeps events in order', async () => {
+    const server = heldFetch();
+    const handlers = loadExtension({ settled: false });
+
+    // Both handlers return while the first post is still unanswered.
+    await handlers.tool_execution_start({ toolCallId: 'q1', toolName: 'Read', args: {} }, { cwd: '/work' });
+    await handlers.tool_execution_end({ toolCallId: 'q1', toolName: 'Read', result: {}, isError: false }, { cwd: '/work' });
+    await settle();
+    expect(posted.map(body => body.hook_event_name)).toEqual(['PreToolUse']);
+
+    await server.releaseAll();
+    expect(posted.map(body => body.hook_event_name)).toEqual(['PreToolUse', 'PostToolUse']);
+  });
+
+  it('drops events past the backlog cap but always sends SessionEnd', async () => {
+    const server = heldFetch();
+    const handlers = loadExtension({ settled: false });
+
+    for (let i = 0; i < 40; i++) await handlers.agent_end({}, { cwd: '/work' });
+    const shutdown = handlers.session_shutdown({ reason: 'quit' }, { cwd: '/work' });
+    let shutDown = false; void shutdown.then(() => { shutDown = true; });
+    await server.releaseAll();
+    await shutdown;
+
+    expect(shutDown).toBe(true);
+    expect(posted.filter(body => body.hook_event_name === 'Stop')).toHaveLength(32);
+    expect(posted.at(-1)?.hook_event_name).toBe('SessionEnd');
   });
 
   it('sends a worktree name only for worktree tools', async () => {

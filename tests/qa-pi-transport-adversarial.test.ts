@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer, type Server } from 'node:http';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import agentFactoryPiExtension from '../extensions/agent-factory/index';
+import agentFactoryPiExtension, { hookPostsSettled } from '../extensions/agent-factory/index';
 
 let directory: string;
 beforeEach(() => { directory = mkdtempSync(join(tmpdir(), 'qa-pi-transport-')); vi.stubEnv('AGENT_FACTORY_CONFIG_DIR', directory); });
@@ -12,7 +12,8 @@ function handler(serverUrl: string) {
   writeFileSync(join(directory, 'config.json'), JSON.stringify({ serverUrl, username: 'QA' }));
   const handlers: Record<string, (event: unknown, ctx: unknown) => Promise<void>> = {};
   agentFactoryPiExtension({ on: (event: string, fn: typeof handlers[string]) => { handlers[event] = fn; }, registerCommand: () => {} } as never);
-  return () => handlers.session_start({ reason: 'new' }, { cwd: '/qa-fixture' });
+  // Hook posts run in the background, so wait for the request itself, not just the handler.
+  return async () => { await handlers.session_start({ reason: 'new' }, { cwd: '/qa-fixture' }); await hookPostsSettled(); };
 }
 it.each(['http://factory.example', 'http://localhost.evil', 'http://127.0.0.1.evil', 'ftp://localhost', 'https://user:secret@factory.example', 'https://factory.example?x=1', 'https://factory.example#fragment', 'https://'])('sends no credential to unsafe Pi address %s', async address => {
   const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);

@@ -155,16 +155,34 @@ function gitActionFrom(toolName: string, args: unknown): "commit" | "pr_merge" |
   return undefined;
 }
 
-async function postHook(event: Record<string, unknown>, ctx?: ExtensionContext) {
+// pi waits for extension handlers before it runs each tool, so hook posts go out in the
+// background. One chain keeps them in order: a fast tool's end cannot land before its start.
+let hookQueue: Promise<void> = Promise.resolve();
+let queuedHooks = 0;
+// While the server is unreachable every post waits out its 2s timeout; drop new events
+// instead of building a backlog that would replay stale activity later.
+const MAX_QUEUED_HOOKS = 32;
+
+function postHook(event: Record<string, unknown>, ctx?: ExtensionContext, force = false): Promise<void> {
+  if (queuedHooks >= MAX_QUEUED_HOOKS && !force) return hookQueue;
+  // Built now: a later session_start replaces sessionId before this event is sent.
   const cfg = readConfig();
-  await postJson("/api/hooks", {
+  const body = {
     ...event,
     session_id: sessionId,
     cwd: ctx?.cwd || process.cwd(),
     username: cfg.username,
     avatar: cfg.avatar,
     source: "pi",
-  });
+  };
+  queuedHooks++;
+  hookQueue = hookQueue.then(() => postJson("/api/hooks", body)).finally(() => { queuedHooks--; });
+  return hookQueue;
+}
+
+/** Resolves once every queued hook post has finished (used by tests). */
+export function hookPostsSettled(): Promise<void> {
+  return hookQueue;
 }
 
 function runDetached(command: string, args: string[] = []) {
@@ -252,21 +270,21 @@ export default function agentFactoryPiExtension(pi: ExtensionAPI) {
     if (event.reason !== "reload") sessionId = randomUUID();
     toolUseCount = 0;
     toolArgs.clear();
-    await postHook({ hook_event_name: "SessionStart", reason: event.reason }, ctx);
+    void postHook({ hook_event_name: "SessionStart", reason: event.reason }, ctx);
   });
 
   pi.on("input", async (event, ctx) => {
     if (!event.text.trim()) return;
     // Only the name from `/rename <name>`; the prompt itself is not sent.
     const sessionName = renameFrom(event.text);
-    await postHook({ hook_event_name: "UserPromptSubmit", ...(sessionName ? { session_name: sessionName } : {}) }, ctx);
+    void postHook({ hook_event_name: "UserPromptSubmit", ...(sessionName ? { session_name: sessionName } : {}) }, ctx);
   });
 
   pi.on("tool_execution_start", async (event, ctx) => {
     toolUseCount += 1;
     toolArgs.set(event.toolCallId, event.args);
     const sessionName = worktreeNameFrom(event.toolName, event.args);
-    await postHook({
+    void postHook({
       hook_event_name: "PreToolUse",
       tool_name: event.toolName,
       activity: activityForTool(event.toolName),
@@ -282,7 +300,7 @@ export default function agentFactoryPiExtension(pi: ExtensionAPI) {
     toolArgs.delete(event.toolCallId);
     const gitAction = gitActionFrom(event.toolName, args);
     const sessionName = worktreeNameFrom(event.toolName, args);
-    await postHook({
+    void postHook({
       hook_event_name: "PostToolUse",
       tool_name: event.toolName,
       error: event.isError,
@@ -292,11 +310,12 @@ export default function agentFactoryPiExtension(pi: ExtensionAPI) {
     }, ctx);
   });
 
-  pi.on("session_before_compact", async (_event, ctx) => postHook({ hook_event_name: "PreCompact" }, ctx));
-  pi.on("session_compact", async (_event, ctx) => postHook({ hook_event_name: "PostCompact" }, ctx));
-  pi.on("agent_end", async (_event, ctx) => postHook({ hook_event_name: "Stop" }, ctx));
+  pi.on("session_before_compact", async (_event, ctx) => { void postHook({ hook_event_name: "PreCompact" }, ctx); });
+  pi.on("session_compact", async (_event, ctx) => { void postHook({ hook_event_name: "PostCompact" }, ctx); });
+  pi.on("agent_end", async (_event, ctx) => { void postHook({ hook_event_name: "Stop" }, ctx); });
   pi.on("session_shutdown", async (event, ctx) => {
     toolArgs.clear();
-    await postHook({ hook_event_name: "SessionEnd", reason: event.reason }, ctx);
+    // The one post pi waits for: the process may exit right after, so drain the queue first.
+    await postHook({ hook_event_name: "SessionEnd", reason: event.reason }, ctx, true);
   });
 }
