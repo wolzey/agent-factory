@@ -52,6 +52,8 @@ import {
   toolToActivity,
 } from '../shared/constants.js';
 import { scrubLegacyAgentFields } from './hook-payload.js';
+// One definition: snapshots are written with the version that loading insists on.
+import { WORLD_SCHEMA_VERSION } from './persistence/world-repository.js';
 
 export type StateNotification =
   | { type: 'delta'; delta: WorldDelta; immediatePersistence: boolean }
@@ -59,7 +61,6 @@ export type StateNotification =
 
 export type StateChangeCallback = (notification: StateNotification) => void;
 
-const WORLD_SCHEMA_VERSION = 1;
 const CHAT_HISTORY_LIMIT = 100;
 const WORLD_MOVE_SPEED = 80;
 const VORTEX_DURATION_MS = 15_000;
